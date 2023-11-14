@@ -1,0 +1,366 @@
+"fp16"  "G_DTYPE" !
+"./qwen7b/" "G_PATH" !
+
+1920 "MAX_TOKENS" !
+2 "MAX_BATCH" !
+
+%def init_var_weight
+    ;; activity memory
+    0.20 1024 1024 1024 * * * 1 "cuda" "G_DTYPE" @ op.create  "_var_"  !
+    
+    "INTERMEDIATE_SIZE" @ dup 2 "cuda" "G_DTYPE" @ op.create "_w_" !
+
+    "_w_" @  0 ("HIDDEN_SIZE" @        "HIDDEN_SIZE" @       2) op.view  "_w_HH_" !
+    "_w_" @  0 ("INTERMEDIATE_SIZE" @  "HIDDEN_SIZE" @       2) op.view  "_w_IH_" !
+    "_w_" @  0 ("HIDDEN_SIZE" @        "INTERMEDIATE_SIZE" @ 2) op.view  "_w_HI_" !
+
+    ;; kv cached memroy
+    32 2 2000 "HIDDEN_SIZE" @ 4 "cuda" "G_DTYPE" @ op.create dup "_kcache_"  !
+    32 2 2000 "HIDDEN_SIZE" @ 4 "cuda" "G_DTYPE" @ op.create dup "_vcache_"  !
+    nn.ezkv_init "cache_man" !
+
+    "MAX_TOKENS" @ "MAX_BATCH" @ * dup dup dup 
+    1 "host" "int"  op.create  "_ids_"     !
+    1 "host" "int"  op.create  "_mask_"    !
+    1 "cuda" "int"  op.create  "_ids"      !
+    1 "cuda" "int"  op.create  "_mask"     !
+    1024 1 "cuda" "int" op.create "_position" !
+    
+    10000 "HEAD_HIDDEN" @ 2 3 "cuda" "float" op.create dup 
+    "ROTARY_BASE" @ op.rotary_cache 
+    "rotary_cache" !
+%end
+
+%def init_gpu
+    init_var_weight
+
+    "cuda" "G_DTYPE" @ create_input_weight
+    "G_PATH" @ load_input_weight
+
+    "cuda" "G_DTYPE" @ create_output_weight
+    "G_PATH" @ load_output_weight
+
+    "cuda" "G_DTYPE" @  "L0."   create_layer_weight 
+    "cuda" "G_DTYPE" @  "L1."   create_layer_weight 
+    "cuda" "G_DTYPE" @  "L2."   create_layer_weight 
+    "cuda" "G_DTYPE" @  "L3."   create_layer_weight 
+    "cuda" "G_DTYPE" @  "L4."   create_layer_weight
+    "cuda" "G_DTYPE" @  "L5."   create_layer_weight 
+    "cuda" "G_DTYPE" @  "L6."   create_layer_weight 
+    "cuda" "G_DTYPE" @  "L7."   create_layer_weight 
+    "cuda" "G_DTYPE" @  "L8."   create_layer_weight 
+    "cuda" "G_DTYPE" @  "L9."   create_layer_weight
+    "cuda" "G_DTYPE" @  "L10."  create_layer_weight
+    "cuda" "G_DTYPE" @  "L11."  create_layer_weight
+    "cuda" "G_DTYPE" @  "L12."  create_layer_weight
+    "cuda" "G_DTYPE" @  "L13."  create_layer_weight
+    "cuda" "G_DTYPE" @  "L14."  create_layer_weight
+    "cuda" "G_DTYPE" @  "L15."  create_layer_weight
+    "cuda" "G_DTYPE" @  "L16."   create_layer_weight 
+    "cuda" "G_DTYPE" @  "L17."   create_layer_weight 
+    "cuda" "G_DTYPE" @  "L18."   create_layer_weight 
+    "cuda" "G_DTYPE" @  "L19."   create_layer_weight 
+    "cuda" "G_DTYPE" @  "L20."   create_layer_weight
+    "cuda" "G_DTYPE" @  "L21."   create_layer_weight 
+    "cuda" "G_DTYPE" @  "L22."   create_layer_weight 
+    "cuda" "G_DTYPE" @  "L23."   create_layer_weight 
+    "cuda" "G_DTYPE" @  "L24."   create_layer_weight 
+    "cuda" "G_DTYPE" @  "L25."   create_layer_weight
+    "cuda" "G_DTYPE" @  "L26."   create_layer_weight
+    "cuda" "G_DTYPE" @  "L27."   create_layer_weight
+    "cuda" "G_DTYPE" @  "L28."   create_layer_weight
+    "cuda" "G_DTYPE" @  "L29."   create_layer_weight
+    "cuda" "G_DTYPE" @  "L30."   create_layer_weight
+    "cuda" "G_DTYPE" @  "L31."   create_layer_weight
+     
+    "G_PATH" @ "h_0."  | "L0." load_layer_weight
+    "G_PATH" @ "h_1."  | "L1." load_layer_weight
+    "G_PATH" @ "h_2."  | "L2." load_layer_weight
+    "G_PATH" @ "h_3."  | "L3." load_layer_weight
+    "G_PATH" @ "h_4."  | "L4." load_layer_weight
+    "G_PATH" @ "h_5."  | "L5." load_layer_weight
+    "G_PATH" @ "h_6."  | "L6." load_layer_weight
+    "G_PATH" @ "h_7."  | "L7." load_layer_weight
+    "G_PATH" @ "h_8."  | "L8." load_layer_weight
+    "G_PATH" @ "h_9."  | "L9." load_layer_weight
+    "G_PATH" @ "h_10."  | "L10." load_layer_weight
+    "G_PATH" @ "h_11."  | "L11." load_layer_weight
+    "G_PATH" @ "h_12."  | "L12." load_layer_weight
+    "G_PATH" @ "h_13."  | "L13." load_layer_weight
+    "G_PATH" @ "h_14."  | "L14." load_layer_weight
+    "G_PATH" @ "h_15."  | "L15." load_layer_weight
+    "G_PATH" @ "h_16."  | "L16." load_layer_weight
+    "G_PATH" @ "h_17."  | "L17." load_layer_weight
+    "G_PATH" @ "h_18."  | "L18." load_layer_weight
+    "G_PATH" @ "h_19."  | "L19." load_layer_weight
+    "G_PATH" @ "h_20."  | "L20." load_layer_weight
+    "G_PATH" @ "h_21."  | "L21." load_layer_weight
+    "G_PATH" @ "h_22."  | "L22." load_layer_weight
+    "G_PATH" @ "h_23."  | "L23." load_layer_weight
+    "G_PATH" @ "h_24."  | "L24." load_layer_weight
+    "G_PATH" @ "h_25."  | "L25." load_layer_weight
+    "G_PATH" @ "h_26."  | "L26." load_layer_weight
+    "G_PATH" @ "h_27."  | "L27." load_layer_weight
+    "G_PATH" @ "h_28."  | "L28." load_layer_weight
+    "G_PATH" @ "h_29."  | "L29." load_layer_weight
+    "G_PATH" @ "h_30."  | "L30." load_layer_weight
+    "G_PATH" @ "h_31."  | "L31." load_layer_weight
+%end
+
+%def create_dynamic
+    $batch          !
+    $full_tokens    !
+    $tokens         !
+    
+    ;; xinput in GPU
+    {
+        "_var_" @ 0  $batch @  $tokens @  "HIDDEN_SIZE" @ 3 op.view  "xinput" !
+        $batch @ $tokens @ "HIDDEN_SIZE" @ * *
+    }
+
+    ;; causal mask, norm2 in GPU, extend to aligen address
+    {
+        dup
+        "_var_" @ swap $batch @ 1 $tokens @  $full_tokens @ 4 "float" op.view_as  "causal_mask"  !
+        $batch @ $tokens @ $full_tokens @ 2 * * * +
+
+        dup
+        "_var_" @ swap $batch @ $tokens @ 1 3 op.view "norm2" !
+        $batch @ $tokens @ 2 * * +                                  
+    }
+
+    ;; xa, xb, xquery/key/value, xll, x4a, x4b, all_logits
+    dup
+    "_var_" @ swap $batch @ $tokens @ "HIDDEN_SIZE" @ 3 op.view "xa" !
+    $batch @ $tokens @ "HIDDEN_SIZE" @  * * +
+    "xa" @ 0 $batch @ $tokens @ "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "ya" !
+    "xa" @ 0 $batch @ "HEADS_NUM" @ $tokens @ "HEAD_HIDDEN" @ 4 op.view "za" !
+
+    dup
+    "_var_" @ swap $batch @ $tokens @ "HIDDEN_SIZE" @ 3 op.view "xb" !
+    $batch @ $tokens @ "HIDDEN_SIZE" @  * * +
+    "xb" @ 0 $batch @ $tokens @ "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "yb" !
+    "xb" @ 0 $batch @ "HEADS_NUM" @ $tokens @ "HEAD_HIDDEN" @ 4 op.view "zb" !
+    
+    dup 
+    {
+        dup
+        "_var_" @ swap $batch @ $tokens @ "HIDDEN_SIZE" @ 3 op.view "xc" !
+        $batch @ $tokens @ "HIDDEN_SIZE" @  * * +
+        "xc" @ 0 $batch @ $tokens @ "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "yc" !
+        "xc" @ 0 $batch @ "HEADS_NUM" @ $tokens @ "HEAD_HIDDEN" @ 4 op.view "zc" !
+      
+        dup
+        "_var_" @ swap $batch @ $full_tokens @ "HIDDEN_SIZE" @ 3 op.view "xfa" !
+        $batch @ $full_tokens @ "HIDDEN_SIZE" @  * * +
+        "xfa" @ 0 $batch @ $full_tokens @ "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "yfa" !
+        "xfa" @ 0 $batch @ "HEADS_NUM" @ $full_tokens @ "HEAD_HIDDEN" @ 4 op.view "zfa" !
+
+        dup
+        "_var_" @ swap $batch @ $full_tokens @ "HIDDEN_SIZE" @ 3 op.view "xfb" !
+        $batch @ $full_tokens @ "HIDDEN_SIZE" @  * * +
+        "xfb" @ 0 $batch @ $full_tokens @ "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "yfb" !
+        "xfb" @ 0 $batch @ "HEADS_NUM" @ $full_tokens @ "HEAD_HIDDEN" @ 4 op.view "zfb" !
+
+        dup
+        "_var_" @ swap $batch @ "HEADS_NUM" @ $tokens @ $full_tokens @ 4 op.view "xll_half" !
+        $batch @ "HEADS_NUM" @ $tokens @ $full_tokens @ * * * +
+
+        "_var_" @ swap $batch @ "HEADS_NUM" @ $tokens @ $full_tokens @ 4 "float" op.view_as "xll" !
+    }  
+    dup
+    {
+   
+        dup 
+        "_var_" @ swap $batch @ $tokens @ "INTERMEDIATE_SIZE" @ 3 op.view "x4a" !
+        $batch @ $tokens @ "INTERMEDIATE_SIZE" @ * * +
+
+        "_var_" @ swap $batch @ $tokens @ "INTERMEDIATE_SIZE" @ 3 op.view "x4b" !
+    }
+    "_var_" @ swap 0 "VOCAB_SIZE" @ 2 op.view  "all_logits" !
+
+    $tokens !!
+    $batch !!
+    $full_tokens !!
+%end
+
+%def prepare_input
+    {
+        $tokens !
+        $batch !
+        
+        "_ids_"  @ 0 $batch @ $tokens @ 2 op.view  "ids_" !
+        "_mask_" @ 0 $batch @ $tokens @ 2 op.view  "mask_" !
+        
+        "ids_" @  io.pipe.read
+        "mask_" @ io.pipe.read
+
+        $batch !!
+        $tokens !!
+    }
+   
+    ;; fetch KV cache
+    "cache_man" @  "ids_" @  "mask_" @  "_ids" @  "_mask" @ nn.ezkv_match  
+    "mask" !        
+    "ids"  !
+       
+    ;; write cached mask & ids back to cpu
+    "_mask_" @ 0 "mask" @ op.get_shape op.view "mask_" !
+    "_ids_" @ 0 "ids" @ op.get_shape op.view "ids_" !
+    
+    "mask_" @ "mask" @ op.copy
+    "ids_" @ "ids" @ op.copy
+
+    {
+        "ids" @ op.get_shape drop swap drop
+        "mask" @ op.get_shape drop swap 
+        create_dynamic
+    }
+
+    "mask" @ "causal_mask" @ op.causal_mask
+%end
+
+%def layer_forward
+    $L !
+    "cache_man" @  "_position" @ nn.ezkv_position  $pos !
+
+    "xinput" @ "ln_1.weight" @ "norm2" @ "xa" @ "RMS_EPS" @ op.rmsnorm
+
+    ;; attention
+    {
+        ;; get key for new tokens, combing cached tokens, position embedding
+        {
+            ;"xa" @ "key.weight" @ "key.bias" @ "xb" @ op.linear
+            
+            "key.weight" @ "_w_HH_" @ op.dequantize
+            "xa" @ "_w_HH_" @ "key.bias" @ "xb" @ op.linear
+        }
+        "yb" @ "rotary_cache" @ $pos @ "yc" @  op.rotary_embed
+        "cache_man" @ "_kcache_" @ "xc" @ "xfb" @ $L @ nn.ezkv_update
+        "yfb" @ "zfa" @ op.transpos_0213
+        
+        ;; get query@key
+        {
+            ;"xa" @ "query.weight" @ "query.bias" @ "xc" @ op.linear
+            
+            "query.weight" @ "_w_HH_" @ op.dequantize
+            "xa" @ "_w_HH_" @ "query.bias" @ "xc" @ op.linear
+        }
+        "yc" @ "rotary_cache" @ $pos @ "yb" @  op.rotary_embed
+        "yb" @ "zc" @ op.transpos_0213
+
+        ;; query@key + apply causal_mask + softmax
+        "zc" @  "zfa" @  "xll" @ op.querykey
+        "xll" @ "causal_mask" @ "xll" @ op.add
+        "xll" @ "xll" @ op.softmax
+        
+        ;; get value for new tokens, combing cached tokens 
+        {
+            ;"xa" @ "value.weight" @ "value.bias" @ "xb" @ op.linear
+            
+            "value.weight" @ "_w_HH_" @ op.dequantize
+            "xa" @ "_w_HH_" @ "value.bias" @ "xb" @ op.linear
+        }
+        "cache_man" @ "_vcache_" @ "xb" @ "xfa" @ $L @ nn.ezkv_update
+        "yfa" @ "zfb" @ op.transpos_0213
+
+        ;; do attention and transpose back
+        "xll_half" @ "xll" @ op.convert
+        "xll_half" @ "zfb" @ "zb" @ op.attn          
+        "zb" @ "ya" @ op.transpos_0213          ;; attn->ya 
+    }
+    
+    ;; do dense & residual
+    {
+        ;"xa" @ "attn.c_proj.weight" @  op.null "xb" @ op.linear
+        
+        "attn.c_proj.weight" @ "_w_HH_" @ op.dequantize
+        "xa" @ "_w_HH_" @  op.null "xb" @ op.linear
+    }
+    "xb" @ "xinput" @ "xa" @ op.add
+
+    ;; post layer norm
+    "xa" @ "ln_2.weight" @ "norm2" @ "xb" @ "RMS_EPS" @ op.rmsnorm
+
+    ;; MLP
+    {
+        ;; xa atteion output
+        ;; xb passed post layernorm
+        { 
+            "mlp.w1.weight" @ "_w_IH_" @ op.dequantize  
+            "xb" @ "_w_IH_" @ op.null "x4a" @ op.linear
+        }
+        {
+            "mlp.w2.weight" @ "_w_IH_" @ op.dequantize  
+            "xb" @ "_w_IH_" @ op.null "x4b" @ op.linear
+        } 
+        "x4b" @ "x4a" @ "x4a" @ op.silu_product
+
+        {
+            "mlp.c_proj.weight" @ "_w_HI_" @ op.dequantize 
+            "x4a" @ "_w_HI_" @ op.null "xb" @ op.linear
+        }
+        
+        ;; residual
+        "xa" @ "xb" @ "xinput" @ op.add
+    }
+
+    $pos !!
+    $L !!
+%end
+
+%def main_gpu
+    prepare_input
+   
+    ;; embed    
+    {
+        "ids" @ "wte.weight" @ "xinput" @ op.embed
+    }
+
+    "L0."   sync_layer_clone 0  layer_forward 
+    "L1."   sync_layer_clone 1  layer_forward    
+    "L2."   sync_layer_clone 2  layer_forward    
+    "L3."   sync_layer_clone 3  layer_forward 
+    "L4."   sync_layer_clone 4  layer_forward 
+    "L5."   sync_layer_clone 5  layer_forward 
+    "L6."   sync_layer_clone 6  layer_forward 
+    "L7."   sync_layer_clone 7  layer_forward 
+    "L8."   sync_layer_clone 8  layer_forward 
+    "L9."   sync_layer_clone 9  layer_forward 
+    "L10."  sync_layer_clone 10 layer_forward 
+    "L11."  sync_layer_clone 11 layer_forward 
+    "L12."  sync_layer_clone 12 layer_forward 
+    "L13."  sync_layer_clone 13 layer_forward 
+    "L14."  sync_layer_clone 14 layer_forward 
+    "L15."  sync_layer_clone 15 layer_forward 
+    "L16."  sync_layer_clone 16 layer_forward
+    "L17."  sync_layer_clone 17 layer_forward
+    "L18."  sync_layer_clone 18 layer_forward
+    "L19."  sync_layer_clone 19 layer_forward
+    "L20."  sync_layer_clone 20 layer_forward
+    "L21."  sync_layer_clone 21 layer_forward
+    "L22."  sync_layer_clone 22 layer_forward
+    "L23."  sync_layer_clone 23 layer_forward
+    "L24."  sync_layer_clone 24 layer_forward
+    "L25."  sync_layer_clone 25  layer_forward
+    "L26."  sync_layer_clone 26 layer_forward
+    "L27."  sync_layer_clone 27 layer_forward
+    "L28."  sync_layer_clone 28 layer_forward
+    "L29."  sync_layer_clone 29 layer_forward
+    "L30."  sync_layer_clone 30 layer_forward
+    "L31."  sync_layer_clone 31 layer_forward
+
+    ;; ln & output    
+    {
+        "xinput" @ "ln_f.weight" @ "norm2" @ "xb" @ "RMS_EPS" @ op.rmsnorm
+        "xb" @ "mask_" @ "lm_head.weight" @ "all_logits" @  op.all_logits 
+    }
+   
+    ;; reshape all_logits according to user's masks
+    "all_logits" @ 0 rot "VOCAB_SIZE" @ 2 op.view "all_logits" !
+
+    ;; sampling using tempture & top_p
+    "all_logits" @ "TEMPERATURE" @ op.sampling_top3
+
+    0 io.pipe.write
+%end

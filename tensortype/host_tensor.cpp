@@ -1,0 +1,360 @@
+#include "host_tensor.hpp"
+
+
+namespace vt {
+
+template <DataType _DTYPE_>
+std::variant<ComputingReturn, size_t> HostTensor<_DTYPE_>::op_sizeof(tensor_t self) {
+    if ( _DTYPE_ == DataType::Float ) {
+        return (size_t) self->items() * sizeof(float);
+    }
+    if ( _DTYPE_ == DataType::Int ) {
+        return (size_t) self->items() * sizeof(int);
+    }
+    if ( _DTYPE_ == DataType::FP16 ) {
+        return (size_t) self->items() * sizeof(local_fp16_t);
+    }
+    if ( _DTYPE_ == DataType::Q8 ) {
+        auto shape = self->shape();
+        size_t last_dim = shape.vec().back();
+        size_t feature_num = self->items() / last_dim;
+        last_dim += sizeof(float) * 2;
+        return last_dim * feature_num;
+    }
+    if ( _DTYPE_ == DataType::Q4 ) {
+        auto shape = self->shape();
+        size_t numel = shape.numel();
+        size_t blk_num = numel / Q4_BLOCK_SIZE;
+        return blk_num * sizeof( q4_block_t );
+    }
+
+    return OP_TODO_ERROR;
+}
+
+template <DataType _DTYPE_>
+ComputingReturn HostTensor<_DTYPE_>::op_zero(tensor_t self) {
+    size_t s = std::get<1>( self->op_sizeof(self) );
+    memset( mem_, 0, s );
+    return OP_OK;
+}
+
+template <DataType _DTYPE_>
+ComputingReturn HostTensor<_DTYPE_>::op_copy(tensor_t self, tensor_t src) {
+    if ( src->is_host() ) {
+        size_t size = std::get<1>( self->op_sizeof(self) );
+        memcpy(data(), src->device_data(), size );
+        return OP_OK;
+    }
+
+#if _USING_DEVICE_CUDA_
+    if ( src->is_cuda() ) {
+        auto stream = ComputingContext::cuda_stream;
+        size_t size = std::get<1>( self->op_sizeof(self) );
+        CUDA_CHECK(cudaMemcpyAsync(data(), src->device_data(), size , cudaMemcpyDeviceToHost, stream));
+        return OP_OK;
+    }
+#endif
+    vt_panic("Can't be here!");
+    return OP_TODO_ERROR;
+}
+
+template <DataType _DTYPE_>
+std::variant<ComputingReturn, tensor_t> HostTensor<_DTYPE_>::op_view(tensor_t self, size_t offset, const std::vector<size_t>& newShape_) {
+    if ( _DTYPE_ == DataType::Float ) {
+        ShapeType newShape(newShape_);
+        float *newData = (float *)data() + offset;
+        auto* newCpuTensor = new HostTensor<DataType::Float>(newShape, newData);
+        return std::make_shared<TensorType>(newCpuTensor, newShape);
+    }
+    if ( _DTYPE_ == DataType::Int ) {
+        ShapeType newShape(newShape_);
+        int *newData = (int *)data() + offset;
+        auto* newCpuTensor = new HostTensor<DataType::Int>(newShape, newData);
+        return std::make_shared<TensorType>(newCpuTensor, newShape);
+    }
+    if ( _DTYPE_ == DataType::FP16 ) {
+        ShapeType newShape(newShape_);
+        local_fp16_t *newData = (local_fp16_t *)data() + offset;
+        auto* newCpuTensor = new HostTensor<DataType::FP16>(newShape, newData);
+        return std::make_shared<TensorType>(newCpuTensor, newShape);
+    }
+    if ( _DTYPE_ == DataType::Q8 ) {
+        auto shape = self->shape();
+        size_t last_dim = shape.vec().back();
+        vt_assert(offset % last_dim == 0, "Q8's view must aligen with last dim");
+        vt_assert(newShape_.back() == last_dim, "Q8's view must aligen with last dim");
+
+        ShapeType newShape(newShape_);
+        void *newData = (char *)data() + (offset / last_dim) * ( last_dim + 2 * sizeof(float) );
+        auto* newCpuTensor = new HostTensor<DataType::Q8>(newShape, newData);
+        return std::make_shared<TensorType>(newCpuTensor, newShape);
+    }
+    if ( _DTYPE_ == DataType::Q4 ) {
+        ShapeType newShape(newShape_);
+        vt_assert(offset % Q4_BLOCK_SIZE == 0, "Q4's view must aligen with Q4_BLOCK_T");
+        void *newData = (char *)data() + (offset / Q4_BLOCK_SIZE) * sizeof(q4_block_t);
+        auto* newCpuTensor = new HostTensor<DataType::Q4>(newShape, newData);
+        return std::make_shared<TensorType>(newCpuTensor, newShape);
+    }
+    return OP_TODO_ERROR;
+}
+
+template <DataType _DTYPE_>
+ComputingReturn HostTensor<_DTYPE_>::io_dump(tensor_t self) {
+    size_t first8 = std::min(self->shape().vec().back(), (size_t)8);
+    if ( _DTYPE_ == DataType::Float ) {
+        float* d = (float *)data();
+        std::cout << "First " << first8 << " : ";
+        for(size_t i = 0; i < first8; i++) {
+            std::cout << d[i] << " ";
+        }
+        std::cout << std::endl;
+        d = (float *)data() + self->items() - first8;
+        std::cout << "Last " << first8 << " : ";
+        for(size_t i = 0; i < first8; i++) {
+            std::cout << d[i] << " ";
+        }
+        std::cout << std::endl;
+
+        return OP_OK;
+    }
+    if ( _DTYPE_ == DataType::Int ) {
+        int* d = (int *)data();
+        std::cout << "First " << first8 << " : ";
+        for(size_t i = 0; i < first8; i++) {
+            std::cout << d[i] << " ";
+        }
+        std::cout << std::endl;
+        d = (int *)data() + self->items() - first8;
+        std::cout << "Last " << first8 << " : ";
+        for(size_t i = 0; i < first8; i++) {
+            std::cout << d[i] << " ";
+        }
+        std::cout << std::endl;
+
+        return OP_OK;
+    }
+    if ( _DTYPE_ == DataType::FP16 ) {
+        local_fp16_t* d = (local_fp16_t *)data();
+        std::cout << "First " << first8 << " : ";
+        for(size_t i = 0; i < first8; i++) {
+            std::cout << fp16_to_fp32(d[i]) << " ";
+        }
+        std::cout << std::endl;
+        d = (local_fp16_t *)data() + self->items() - first8;
+        std::cout << "Last " << first8 << " : ";
+        for(size_t i = 0; i < first8; i++) {
+            std::cout << fp16_to_fp32(d[i]) << " ";
+        }
+        std::cout << std::endl;
+
+        return OP_OK;
+    }
+    if ( _DTYPE_ == DataType::Q4 ) {
+        size_t block_num = self->items() / Q4_BLOCK_SIZE;
+
+        q4_block_t* d = (q4_block_t *)data();
+        std::cout << "First " << first8 << " : ";
+        for (size_t i = 0; i < 8; i++) {
+            std::cout << dequantize_q4(d, i) << " ";
+        }
+        std::cout << std::endl;
+
+        std::cout << "Last " << first8 << " : ";
+        d += block_num - 1;
+        for (size_t i = 8; i < 16; i++) {
+            std::cout << dequantize_q4(d, i) << " ";
+        }
+        std::cout << std::endl;
+        return OP_OK;
+    }
+    if ( _DTYPE_ == DataType::Q8 ) {
+        size_t last_dim = self->shape().vec().back();
+        size_t feature_num = self->items() / last_dim;
+
+        q8_head_t* target = (q8_head_t *)data();
+        std::cout << "First " << first8 << " : ";
+        for (size_t i = 0; i < 8; i++) {
+            std::cout << dequantize_q8(target, i) << " ";
+        }
+        std::cout << std::endl;
+
+        std::cout << "Last " << first8 << " : ";
+        target = (q8_head_t *)( (char *)data() + (feature_num - 1) * (last_dim + 2 * sizeof(float)));
+        for (size_t i = last_dim - 8; i < last_dim; i++) {
+            std::cout << dequantize_q8(target, i) << " ";
+        }
+        std::cout << std::endl;
+        return OP_OK;
+    }
+
+    if ( _DTYPE_ == DataType::Q4 ) {
+        size_t block_num = self->items() / Q4_BLOCK_SIZE;
+
+        q4_block_t* d = (q4_block_t *)data();
+        std::cout << "First " << first8 << " : ";
+        for (size_t i = 0; i < 8; i++) {
+            std::cout << dequantize_q4(d, i) << " ";
+        }
+        std::cout << std::endl;
+
+        std::cout << "Last " << first8 << " : ";
+        d += block_num - 1;
+        for (size_t i = 8; i < 16; i++) {
+            std::cout << dequantize_q4(d, i) << " ";
+        }
+        std::cout << std::endl;
+        return OP_OK;
+    }
+
+    return OP_TODO_ERROR;
+}
+
+template <DataType _DTYPE_>
+ComputingReturn HostTensor<_DTYPE_>::io_save(tensor_t self, const char* fileName) {
+    std::ofstream wf(fileName, std::ios::out | std::ios::binary);
+
+    const char* d = (const char *)data();
+    size_t len = std::get<1>(self->op_sizeof(self));
+    wf.write(d, len);
+    wf.close();
+    return OP_OK;
+}
+
+template <DataType _DTYPE_>
+ComputingReturn HostTensor<_DTYPE_>::io_load(tensor_t self, const char* fileName) {
+    std::ifstream inf(fileName, std::ios::binary);
+    if ( ! inf.is_open() ) {
+        std::cout << "Can't open " << fileName << std::endl;
+        vt_panic("Can't open file");
+    }
+
+    if (_DTYPE_ == DataType::Float) {
+        size_t ret = inf.read( (char *)data(), sizeof(float) * self->items() ).gcount();
+        vt_assert(ret == sizeof(float) * self->items(), "file size dont't match tensor");
+    } else  if (_DTYPE_ == DataType::Int) {
+        size_t ret = inf.read( (char *)data(), sizeof(int) * self->items() ).gcount();
+        vt_assert(ret == sizeof(int) * self->items(), "file size dont't match tensor");
+    } else if (_DTYPE_ == DataType::FP16) {
+        size_t ret = inf.read( (char *)data(), sizeof(local_fp16_t) * self->items() ).gcount();
+        vt_assert(ret == sizeof(local_fp16_t) * self->items(), "file size dont't match tensor");
+    } else if (_DTYPE_ == DataType::Q8 ) {
+        size_t s = std::get<1>(self->op_sizeof(self));
+        size_t ret = inf.read( (char *)data(), s).gcount();
+        vt_assert(ret == s, "file size dont't match tensor");
+    } else if (_DTYPE_ == DataType::Q4 ) {
+        size_t s = std::get<1>(self->op_sizeof(self));
+        size_t ret = inf.read( (char *)data(), s).gcount();
+        vt_assert(ret == s, "file size dont't match tensor");
+    } else {
+        vt_panic("DataType don't support");
+    }
+
+    inf.close();
+    return OP_OK;
+}
+
+#ifdef _USING_HPC_MPI_
+template <DataType _DTYPE_>
+ComputingReturn HostTensor<_DTYPE_>::io_mpi_recv(tensor_t self, int source) {
+    if ( _DTYPE_ == DataType::Float ) {
+        MPI_Recv(data(), self->items(), MPI_FLOAT, source, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        return OP_OK;
+    }
+    if ( _DTYPE_ == DataType::Int ) {
+        MPI_Recv(data(), self->items(), MPI_INT, source, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        return OP_OK;
+    }
+    if ( _DTYPE_ == DataType::FP16 ) {
+        MPI_Recv(data(), self->items(), MPI_SHORT, source, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        return OP_OK;
+    }
+    return OP_TODO_ERROR;
+}
+
+template <DataType _DTYPE_>
+ComputingReturn HostTensor<_DTYPE_>::io_mpi_bcast(tensor_t self, int root) {
+    if ( _DTYPE_ == DataType::Float ) {
+        MPI_Bcast(data(), self->items(), MPI_FLOAT, root, MPI_COMM_WORLD);
+        return OP_OK;
+    }
+    if ( _DTYPE_ == DataType::Int ) {
+        MPI_Bcast(data(), self->items(), MPI_INT, root, MPI_COMM_WORLD);
+        return OP_OK;
+    }
+    if ( _DTYPE_ == DataType::FP16 ) {
+        MPI_Bcast(data(), self->items(), MPI_SHORT, root, MPI_COMM_WORLD);
+        return OP_OK;
+    }
+    return OP_TODO_ERROR;
+}
+
+template <DataType _DTYPE_>
+ComputingReturn HostTensor<_DTYPE_>::io_mpi_send(tensor_t self, int dst) {
+    if ( _DTYPE_ == DataType::Float ) {
+        MPI_Send(data(), self->items(), MPI_FLOAT, dst, 0, MPI_COMM_WORLD);
+        return OP_OK;
+    }
+    if ( _DTYPE_ == DataType::Int ) {
+        MPI_Send(data(), self->items(), MPI_INT, dst, 0, MPI_COMM_WORLD);
+        return OP_OK;
+    }
+    if ( _DTYPE_ == DataType::FP16 ) {
+        MPI_Send(data(), self->items(), MPI_SHORT, dst, 0, MPI_COMM_WORLD);
+        return OP_OK;
+    }
+    return OP_TODO_ERROR;
+}
+#endif
+
+template <DataType _DTYPE_>
+ComputingReturn HostTensor<_DTYPE_>::io_pipe_read(tensor_t self) {
+    auto size = std::get<1>( self->op_sizeof(self) );
+    int ret = CollectiveContext::pipe_read(data(), size);
+    if ( ret < 0 ) {
+        return OP_OUTPUT_ERROR;
+    }
+    return OP_OK;
+}
+
+template <DataType _DTYPE_>
+ComputingReturn HostTensor<_DTYPE_>::io_pipe_write(tensor_t self, int n) {
+    auto size = std::get<1>( self->op_sizeof(self) );
+    int ret = CollectiveContext::pipe_write(n, data(), size);
+    if ( ret < 0 ) {
+        return OP_OUTPUT_ERROR;
+    }
+    return OP_OK;
+}
+
+tensor_t create_host_float(std::vector<size_t>& shape_) {
+    ShapeType shape(shape_);
+    HostTensor<DataType::Float>* tensor = new HostTensor<DataType::Float>(shape);
+    return std::make_shared<TensorType>(tensor, shape);
+}
+
+tensor_t create_host_fp16(std::vector<size_t>& shape_) {
+    ShapeType shape(shape_);
+    HostTensor<DataType::FP16>* tensor = new HostTensor<DataType::FP16>(shape);
+    return std::make_shared<TensorType>(tensor, shape);
+}
+
+tensor_t create_host_int(std::vector<size_t>& shape_) {
+    ShapeType shape(shape_);
+    HostTensor<DataType::Int>* tensor = new HostTensor<DataType::Int>(shape);
+    return std::make_shared<TensorType>(tensor, shape);
+}
+
+tensor_t create_host_q8(std::vector<size_t>& shape_) {
+    ShapeType shape(shape_);
+    HostTensor<DataType::Q8>* tensor = new HostTensor<DataType::Q8>(shape);
+    return std::make_shared<TensorType>(tensor, shape);
+}
+
+tensor_t create_host_q4(std::vector<size_t>& shape_) {
+    ShapeType shape(shape_);
+    HostTensor<DataType::Q4>* tensor = new HostTensor<DataType::Q4>(shape);
+    return std::make_shared<TensorType>(tensor, shape);
+}
+
+}
