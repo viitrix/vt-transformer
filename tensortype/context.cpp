@@ -214,29 +214,33 @@ int CollectiveContext::now() {
 
 /**************************************************************/
 const size_t MemoryContext::aligen_size = 4;
-void* MemoryContext::root = nullptr;
 size_t MemoryContext::total_size = 0;
 size_t MemoryContext::currentp = 0;
 
 void MemoryContext::boot(size_t total_bytes) {
     total_size = total_bytes;
-    root = malloc(total_bytes);
     currentp = 0;
 }
 
+void MemoryContext::free(void *m, size_t s) {
+    if ( currentp < s) {
+        vt_panic("Memory leaking");
+    }
+    ::free(m);
+    currentp -= s;
+}
+
 void MemoryContext::shutdown() {
-    free(root);
+
 }
 
 void* MemoryContext::alloc(size_t blk_size) {
     vt_assert(blk_size % aligen_size == 0, "block size must be aligend");
     if ( blk_size + currentp > total_size ) {
-        //std::cout << CollectiveContext::mpi_rank << ": " <<  currentp << " " << blk_size << std::endl;
         vt_panic("Can't allocate memory, out of pre-allocating");
     }
 
-    void* ret = (unsigned char*)root + currentp;
-    currentp = currentp + blk_size;
+    void* ret = malloc(blk_size);
     return ret;
 }
 

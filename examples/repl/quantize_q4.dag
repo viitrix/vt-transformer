@@ -1,4 +1,4 @@
-"./fp16/"  "PREFIX"                !
+"./qwen7b/"  "PREFIX"                !
 
 4096       "HIDDEN_SIZE"           !
 11008      "INTERMEDIATE_SIZE"     !

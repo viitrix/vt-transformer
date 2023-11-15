@@ -119,12 +119,12 @@ struct CollectiveContext {
 };
 
 struct MemoryContext {
-    static const size_t aligen_size;
-    static void*    root;
-    static size_t   total_size;
-    static size_t   currentp;
+    const static size_t aligen_size;
+    static size_t  total_size;
+    static size_t  currentp;
 
     static void* alloc(size_t blk_size);
+    static void free(void* m, size_t s);
     static void boot(size_t total_bytes);
     static void shutdown();
 };

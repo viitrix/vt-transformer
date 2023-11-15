@@ -1,5 +1,5 @@
 "fp16"  "G_DTYPE" !
-"./weights/fp16/" "G_PATH" !
+"./qwen7b/" "G_PATH" !
 
 2048 "MAX_TOKENS" !
 4 "MAX_BATCH" !

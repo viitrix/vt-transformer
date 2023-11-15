@@ -10,32 +10,33 @@ namespace vt {
 
 template <DataType _DTYPE_>
 struct HostTensor : public TransformerComputing {
-    virtual ~HostTensor() { }
-    HostTensor(const ShapeType& shape) {
+    HostTensor(const ShapeType& shape) : owner_(true) {
         if ( _DTYPE_ == DataType::Float ) {
-            mem_ = MemoryContext::alloc(shape.numel() * sizeof(float));
+            size_ = shape.numel() * sizeof(float);
         } else if ( _DTYPE_ == DataType::Int ) {
-            mem_ = MemoryContext::alloc(shape.numel() * sizeof(int));
+            size_ = shape.numel() * sizeof(int);
         } else if ( _DTYPE_ == DataType::FP16 ) {
-            mem_ = MemoryContext::alloc(shape.numel() * sizeof(local_fp16_t));
+            size_ =  shape.numel() * sizeof(local_fp16_t);
         } else if ( _DTYPE_ == DataType::Q8 ) {
             size_t last_dim = shape.vec().back();
             size_t feature_num = shape.numel() / last_dim;
             vt_assert( last_dim > 128, "Q8 tensor last dim must > 128k");
             last_dim += sizeof(float) * 2;
-            mem_ = MemoryContext::alloc( feature_num * last_dim );
+            size_ = feature_num * last_dim;
         } else if ( _DTYPE_ == DataType::Q4 ) {
             size_t last_dim = shape.vec().back();
             vt_assert( last_dim % Q4_BLOCK_SIZE == 0, "Q4 tensor must has 32 aligened dim");
 
             size_t numel = shape.numel();
             size_t blk_num = numel / Q4_BLOCK_SIZE;
-            mem_ = MemoryContext::alloc(blk_num * sizeof( q4_block_t ));
+            size_ = blk_num * sizeof( q4_block_t );
         } else {
             vt_panic("Can't be here!");
         }
+
+        mem_ = MemoryContext::alloc(size_);
     }
-    HostTensor(const ShapeType& shape,  void *mem) : mem_(mem) {
+    HostTensor(const ShapeType& shape,  void *mem) : owner_(false), mem_(mem) {
         if ( _DTYPE_ == DataType::Q4 ) {
             size_t last_dim = shape.vec().back();
             vt_assert( last_dim % Q4_BLOCK_SIZE == 0, "Q4 tensor must has 32 aligened dim");
@@ -44,8 +45,13 @@ struct HostTensor : public TransformerComputing {
             size_t last_dim = shape.vec().back();
             vt_assert( last_dim > 128, "Q8 tensor last dim must > 128k");
         }
+        size_ = 0;
     }
+    virtual ~HostTensor() {
+        if ( owner_ ) {
 
+        }
+    }
     void* data() {
         return mem_;
     }
@@ -69,7 +75,9 @@ public:
     std::variant<ComputingReturn, tensor_t> op_view(tensor_t self, size_t offset, const std::vector<size_t>& newShape_) override;
 
 protected:
+    const bool owner_;
     void* mem_;
+    size_t size_;
 
     friend struct HostTensor<DataType::Float>;
     friend struct HostTensor<DataType::BF16>;
