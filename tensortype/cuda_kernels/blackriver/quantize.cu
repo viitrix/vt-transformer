@@ -25,28 +25,26 @@ __global__ void quantize_q4_kernel(const T *in, void *out, int items) {
     target = &target[blk];
     const T* src = &in[blk * Q4_BLOCK_SIZE];
     
-    float amax = 0.0;
-    float max = 0.0;
-
+    float min = FLT_MAX;
+    float max = -FLT_MAX;
+ 
     for (int i = 1; i < Q4_BLOCK_SIZE; i++) {
         const float v = src[i];
-        if ( fabs(v) > amax) {
-            amax = fabs(v);
-            max = v;
-        }
+        if ( v < min ) min = v;
+        if ( v > max ) max = v;
     }
   
-    const float d  = max / -8;
+    const float d  = (max - min) / ((1 << 4) - 1);
     const float id = d ? 1.0f/d : 0.0f;
-    
+    target->m = min;
     target->d = d;
 
     for (int i = 0; i < Q4_BLOCK_SIZE / 2; i++) {
-        const float x0 = (float )src[i*2 + 0] * id;
-        const float x1 = (float )src[i*2 + 1] * id;
+        const float x0 = ((float )src[i*2 + 0] - min) * id;
+        const float x1 = ((float )src[i*2 + 1] - min) * id;
    
-        const uint8_t xi0 = MIN(15, (int8_t)(x0 + 8.5f));
-        const uint8_t xi1 = MIN(15, (int8_t)(x1 + 8.5f));
+        const uint8_t xi0 = MIN(15, (int8_t)(x0 + 0.5f));
+        const uint8_t xi1 = MIN(15, (int8_t)(x1 + 0.5f));
 
         target->q[i]  = xi0;
         target->q[i] |= xi1 << 4; 
@@ -100,23 +98,25 @@ __global__ void dequantize_q4_kernel(const void *in, T *out, int items) {
 
     const q4_block_t* target = (q4_block_t *)in;
     target = &target[blk];
-  
+ 
     __shared__ float d;
+    __shared__ float m;
     if ( idx == 0 ) {
         d = target->d;
+        m = target->m;
     }
     __syncthreads(); 
     
     const uint8_t vu = target->q[ idx / 2];
     
-    int8_t qv;
+    uint8_t qv;
     if ( idx % 2) {
         qv = vu >> 4; 
     } else {
         qv = vu & 0xF;
     }
     
-    out[blk * Q4_BLOCK_SIZE + idx] = (qv - 8) * d;
+    out[blk * Q4_BLOCK_SIZE + idx] = qv * d + m;
 }
 
 template <typename T>
@@ -124,18 +124,20 @@ int dequantize_q4(const void *input, T *out, int items, cudaStream_t stream);
 
 template <>
 int dequantize_q4<__half>(const void *in, __half *out, int items, cudaStream_t stream) {
-    dim3 block_size(16);
-	dim3 num_of_blocks((items + block_size.x - 1) / block_size.x);
+    dim3 block_size(Q4_BLOCK_SIZE);
+    dim3 num_of_blocks((items + block_size.x - 1) / block_size.x);
 
     dequantize_q4_kernel<__half> <<< num_of_blocks, block_size, 0, stream>>> (in, out, items); 
 
     cudaError_t err = cudaGetLastError();
     if (err != cudaSuccess) {
-        fprintf(stderr, "Failed to launch quantize_half_q4 kernel (error code %s)!\n", cudaGetErrorString(err));
+        fprintf(stderr, "Failed to launch dequantize_half_q4 kernel (error code %s)!\n", cudaGetErrorString(err));
         exit(-1);
     }
     return 0;
 }
+
+// ===================================================
 
 template<typename T>
 __global__ void quantize_q8_kernel(const T *in, void *out, int feature_num, int feature_size) {

@@ -185,7 +185,7 @@ ComputingReturn CUDATensor<DT>::io_dump(tensor_t self) {
         CUDA_CHECK(cudaMemcpyAsync(&local_block, src, sizeof(q4_block_t), cudaMemcpyDeviceToHost, stream));
 
         std::cout << "Last 8 : ";
-        for (size_t i = 8; i < 16; i++) {
+        for (size_t i = Q4_BLOCK_SIZE - 8; i < Q4_BLOCK_SIZE; i++) {
             std::cout << dequantize_q4(&local_block, i) << " ";
         }
         std::cout << std::endl;

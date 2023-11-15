@@ -133,12 +133,13 @@ using local_fp16_t = uint16_t;
 float fp16_to_fp32(local_fp16_t value);
 local_fp16_t fp32_to_fp16(float value);
 
-const int Q4_BLOCK_SIZE = 16;
+const int Q4_BLOCK_SIZE = 128;
 typedef struct {
     float   d;
-    uint8_t q[8];
+    float   m;
+    uint8_t q[64];
 } q4_block_t;
-static_assert(sizeof(q4_block_t) == sizeof(local_fp16_t) * 2  + 8, "wrong q4_block_t size/padding");
+static_assert(sizeof(q4_block_t) == sizeof(float) * 2  + 64, "wrong q4_block_t size/padding");
 
 typedef struct {
     float   d;
@@ -148,13 +149,13 @@ typedef struct {
 
 inline float dequantize_q4(const q4_block_t* q4, const int i) {
     const uint8_t uv = q4->q[i>>1];
-    int8_t v = 0;
+    uint8_t v = 0;
     if ( i % 2 == 0 ) {
         v = uv & 0x0F;
     } else {
         v = uv >> 4;
     }
-    return q4->d * (v - 8);;
+    return q4->d * v + q4->m;
 }
 
 inline float dequantize_q8(const q8_head_t* q8, const int i) {

@@ -17,6 +17,7 @@ __device__ float dot(float4& a, float4& b) {
 
 template <const int BM, const int BN, const int THREADS, const int DIV, typename T, typename TT>
 __global__ void linear2d_q4_kernel(int M, int N, int K, const T *A, const q4_block_t *B, T *C) {
+#if 0 
     const int Abi = blockIdx.x;
     const int Bbi = blockIdx.y;
     const int KK = K / Q4_BLOCK_SIZE;
@@ -100,6 +101,7 @@ __global__ void linear2d_q4_kernel(int M, int N, int K, const T *A, const q4_blo
             C[m*N + n] = tmp[m - TMi * TM][n - TNi * TN];
         }
     }
+#endif
 }
 
 template <typename T>

@@ -2,7 +2,7 @@
 4096 4096 2 "cuda" "fp16" op.create dup "w" ! 0 256 256 2 op.view "256x256.fp16" io.load
 16 32 4096 3 "cuda" "fp16" op.create "y" !
 
-4096 4096 2 "cuda" "q4" op.create "wq" !
+4096 4096 2 "cuda" "q8" op.create "wq" !
 "w" @ "wq" @ op.quantize 
 
 "w" @ io.dump
