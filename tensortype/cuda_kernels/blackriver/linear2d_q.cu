@@ -17,7 +17,8 @@ __device__ float dot(float4& a, float4& b) {
 
 template <const int BM, const int BN, const int THREADS, const int DIV, typename T, typename TT>
 __global__ void linear2d_q4_kernel(int M, int N, int K, const T *A, const q4_block_t *B, T *C) {
-#if 0 
+    const int MOVING_BLOCK = 32;
+    
     const int Abi = blockIdx.x;
     const int Bbi = blockIdx.y;
     const int KK = K / Q4_BLOCK_SIZE;
@@ -31,60 +32,58 @@ __global__ void linear2d_q4_kernel(int M, int N, int K, const T *A, const q4_blo
     const int EN = (N - Bbi * BN) >= BN ? BN : (N - Bbi * BN);
 
     // allocate space for the current blocktile in smem
-    __shared__ float As[BM * Q4_BLOCK_SIZE ];
-    __shared__ float Bs[BN * Q4_BLOCK_SIZE ];
+    __shared__ float As[BM * MOVING_BLOCK ];
+    __shared__ float Bs[BN * MOVING_BLOCK ];
 
     // used for copy data
-    const int Tc = threadIdx.x % (Q4_BLOCK_SIZE/2);
-    const int Tr = threadIdx.x / (Q4_BLOCK_SIZE/2);
-    const int stride = THREADS / (Q4_BLOCK_SIZE/2);
+    const int Tc = threadIdx.x % (MOVING_BLOCK/2);
+    const int Tr = threadIdx.x / (MOVING_BLOCK/2);
+    const int stride = THREADS / (MOVING_BLOCK/2);
 
     // used for computing 
     const int TM = BM / DIV;
     const int TN = BN / DIV;
     const int TNi = threadIdx.x % DIV;
     const int TMi = threadIdx.x / DIV;
-    const int offsetA = TMi * TM * Q4_BLOCK_SIZE;
-    const int offsetB = TNi * TN * Q4_BLOCK_SIZE;
+    const int offsetA = TMi * TM * MOVING_BLOCK;
+    const int offsetB = TNi * TN * MOVING_BLOCK;
     float tmp[TM][TN] = {0.0};
     
-    for(int left = 0; left < K; left += Q4_BLOCK_SIZE) {
+    for(int left = 0; left < K; left += MOVING_BLOCK) {
         // copy data from A
         TT vi;
         for (int i = Tr; i < EM; i += stride) {
-            //As[i*Q4_BLOCK_SIZE + Tc] = A[i * K + Tc];
             vi = *(TT *)(&A[i * K + Tc*2]); 
-            As[i*Q4_BLOCK_SIZE + Tc*2 + 0] = vi.x;
-            As[i*Q4_BLOCK_SIZE + Tc*2 + 1] = vi.y;
+            As[i*MOVING_BLOCK + Tc*2 + 0] = vi.x;
+            As[i*MOVING_BLOCK + Tc*2 + 1] = vi.y;
         }
        
         // copy data from B
         const q4_block_t* q4;
-        float d;
         for ( int i = Tr; i < EN; i += stride) {
-            q4 = &B[i * KK];
-            d = q4->d;
-            
-            const uint8_t vui = q4->q[Tc];
-            const int8_t vi0 = vui & 0xF;
-            const int8_t vi1 = vui >> 4;
+            q4 = &B[i * KK] + left / Q4_BLOCK_SIZE;
+            float d = q4->d;
+            float m = q4->m;
 
-            Bs[i*Q4_BLOCK_SIZE + Tc*2 + 0] = (vi0 - 8) * d;
-            Bs[i*Q4_BLOCK_SIZE + Tc*2 + 1] = (vi1 - 8) * d;
+            int qtc = left % Q4_BLOCK_SIZE;  
+            const uint8_t vui = q4->q[qtc];
+            const uint8_t vi0 = vui & 0xF;
+            const uint8_t vi1 = vui >> 4;
+
+            Bs[i*MOVING_BLOCK + Tc*2 + 0] = vi0 * d + m;
+            Bs[i*MOVING_BLOCK + Tc*2 + 1] = vi1 * d + m;
         }
         __syncthreads(); 
       
-        A += Q4_BLOCK_SIZE;
-        B ++;
+        A += MOVING_BLOCK;
 
         float4 a, b;
-        for (int i = 0; i < Q4_BLOCK_SIZE / 4; i++) {
+        for (int i = 0; i < MOVING_BLOCK / 4; i++) {
             for(int m = 0; m < TM; m++) {
-                a =  *(float4 *)(&As[offsetA + m * Q4_BLOCK_SIZE + i*4]);
+                a =  *(float4 *)(&As[offsetA + m * MOVING_BLOCK + i*4]);
                 #pragma unroll
                 for (int n = 0; n < TN; n++) {
-                    //tmp[m][n] += a * Bs[ offsetB + n * Q4_BLOCK_SIZE + i]; 
-                    b = *(float4 *)(&Bs[offsetB + n * Q4_BLOCK_SIZE + i*4]);  
+                    b = *(float4 *)(&Bs[offsetB + n * MOVING_BLOCK + i*4]);  
                     tmp[m][n] += dot(a, b); 
                 }
             }
@@ -101,7 +100,6 @@ __global__ void linear2d_q4_kernel(int M, int N, int K, const T *A, const q4_blo
             C[m*N + n] = tmp[m - TMi * TM][n - TNi * TN];
         }
     }
-#endif
 }
 
 template <typename T>
@@ -149,6 +147,7 @@ int linear2d_q4<float>(const float *in, const void* w, float *out, int M, int N,
 
 template <const int BM, const int BN, const int THREADS, const int DIV, typename T, typename TT>
 __global__ void linear2d_q8_kernel(int M, int N, int K, const T *A, const uint8_t *B, T *C) {
+    const int MOVING_BLOCK = 32;
     const int Abi = blockIdx.x;
     const int Bbi = blockIdx.y;
     const int KK = K + sizeof(float) * 2;
@@ -162,7 +161,6 @@ __global__ void linear2d_q8_kernel(int M, int N, int K, const T *A, const uint8_
     const int EN = (N - Bbi * BN) >= BN ? BN : (N - Bbi * BN);
 
     // allocate space for the current blocktile in smem
-    const int MOVING_BLOCK = 32;
     __shared__ float  As[BM * MOVING_BLOCK];
     __shared__ float  Bs[BN * MOVING_BLOCK];
 

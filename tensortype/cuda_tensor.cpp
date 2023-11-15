@@ -660,9 +660,9 @@ ComputingReturn CUDATensor<DT>::op_linear(tensor_t self, tensor_t w_, tensor_t b
         device_fp16_t* dst = (device_fp16_t *)y_->cuda_fp16()->data();
         void* w = w_->cuda_q8()->data();
 
-        ComputingContext::cuda_event(0);
+        //ComputingContext::cuda_event(0);
         cuda::linear2d_q8<device_fp16_t>((device_fp16_t *)src, (void*)w, (device_fp16_t*)dst, batch * tokens, outSize, inSize, ComputingContext::cuda_stream);
-        std::cout << "Kernel using " << ComputingContext::cuda_event(1);
+        //std::cout << "Kernel using " << ComputingContext::cuda_event(1);
 
 
         if ( b_ != nullptr ) {
