@@ -4,7 +4,6 @@
 #ifdef _USING_DEVICE_CUDA_
 #include <cuda.h>
 #include <cuda_runtime.h>
-#include <cublas.h>
 #include <cublas_v2.h>
 #include <cublasLt.h>
 #include <cudnn.h>

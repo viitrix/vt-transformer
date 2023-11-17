@@ -596,6 +596,25 @@ ComputingReturn CUDATensor<DT>::op_linear(tensor_t self, tensor_t w_, tensor_t b
     }
 
     if ( DT == DataType::Float && w_->is_q8() ) {
+        float* src = (float *)data();
+        float* dst = (float *)y_->cuda_fp16()->data();
+        void* w = w_->cuda_q8()->data();
+
+        //ComputingContext::cuda_event(0);
+        cuda::linear2d_q8<float>((float *)src, (void*)w, (float*)dst, batch * tokens, outSize, inSize, ComputingContext::cuda_stream);
+        //std::cout << "Kernel using " << ComputingContext::cuda_event(1);
+
+        if ( b_ != nullptr ) {
+            auto ydesc = y_->cuda_float()->create_cudnn_td_with({batch, 1, tokens, outSize});
+            auto bdesc = b_->cuda_float()->create_cudnn_td_with({1, 1, 1, outSize});
+            void* bias = b_->cuda_float()->data();
+            void* C = y_->cuda_float()->data();
+
+            beta = 1.0;
+            CUDNN_CHECK( cudnnAddTensor(ComputingContext::cudnn_handle,
+                                        &alpha, bdesc, bias,
+                                        &beta, ydesc, C));
+        }
 
         return OP_OK;
     }

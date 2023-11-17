@@ -15,5 +15,7 @@
 "x" @ "w" @ op.null "y" @ op.linear
 "y" @ io.dump
 
+0 op.cuda_event
 "x" @ "wq" @ op.null "y" @ op.linear
+1 op.cuda_event
 "y" @ io.dump

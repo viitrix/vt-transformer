@@ -41,6 +41,17 @@ namespace op {
     };
     std::chrono::time_point<std::chrono::high_resolution_clock> CheckPoint::ck;
 
+#ifdef _USING_DEVICE_CUDA_
+    struct CudaEvent: public NativeWord {
+        void run(Stack& stack) override {
+            int flag = stack.pop_number();
+            float ret = ComputingContext::cuda_event(flag);
+            std::cout << "CudaEvent " << flag << " : " << ret << std::endl;
+        }
+        NWORD_CREATOR_DEFINE_LR(CudaEvent)
+    };
+#endif
+
     struct Shape : public NativeWord {
         void run(Stack& stack) override {
             tensor_t x = stack.pop_tensor();
@@ -663,6 +674,9 @@ void load_nn_operators(Enviroment& env) {
 
     env.insert_native_word("op.sync", op::Sync::creator );
     env.insert_native_word("op.check", op::CheckPoint::creator );
+#if _USING_DEVICE_CUDA_
+    env.insert_native_word("op.cuda_event", op::CudaEvent::creator );
+#endif
     env.insert_native_word("op.get_shape", op::Shape::creator);
     env.insert_native_word("op.get_device", op::Device::creator);
     env.insert_native_word("op.get_dtype", op::DataType::creator);
