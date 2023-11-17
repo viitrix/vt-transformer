@@ -72,6 +72,7 @@ public:
     std::variant<ComputingReturn, size_t> op_sizeof(tensor_t self) override;
     ComputingReturn op_zero(tensor_t self) override;
     ComputingReturn op_copy(tensor_t self, tensor_t dst) override;
+    ComputingReturn op_embed(tensor_t self, tensor_t table, tensor_t output) override;
     std::variant<ComputingReturn, tensor_t> op_view(tensor_t self, size_t offset, const std::vector<size_t>& newShape_) override;
 
 protected:

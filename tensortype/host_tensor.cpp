@@ -59,6 +59,36 @@ ComputingReturn HostTensor<_DTYPE_>::op_copy(tensor_t self, tensor_t src) {
 }
 
 template <DataType _DTYPE_>
+ComputingReturn HostTensor<_DTYPE_>::op_embed(tensor_t self, tensor_t table, tensor_t output) {
+    const size_t feature_size = table->shape().vec().back();
+    const int items = self->items();
+    int* tokens = (int * )self->host_int()->data();
+
+    if ( table->dtype() == DataType::Float && output->dtype() == DataType::Float ) {
+        float* dst = (float *)output->host_float()->data();
+        float* src = (float *)table->host_float()->data();
+        for ( int i = 0; i < items; i++) {
+            float* emb = &src[ tokens[i] * feature_size ];
+            memcpy(dst, emb, sizeof(float)*feature_size);
+            dst += feature_size;
+        }
+        return OP_OK;
+    }
+    if ( table->dtype() == DataType::FP16 && output->dtype() == DataType::FP16) {
+        local_fp16_t* dst = (local_fp16_t *)output->host_fp16()->data();
+        local_fp16_t* src = (local_fp16_t *)table->host_fp16()->data();
+        for ( int i = 0; i < items; i++) {
+            local_fp16_t* emb = &src[ tokens[i] * feature_size ];
+            memcpy(dst, emb, sizeof(local_fp16_t)*feature_size);
+            dst += feature_size;
+        }
+        return OP_OK;
+    }
+
+    return OP_TODO_ERROR;
+}
+
+template <DataType _DTYPE_>
 std::variant<ComputingReturn, tensor_t> HostTensor<_DTYPE_>::op_view(tensor_t self, size_t offset, const std::vector<size_t>& newShape_) {
     if ( _DTYPE_ == DataType::Float ) {
         ShapeType newShape(newShape_);
