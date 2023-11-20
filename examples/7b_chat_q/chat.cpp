@@ -94,7 +94,7 @@ struct ChatApplication {
             std::string talk = tokenizer_->decode( out_tokens );
             std::cout << "\n====== Generated " << out_tokens.size() << " tokens, using " << duration.count() / 1000.0 << " seconds, ";
             std::cout << (next == tokenizer_->token_eos()) << " eos ending ===== " << std::endl;
-            std::cout << talk << std::endl;
+            //std::cout << talk << std::endl;
 
             talk = talk + "<|im_end|>\n";
             history.push_back(talk);

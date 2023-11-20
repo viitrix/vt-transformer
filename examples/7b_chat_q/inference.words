@@ -1,7 +1,7 @@
 "fp16"  "G_DTYPE" !
 "./qwen7b/" "G_PATH" !
 
-1920 "MAX_TOKENS" !
+1600 "MAX_TOKENS" !
 2 "MAX_BATCH" !
 
 %def init_var_weight
@@ -15,8 +15,8 @@
     "_w_" @  0 ("HIDDEN_SIZE" @        "INTERMEDIATE_SIZE" @ 2) op.view  "_w_HI_" !
 
     ;; kv cached memroy
-    32 2 2000 "HIDDEN_SIZE" @ 4 "cuda" "G_DTYPE" @ op.create dup "_kcache_"  !
-    32 2 2000 "HIDDEN_SIZE" @ 4 "cuda" "G_DTYPE" @ op.create dup "_vcache_"  !
+    32 2 1800 "HIDDEN_SIZE" @ 4 "cuda" "G_DTYPE" @ op.create dup "_kcache_"  !
+    32 2 1800 "HIDDEN_SIZE" @ 4 "cuda" "G_DTYPE" @ op.create dup "_vcache_"  !
     nn.ezkv_init "cache_man" !
 
     "MAX_TOKENS" @ "MAX_BATCH" @ * dup dup dup 

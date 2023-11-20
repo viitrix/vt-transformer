@@ -19,6 +19,11 @@ VT-Transformer 就是一个面向边端环境，整体的、精简的、大模�
 
 ---
 
+一个简单的ChatBot例子，基于Qwen7b-chat模型，跑在GTX 3080/10G环境下，运行界面如下：
+
+![A simple chatbot](./assets/qwen7b_gtx3080_10G.gif) 
+
+
 
 ### 近期目标：完成下面的适配表格，推动国产硬件在边端环境下的应用
 
