@@ -19,7 +19,7 @@ chat: chat.cpp
 	g++ $(FLAGS) -o $@ $< $(INC) $(LINK)
 
 run: chat 
-	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/home/teaonly/opt/nccl/lib:/home/teaonly/opt/dnnl/lib:/home/teaonly/opt/cudnn/lib:/usr/lib/x86_64-linux-gnu ./repl
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/home/teaonly/opt/nccl/lib:/home/teaonly/opt/dnnl/lib:/home/teaonly/opt/cudnn/lib:/usr/lib/x86_64-linux-gnu ./chat
 
 clean:
 	rm -f chat

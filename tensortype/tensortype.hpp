@@ -159,6 +159,13 @@ using cuda_q8_t = CUDATensor<DataType::Q8>;
 using cuda_q4_t = CUDATensor<DataType::Q4>;
 #endif
 
+#ifdef _USING_DEVICE_DCU_
+template <DataType _DTYPE_> struct DCUTensor;
+using dcu_float_t = DCUTensor<DataType::Float>;
+using dcu_fp16_t = DCUTensor<DataType::FP16>;
+using dcu_int_t = DCUTensor<DataType::Int>;
+#endif
+
 #ifdef _USING_DEVICE_DNNL_
 template <DataType _DTYPE_> struct DNNLTensor;
 using dnnl_float_t = DNNLTensor<DataType::Float>;
@@ -186,11 +193,16 @@ public:
 #endif
 
 #ifdef _USING_DEVICE_DNNL_
+    TensorType(dcu_float_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Float), impl_(tensor) {};
+    TensorType(dcu_fp16_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::FP16), impl_(tensor) {};
+    TensorType(dcu_int_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Int), impl_(tensor) {};
+#endif
+
+#ifdef _USING_DEVICE_DNNL_
     TensorType(dnnl_float_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Float), impl_(tensor) {};
     TensorType(dnnl_fp16_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::FP16), impl_(tensor) {};
     TensorType(dnnl_int_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Int), impl_(tensor) {};
 #endif
-
 
     virtual ~TensorType();
 
@@ -272,6 +284,27 @@ public:
     }
 #endif
 
+#if _USING_DEVICE_DCU_
+    dcu_float_t* dcu_float() {
+        if ( impl_.index() != DCU_FLOAT ) {
+            vt_panic("Cant get dcu_float from a tensor");
+        }
+        return std::get<DCU_FLOAT>(impl_);
+    }
+    dcu_fp16_t* dcu_fp16() {
+        if ( impl_.index() != DCU_FP16 ) {
+            vt_panic("Cant get dcu_fp16 from a tensor");
+        }
+        return std::get<DCU_FP16>(impl_);
+    }
+    dcu_int_t* dcu_int() {
+        if ( impl_.index() != DCU_INT ) {
+            vt_panic("Cant get dcu_int from a tensor");
+        }
+        return std::get<DCU_INT>(impl_);
+    }
+#endif
+
 #if _USING_DEVICE_DNNL_
     dnnl_float_t* dnnl_float() {
         if ( impl_.index() != DNNL_FLOAT ) {
@@ -314,16 +347,23 @@ public:
         }
 #ifdef _USING_DEVICE_CUDA_
         if ( (impl_index() <= ImplType::CUDA_Q4) && (impl_index() >= ImplType::CUDA_FLOAT) ) {
-            return "host";
+            return "cuda";
+        }
+#endif
+
+#ifdef _USING_DEVICE_DCU_
+        if ( (impl_index() <= ImplType::DCU_INT) && (impl_index() >= ImplType::DCU_FLOAT) ) {
+            return "dcu";
         }
 #endif
 
 #ifdef _USING_DEVICE_DNNL_
         if ( (impl_index() <= ImplType::DNNL_INT) && (impl_index() >= ImplType::DNNL_FLOAT) ) {
-            return "host";
+            return "nccl";
         }
 #endif
-        return "dnnl";
+        vt_panic("Can't be here!");
+        return "";
     }
 
     bool is_host() const {
@@ -333,15 +373,25 @@ public:
         return false;
     }
 
-    bool is_cuda() const {
 #ifdef _USING_DEVICE_CUDA_
+    bool is_cuda() const {
         auto ii = impl_index();
         if ( (ii >= ImplType::CUDA_FLOAT) && (ii <= ImplType::CUDA_Q4) ) {
             return true;
         }
-#endif
         return false;
     }
+#endif
+
+#ifdef _USING_DEVICE_DCU_
+    bool is_dcu() const {
+        auto ii = impl_index();
+        if ( (ii >= ImplType::DCU_FLOAT) && (ii <= ImplType::DCU_INT) ) {
+            return true;
+        }
+        return false;
+    }
+#endif
 
     bool is_float() const {
         if (impl_index() == ImplType::HOST_FLOAT) {
@@ -349,6 +399,12 @@ public:
         }
 #ifdef _USING_DEVICE_CUDA_
         if (impl_index() == ImplType::CUDA_FLOAT) {
+            return true;
+        }
+#endif
+
+#ifdef _USING_DEVICE_DCU_
+        if (impl_index() == ImplType::DCU_FLOAT) {
             return true;
         }
 #endif
@@ -371,6 +427,12 @@ public:
         }
 #endif
 
+#ifdef _USING_DEVICE_DCU_
+        if (impl_index() == ImplType::DCU_FP16) {
+            return true;
+        }
+#endif
+
 #ifdef _USING_DEVICE_DNNL_
         if (impl_index() == ImplType::DNNL_FP16) {
             return true;
@@ -385,6 +447,12 @@ public:
         }
 #ifdef _USING_DEVICE_CUDA_
         if (impl_index() == ImplType::CUDA_INT) {
+            return true;
+        }
+#endif
+
+#ifdef _USING_DEVICE_DCU_
+        if (impl_index() == ImplType::DCU_INT) {
             return true;
         }
 #endif
@@ -516,6 +584,13 @@ private:
         CUDA_Q8,
         CUDA_Q4,
 #endif
+
+#ifdef _USING_DEVICE_DCU_
+        DCU_FLOAT,
+        DCU_FP16,
+        DCU_INT,
+#endif
+
 #ifdef _USING_DEVICE_DNNL_
         DNNL_FLOAT,
         DNNL_FP16,
@@ -534,6 +609,13 @@ private:
                                         cuda_int_t*,
                                         cuda_q8_t*,
                                         cuda_q4_t*
+#endif
+
+#ifdef _USING_DEVICE_DNNL_
+                                        ,
+                                        dcu_float_t*,
+                                        dcu_fp16_t*,
+                                        dcu_int_t*
 #endif
 
 #ifdef _USING_DEVICE_DNNL_
@@ -558,6 +640,12 @@ tensor_t create_cuda_fp16(std::vector<size_t>& shape);
 tensor_t create_cuda_int(std::vector<size_t>& shape);
 tensor_t create_cuda_q8(std::vector<size_t>& shape);
 tensor_t create_cuda_q4(std::vector<size_t>& shape);
+#endif
+
+#if _USING_DEVICE_DCU_
+tensor_t create_dcu_float(std::vector<size_t>& shape);
+tensor_t create_dcu_fp16(std::vector<size_t>& shape);
+tensor_t create_dcu_int(std::vector<size_t>& shape);
 #endif
 
 #if _USING_DEVICE_DNNL_
