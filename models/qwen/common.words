@@ -1,10 +1,14 @@
+1e-06                   "RMS_EPS"               !
+10000.0                 "ROTARY_BASE"           !
+2.5                     "TEMPERATURE"           !
+
 %def define_qwen_14b
     152064                  "VOCAB_SIZE"            !
     5120                    "HIDDEN_SIZE"           !
     13696                   "INTERMEDIATE_SIZE"     !
     40                      "HEADS_NUM"             !
     128                     "HEAD_HIDDEN"           !
-#endif
+%end
 
 %def define_qwen_7b
     151936                  "VOCAB_SIZE"            !
@@ -12,11 +16,7 @@
     11008                   "INTERMEDIATE_SIZE"     !
     32                      "HEADS_NUM"             !
     128                     "HEAD_HIDDEN"           !
-%endif 
-
-1e-06                   "RMS_EPS"               !
-10000.0                 "ROTARY_BASE"           !
-2.5                     "TEMPERATURE"           !
+%end 
 
 %def create_input_weight
     $DTYPE !
@@ -41,16 +41,17 @@
 
 %def create_layer_weight
     $L !
+    $DTYPE_Q !
     $DTYPE !
     $DEVICE !
 
     (1 1 "HIDDEN_SIZE" @  3 $DEVICE @ $DTYPE @)  op.create  $L @ "ln_1.weight" | !
     (1 1 "HIDDEN_SIZE" @  3 $DEVICE @ $DTYPE @)  op.create  $L @ "ln_2.weight"  | !
 
-    ("HIDDEN_SIZE" @ 3 * "HIDDEN_SIZE" @ 2 $DEVICE @  $DTYPE @)  op.create  $L @  "attn.qkv_proj.weight" | !
-    ("HIDDEN_SIZE" @ 3 *                 1 $DEVICE @  $DTYPE @)  op.create  $L @  "attn.qkv_proj.bias" | !
+    ("HIDDEN_SIZE" @ 3 * "HIDDEN_SIZE" @ 2 $DEVICE @  $DTYPE_Q @ )  op.create  $L @  "attn.qkv_proj.weight" | !
+    ("HIDDEN_SIZE" @ 3 *                 1 $DEVICE @  $DTYPE   @ )  op.create  $L @  "attn.qkv_proj.bias" | !
     ;
-    ; dummy split to three tensors, 5120 * 5120 = 16777216
+    ; dummy split to three tensors, 4096 * 4096 = 16777216
     ;
     ($L @ "attn.qkv_proj.weight" | @ 0                             "HIDDEN_SIZE" @ dup 2 op.view)  $L @  "query.weight" | !
     ($L @ "attn.qkv_proj.weight" | @ ("HIDDEN_SIZE" @ dup *)       "HIDDEN_SIZE" @ dup 2 op.view)  $L @  "key.weight" | !
@@ -60,11 +61,11 @@
     ($L @ "attn.qkv_proj.bias" | @ ("HIDDEN_SIZE" @ )              "HIDDEN_SIZE" @ 1 op.view)  $L @  "key.bias" | !
     ($L @ "attn.qkv_proj.bias" | @ ("HIDDEN_SIZE" @ 2 *)           "HIDDEN_SIZE" @ 1 op.view)  $L @  "value.bias" | !
     
-    ("HIDDEN_SIZE" @  "HIDDEN_SIZE" @ 2 $DEVICE @  $DTYPE @)  op.create   $L @ "attn.c_proj.weight" |  !
+    ("HIDDEN_SIZE" @  "HIDDEN_SIZE" @ 2 $DEVICE @  $DTYPE_Q @)  op.create   $L @ "attn.c_proj.weight" |  !
 
-    ("INTERMEDIATE_SIZE" @  "HIDDEN_SIZE" @ 2 $DEVICE @  $DTYPE @)  op.create  $L @  "mlp.w1.weight"  | !
-    ("INTERMEDIATE_SIZE" @  "HIDDEN_SIZE" @ 2 $DEVICE @  $DTYPE @)  op.create  $L @  "mlp.w2.weight"  | !
-    ("HIDDEN_SIZE" @  "INTERMEDIATE_SIZE" @ 2 $DEVICE @  $DTYPE @)  op.create  $L @  "mlp.c_proj.weight" | !
+    ("INTERMEDIATE_SIZE" @  "HIDDEN_SIZE" @ 2 $DEVICE @  $DTYPE_Q @)  op.create  $L @  "mlp.w1.weight"  | !
+    ("INTERMEDIATE_SIZE" @  "HIDDEN_SIZE" @ 2 $DEVICE @  $DTYPE_Q @)  op.create  $L @  "mlp.w2.weight"  | !
+    ("HIDDEN_SIZE" @  "INTERMEDIATE_SIZE" @ 2 $DEVICE @  $DTYPE_Q @)  op.create  $L @  "mlp.c_proj.weight" | !
 
     $L !!
     $DTYPE !!
@@ -72,7 +73,7 @@
 %end
 
 %def load_input_weight
-    "Loading input weight..." echo 
+    "Loading input weight..." ? 
     
     $weights_path ! 
 
@@ -82,11 +83,11 @@
 
     $weights_path !!
 
-    "Loaded input weight." echo
+    "Loaded input weight." ?
 %end
 
 %def load_output_weight
-    "Loading output weight..." echo 
+    "Loading output weight..." ? 
     
     $weights_path ! 
     
@@ -100,25 +101,25 @@
 
     $weights_path !!
 
-    "Loaded output weight." echo
+    "Loaded output weight." ?
 %end
 
 %def load_layer_weight
     $L !
     $weights_path ! 
     
-    "Loading... " $weights_path @ | echo
+    "Loading... " $weights_path @ | ?
     
     $L @ "ln_1.weight"                     | @ $weights_path @  "ln_1.weight.bin"                | io.load
     $L @ "ln_2.weight"                     | @ $weights_path @  "ln_2.weight.bin"                | io.load
-    $L @ "attn.qkv_proj.weight"            | @ $weights_path @  "attn.c_attn.weight.bin"         | io.load
+    $L @ "attn.qkv_proj.weight"            | @ $weights_path @  "attn.c_attn.weight.q4"         | io.load
     $L @ "attn.qkv_proj.bias"              | @ $weights_path @  "attn.c_attn.bias.bin"           | io.load
-    $L @ "attn.c_proj.weight"              | @ $weights_path @  "attn.c_proj.weight.bin"         | io.load
-    $L @ "mlp.w1.weight"                   | @ $weights_path @  "mlp.w1.weight.bin"              | io.load
-    $L @ "mlp.w2.weight"                   | @ $weights_path @  "mlp.w2.weight.bin"              | io.load
-    $L @ "mlp.c_proj.weight"               | @ $weights_path @  "mlp.c_proj.weight.bin"          | io.load
+    $L @ "attn.c_proj.weight"              | @ $weights_path @  "attn.c_proj.weight.q4"         | io.load
+    $L @ "mlp.w1.weight"                   | @ $weights_path @  "mlp.w1.weight.q4"              | io.load
+    $L @ "mlp.w2.weight"                   | @ $weights_path @  "mlp.w2.weight.q4"              | io.load
+    $L @ "mlp.c_proj.weight"               | @ $weights_path @  "mlp.c_proj.weight.q4"          | io.load
     
-    "Loaded " $weights_path @ | echo
+    "Loaded " $weights_path @ | ?
     
     $L !!
     $weights_path !!
@@ -137,7 +138,7 @@
     $L @ "mlp.c_proj.weight"                  | @ "mlp.c_proj.weight"                 !
 
     ;
-    ; dummy split to three tensors, 5120 * 5120 = 16777216
+    ; dummy split to three tensors, 4096 * 4096 = 16777216
     ;
     ("attn.qkv_proj.weight" @ 0                             "HIDDEN_SIZE" @ dup 2 op.view)  "query.weight"  !
     ("attn.qkv_proj.weight" @ ("HIDDEN_SIZE" @ dup *)       "HIDDEN_SIZE" @ dup 2 op.view)  "key.weight"    !

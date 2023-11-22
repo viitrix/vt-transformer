@@ -32,6 +32,8 @@
 %end
 
 %def init_gpu
+    define_qwen_7b
+
     init_var_weight
 
     "cuda" "G_DTYPE" @ create_input_weight
@@ -40,38 +42,38 @@
     "cuda" "G_DTYPE" @ create_output_weight
     "G_PATH" @ load_output_weight
 
-    "cuda" "G_DTYPE" @  "L0."   create_layer_weight 
-    "cuda" "G_DTYPE" @  "L1."   create_layer_weight 
-    "cuda" "G_DTYPE" @  "L2."   create_layer_weight 
-    "cuda" "G_DTYPE" @  "L3."   create_layer_weight 
-    "cuda" "G_DTYPE" @  "L4."   create_layer_weight
-    "cuda" "G_DTYPE" @  "L5."   create_layer_weight 
-    "cuda" "G_DTYPE" @  "L6."   create_layer_weight 
-    "cuda" "G_DTYPE" @  "L7."   create_layer_weight 
-    "cuda" "G_DTYPE" @  "L8."   create_layer_weight 
-    "cuda" "G_DTYPE" @  "L9."   create_layer_weight
-    "cuda" "G_DTYPE" @  "L10."  create_layer_weight
-    "cuda" "G_DTYPE" @  "L11."  create_layer_weight
-    "cuda" "G_DTYPE" @  "L12."  create_layer_weight
-    "cuda" "G_DTYPE" @  "L13."  create_layer_weight
-    "cuda" "G_DTYPE" @  "L14."  create_layer_weight
-    "cuda" "G_DTYPE" @  "L15."  create_layer_weight
-    "cuda" "G_DTYPE" @  "L16."   create_layer_weight 
-    "cuda" "G_DTYPE" @  "L17."   create_layer_weight 
-    "cuda" "G_DTYPE" @  "L18."   create_layer_weight 
-    "cuda" "G_DTYPE" @  "L19."   create_layer_weight 
-    "cuda" "G_DTYPE" @  "L20."   create_layer_weight
-    "cuda" "G_DTYPE" @  "L21."   create_layer_weight 
-    "cuda" "G_DTYPE" @  "L22."   create_layer_weight 
-    "cuda" "G_DTYPE" @  "L23."   create_layer_weight 
-    "cuda" "G_DTYPE" @  "L24."   create_layer_weight 
-    "cuda" "G_DTYPE" @  "L25."   create_layer_weight
-    "cuda" "G_DTYPE" @  "L26."   create_layer_weight
-    "cuda" "G_DTYPE" @  "L27."   create_layer_weight
-    "cuda" "G_DTYPE" @  "L28."   create_layer_weight
-    "cuda" "G_DTYPE" @  "L29."   create_layer_weight
-    "cuda" "G_DTYPE" @  "L30."   create_layer_weight
-    "cuda" "G_DTYPE" @  "L31."   create_layer_weight
+    "cuda" "G_DTYPE" @ "q4"  "L0."   create_layer_weight 
+    "cuda" "G_DTYPE" @ "q4"  "L1."   create_layer_weight 
+    "cuda" "G_DTYPE" @ "q4"  "L2."   create_layer_weight 
+    "cuda" "G_DTYPE" @ "q4"  "L3."   create_layer_weight 
+    "cuda" "G_DTYPE" @ "q4"  "L4."   create_layer_weight
+    "cuda" "G_DTYPE" @ "q4"  "L5."   create_layer_weight 
+    "cuda" "G_DTYPE" @ "q4"  "L6."   create_layer_weight 
+    "cuda" "G_DTYPE" @ "q4"  "L7."   create_layer_weight 
+    "cuda" "G_DTYPE" @ "q4"  "L8."   create_layer_weight 
+    "cuda" "G_DTYPE" @ "q4"  "L9."   create_layer_weight
+    "cuda" "G_DTYPE" @ "q4"  "L10."  create_layer_weight
+    "cuda" "G_DTYPE" @ "q4"  "L11."  create_layer_weight
+    "cuda" "G_DTYPE" @ "q4"  "L12."  create_layer_weight
+    "cuda" "G_DTYPE" @ "q4"  "L13."  create_layer_weight
+    "cuda" "G_DTYPE" @ "q4"  "L14."  create_layer_weight
+    "cuda" "G_DTYPE" @ "q4"  "L15."  create_layer_weight
+    "cuda" "G_DTYPE" @ "q4"  "L16."   create_layer_weight 
+    "cuda" "G_DTYPE" @ "q4"  "L17."   create_layer_weight 
+    "cuda" "G_DTYPE" @ "q4"  "L18."   create_layer_weight 
+    "cuda" "G_DTYPE" @ "q4"  "L19."   create_layer_weight 
+    "cuda" "G_DTYPE" @ "q4"  "L20."   create_layer_weight
+    "cuda" "G_DTYPE" @ "q4"  "L21."   create_layer_weight 
+    "cuda" "G_DTYPE" @ "q4"  "L22."   create_layer_weight 
+    "cuda" "G_DTYPE" @ "q4"  "L23."   create_layer_weight 
+    "cuda" "G_DTYPE" @ "q4"  "L24."   create_layer_weight 
+    "cuda" "G_DTYPE" @ "q4"  "L25."   create_layer_weight
+    "cuda" "G_DTYPE" @ "q4"  "L26."   create_layer_weight
+    "cuda" "G_DTYPE" @ "q4"  "L27."   create_layer_weight
+    "cuda" "G_DTYPE" @ "q4"  "L28."   create_layer_weight
+    "cuda" "G_DTYPE" @ "q4"  "L29."   create_layer_weight
+    "cuda" "G_DTYPE" @ "q4"  "L30."   create_layer_weight
+    "cuda" "G_DTYPE" @ "q4"  "L31."   create_layer_weight
      
     "G_PATH" @ "h_0."  | "L0." load_layer_weight
     "G_PATH" @ "h_1."  | "L1." load_layer_weight
