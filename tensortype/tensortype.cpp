@@ -408,26 +408,6 @@ ComputingReturn TensorType::io_pipe_write(tensor_t self, int n) {
 
 
 TensorType::~TensorType() {
-    if ( impl_index() == ImplType::CUDA_FLOAT ) {
-        cuda_float_t* tensor = std::get<CUDA_FLOAT>(impl_);
-        delete tensor;
-    }
-    if ( impl_index() == ImplType::CUDA_FP16 ) {
-        cuda_fp16_t* tensor = std::get<CUDA_FP16>(impl_);
-        delete tensor;
-    }
-    if ( impl_index() == ImplType::CUDA_INT ) {
-        cuda_int_t* tensor = std::get<CUDA_INT>(impl_);
-        delete tensor;
-    }
-    if ( impl_index() == ImplType::CUDA_Q8 ) {
-        cuda_q8_t* tensor = std::get<CUDA_Q8>(impl_);
-        delete tensor;
-    }
-    if ( impl_index() == ImplType::CUDA_Q4 ) {
-        cuda_q4_t* tensor = std::get<CUDA_Q4>(impl_);
-        delete tensor;
-    }
     if ( impl_index() == ImplType::HOST_FLOAT ) {
         host_float_t* tensor = std::get<HOST_FLOAT>(impl_);
         delete tensor;
@@ -448,30 +428,48 @@ TensorType::~TensorType() {
         host_q4_t* tensor = std::get<HOST_Q4>(impl_);
         delete tensor;
     }
+
+#ifdef _USING_DEVICE_CUDA_
+    if ( impl_index() == ImplType::CUDA_FLOAT ) {
+        cuda_float_t* tensor = std::get<CUDA_FLOAT>(impl_);
+        delete tensor;
+    }
+    if ( impl_index() == ImplType::CUDA_FP16 ) {
+        cuda_fp16_t* tensor = std::get<CUDA_FP16>(impl_);
+        delete tensor;
+    }
+    if ( impl_index() == ImplType::CUDA_INT ) {
+        cuda_int_t* tensor = std::get<CUDA_INT>(impl_);
+        delete tensor;
+    }
+    if ( impl_index() == ImplType::CUDA_Q8 ) {
+        cuda_q8_t* tensor = std::get<CUDA_Q8>(impl_);
+        delete tensor;
+    }
+    if ( impl_index() == ImplType::CUDA_Q4 ) {
+        cuda_q4_t* tensor = std::get<CUDA_Q4>(impl_);
+        delete tensor;
+    }
+#endif
+
+#ifdef _USING_DEVICE_DNNL_
+    if ( impl_index() == ImplType::DNNL_FLOAT ) {
+        dnnl_float_t* tensor = std::get<DNNL_FLOAT>(impl_);
+        delete tensor;
+    }
+    if ( impl_index() == ImplType::DNNL_FP16 ) {
+        dnnl_fp16_t* tensor = std::get<DNNL_FP16>(impl_);
+        delete tensor;
+    }
+    if ( impl_index() == ImplType::DNNL_INT ) {
+        dnnl_int_t* tensor = std::get<DNNL_INT>(impl_);
+        delete tensor;
+    }
+#endif
 
 }
 
 TransformerComputing* TensorType::impl() {
-    if ( impl_index() == ImplType::CUDA_FLOAT ) {
-        cuda_float_t* tensor = std::get<CUDA_FLOAT>(impl_);
-        return tensor;
-    }
-    if ( impl_index() == ImplType::CUDA_INT ) {
-        cuda_int_t* tensor = std::get<CUDA_INT>(impl_);
-        return tensor;
-    }
-    if ( impl_index() == ImplType::CUDA_FP16 ) {
-        cuda_fp16_t* tensor = std::get<CUDA_FP16>(impl_);
-        return tensor;
-    }
-    if ( impl_index() == ImplType::CUDA_Q8 ) {
-        cuda_q8_t* tensor = std::get<CUDA_Q8>(impl_);
-        return tensor;
-    }
-    if ( impl_index() == ImplType::CUDA_Q4 ) {
-        cuda_q4_t* tensor = std::get<CUDA_Q4>(impl_);
-        return tensor;
-    }
     if ( impl_index() == ImplType::HOST_FLOAT ) {
         host_float_t* tensor = std::get<HOST_FLOAT>(impl_);
         return tensor;
@@ -492,6 +490,44 @@ TransformerComputing* TensorType::impl() {
         host_q4_t* tensor = std::get<HOST_Q4>(impl_);
         return tensor;
     }
+
+#ifdef _USING_DEVICE_CUDA_
+    if ( impl_index() == ImplType::CUDA_FLOAT ) {
+        cuda_float_t* tensor = std::get<CUDA_FLOAT>(impl_);
+        return tensor;
+    }
+    if ( impl_index() == ImplType::CUDA_INT ) {
+        cuda_int_t* tensor = std::get<CUDA_INT>(impl_);
+        return tensor;
+    }
+    if ( impl_index() == ImplType::CUDA_FP16 ) {
+        cuda_fp16_t* tensor = std::get<CUDA_FP16>(impl_);
+        return tensor;
+    }
+    if ( impl_index() == ImplType::CUDA_Q8 ) {
+        cuda_q8_t* tensor = std::get<CUDA_Q8>(impl_);
+        return tensor;
+    }
+    if ( impl_index() == ImplType::CUDA_Q4 ) {
+        cuda_q4_t* tensor = std::get<CUDA_Q4>(impl_);
+        return tensor;
+    }
+#endif
+
+#ifdef _USING_DEVICE_DNNL_
+    if ( impl_index() == ImplType::DNNL_FLOAT ) {
+        dnnl_float_t* tensor = std::get<DNNL_FLOAT>(impl_);
+        return tensor;
+    }
+    if ( impl_index() == ImplType::DNNL_FP16 ) {
+        dnnl_fp16_t* tensor = std::get<DNNL_FP16>(impl_);
+        return tensor;
+    }
+    if ( impl_index() == ImplType::DNNL_INT ) {
+        dnnl_int_t* tensor = std::get<DNNL_INT>(impl_);
+        return tensor;
+    }
+#endif
 
     vt_panic("Can't be here!");
     return nullptr;

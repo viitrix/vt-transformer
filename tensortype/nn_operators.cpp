@@ -66,13 +66,8 @@ namespace op {
     struct Device : public NativeWord {
         void run(Stack& stack) override {
             tensor_t x = stack.pop_tensor();
-            if ( x->is_host() ) {
-                stack.push_string( "host" );
-            } else if ( x->is_cuda() ) {
-                stack.push_string( "cuda" );
-            } else {
-                vt_panic("Can't be here!");
-            }
+            std::string dname = x->device_name();
+            stack.push_string(dname);
         }
         NWORD_CREATOR_DEFINE_LR(Device)
     };
