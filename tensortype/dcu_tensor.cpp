@@ -47,4 +47,16 @@ tensor_t create_dcu_int(std::vector<size_t>& shape_) {
     return std::make_shared<TensorType>(tensor, shape);
 }
 
+tensor_t create_dcu_q8(std::vector<size_t>& shape_) {
+    ShapeType shape(shape_);
+    DCUTensor<DataType::Q8>* tensor = new DCUTensor<DataType::Q8>(shape);
+    return std::make_shared<TensorType>(tensor, shape);
+}
+
+tensor_t create_dcu_q4(std::vector<size_t>& shape_) {
+    ShapeType shape(shape_);
+    DCUTensor<DataType::Q4>* tensor = new DCUTensor<DataType::Q4>(shape);
+    return std::make_shared<TensorType>(tensor, shape);
+}
+
 }

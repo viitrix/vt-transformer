@@ -80,6 +80,10 @@ void ComputingContext::shutdown() {
         CUDA_CHECK( cudaStreamDestroy(assist_streams[i]) );
     }
 #endif
+
+#ifdef _USING_DEVICE_DCU_
+    HIP_CHECK( hipStreamDestroy(dcu_stream) );
+#endif
 }
 
 #ifdef _USING_DEVICE_CUDA_

@@ -17,16 +17,14 @@ struct DCUTensor : public TransformerComputing {
     }
     DCUTensor(const ShapeType& shape);
     DCUTensor(ShapeType& shape, void *mem) : mem_(mem), owner_(false) {
-        /*
         if ( _DTYPE_ == DataType::Q4 ) {
             size_t last_dim = shape.vec().back();
             vt_assert( (last_dim % Q4_BLOCK_SIZE) == 0, "Q4 tensor last dim must be 32 aligened.");
         }
         if ( _DTYPE_ == DataType::Q8 ) {
             size_t last_dim = shape.vec().back();
-            vt_assert( last_dim > 128, "Q8 tensor last dim must > 128k");
+            vt_assert( last_dim > 128, "Q8 tensor last dim must > 128");
         }
-        */
     }
     void* data() {
         return mem_;
@@ -43,6 +41,8 @@ protected:
     friend struct DCUTensor<DataType::Float>;
     friend struct DCUTensor<DataType::BF16>;
     friend struct DCUTensor<DataType::Int>;
+    friend struct DCUTensor<DataType::Q8>;
+    friend struct DCUTensor<DataType::Q4>;
 };
 
 } // end of namespace

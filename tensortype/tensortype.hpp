@@ -164,6 +164,8 @@ template <DataType _DTYPE_> struct DCUTensor;
 using dcu_float_t = DCUTensor<DataType::Float>;
 using dcu_fp16_t = DCUTensor<DataType::FP16>;
 using dcu_int_t = DCUTensor<DataType::Int>;
+using dcu_q8_t = DCUTensor<DataType::Q8>;
+using dcu_q4_t = DCUTensor<DataType::Q4>;
 #endif
 
 #ifdef _USING_DEVICE_DNNL_
@@ -196,6 +198,8 @@ public:
     TensorType(dcu_float_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Float), impl_(tensor) {};
     TensorType(dcu_fp16_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::FP16), impl_(tensor) {};
     TensorType(dcu_int_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Int), impl_(tensor) {};
+    TensorType(dcu_q8_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Q8), impl_(tensor) {};
+    TensorType(dcu_q4_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Q4), impl_(tensor) {};
 #endif
 
 #ifdef _USING_DEVICE_DNNL_
@@ -303,6 +307,18 @@ public:
         }
         return std::get<DCU_INT>(impl_);
     }
+    dcu_q8_t* dcu_q8() {
+        if ( impl_.index() != DCU_Q8 ) {
+            vt_panic("Cant get dcu_q8 from a tensor");
+        }
+        return std::get<DCU_Q8>(impl_);
+    }
+    dcu_q4_t* dcu_q4() {
+        if ( impl_.index() != DCU_Q4 ) {
+            vt_panic("Cant get dcu_q4 from a tensor");
+        }
+        return std::get<DCU_Q4>(impl_);
+    }
 #endif
 
 #if _USING_DEVICE_DNNL_
@@ -352,7 +368,7 @@ public:
 #endif
 
 #ifdef _USING_DEVICE_DCU_
-        if ( (impl_index() <= ImplType::DCU_INT) && (impl_index() >= ImplType::DCU_FLOAT) ) {
+        if ( (impl_index() <= ImplType::DCU_Q4) && (impl_index() >= ImplType::DCU_FLOAT) ) {
             return "dcu";
         }
 #endif
@@ -367,7 +383,8 @@ public:
     }
 
     bool is_host() const {
-        if (impl_index() <= ImplType::HOST_Q4) {
+        auto ii = impl_index();
+        if ( (ii >= ImplType::HOST_FLOAT) && (ii <= ImplType::HOST_Q4) ) {
             return true;
         }
         return false;
@@ -386,7 +403,7 @@ public:
 #ifdef _USING_DEVICE_DCU_
     bool is_dcu() const {
         auto ii = impl_index();
-        if ( (ii >= ImplType::DCU_FLOAT) && (ii <= ImplType::DCU_INT) ) {
+        if ( (ii >= ImplType::DCU_FLOAT) && (ii <= ImplType::DCU_Q4) ) {
             return true;
         }
         return false;
@@ -476,6 +493,11 @@ public:
             return true;
         }
 #endif
+#ifdef _USING_DEVICE_DCU_
+        if (impl_index() == ImplType::DCU_Q8) {
+            return true;
+        }
+#endif
         return false;
     }
     bool is_q4() const {
@@ -484,6 +506,11 @@ public:
         }
 #ifdef _USING_DEVICE_CUDA_
         if (impl_index() == ImplType::CUDA_Q4) {
+            return true;
+        }
+#endif
+#ifdef _USING_DEVICE_DCU_
+        if (impl_index() == ImplType::DCU_Q4) {
             return true;
         }
 #endif
@@ -572,11 +599,6 @@ private:
 
     // ImplType enum order is same as TensorImpl's variant
     enum ImplType {
-        HOST_FLOAT,
-        HOST_FP16,
-        HOST_INT,
-        HOST_Q8,
-        HOST_Q4,
 #ifdef _USING_DEVICE_CUDA_
         CUDA_FLOAT,
         CUDA_FP16,
@@ -589,6 +611,8 @@ private:
         DCU_FLOAT,
         DCU_FP16,
         DCU_INT,
+        DCU_Q8,
+        DCU_Q4,
 #endif
 
 #ifdef _USING_DEVICE_DNNL_
@@ -596,35 +620,39 @@ private:
         DNNL_FP16,
         DNNL_INT,
 #endif
+        HOST_FLOAT,
+        HOST_FP16,
+        HOST_INT,
+        HOST_Q8,
+        HOST_Q4
     };
-    using TensorImpl =   std::variant<  host_float_t*,
-                                        host_fp16_t*,
-                                        host_int_t*,
-                                        host_q8_t*,
-                                        host_q4_t*
+    using TensorImpl =   std::variant<
 #ifdef _USING_DEVICE_CUDA_
-                                        ,
                                         cuda_float_t*,
                                         cuda_fp16_t*,
                                         cuda_int_t*,
                                         cuda_q8_t*,
-                                        cuda_q4_t*
+                                        cuda_q4_t*,
 #endif
 
 #ifdef _USING_DEVICE_DCU_
-                                        ,
                                         dcu_float_t*,
                                         dcu_fp16_t*,
-                                        dcu_int_t*
+                                        dcu_int_t*,
+                                        dcu_q8_t*,
+                                        dcu_q4_t*,
 #endif
 
 #ifdef _USING_DEVICE_DNNL_
-                                        ,
                                         dnnl_float_t*,
                                         dnnl_fp16_t*,
-                                        dnnl_int_t*
+                                        dnnl_int_t*,
 #endif
-                                        >;
+                                        host_float_t*,
+                                        host_fp16_t*,
+                                        host_int_t*,
+                                        host_q8_t*,
+                                        host_q4_t* >;
     TensorImpl impl_;
 };
 
@@ -646,6 +674,8 @@ tensor_t create_cuda_q4(std::vector<size_t>& shape);
 tensor_t create_dcu_float(std::vector<size_t>& shape);
 tensor_t create_dcu_fp16(std::vector<size_t>& shape);
 tensor_t create_dcu_int(std::vector<size_t>& shape);
+tensor_t create_dcu_q8(std::vector<size_t>& shape);
+tensor_t create_dcu_q4(std::vector<size_t>& shape);
 #endif
 
 #if _USING_DEVICE_DNNL_

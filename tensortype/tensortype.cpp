@@ -11,6 +11,9 @@
 #ifdef _USING_DEVICE_CUDA_
 #include "cuda_tensor.hpp"
 #endif
+#ifdef _USING_DEVICE_DCU_
+#include "dcu_tensor.hpp"
+#endif
 
 namespace vt {
 
@@ -406,7 +409,6 @@ ComputingReturn TensorType::io_pipe_write(tensor_t self, int n) {
     op_check(ret, "pipe_write");
 }
 
-
 TensorType::~TensorType() {
     if ( impl_index() == ImplType::HOST_FLOAT ) {
         host_float_t* tensor = std::get<HOST_FLOAT>(impl_);
@@ -448,6 +450,29 @@ TensorType::~TensorType() {
     }
     if ( impl_index() == ImplType::CUDA_Q4 ) {
         cuda_q4_t* tensor = std::get<CUDA_Q4>(impl_);
+        delete tensor;
+    }
+#endif
+
+#ifdef _USING_DEVICE_DCU_
+    if ( impl_index() == ImplType::DCU_FLOAT ) {
+        dcu_float_t* tensor = std::get<DCU_FLOAT>(impl_);
+        delete tensor;
+    }
+    if ( impl_index() == ImplType::DCU_FP16 ) {
+        dcu_fp16_t* tensor = std::get<DCU_FP16>(impl_);
+        delete tensor;
+    }
+    if ( impl_index() == ImplType::DCU_INT ) {
+        dcu_int_t* tensor = std::get<DCU_INT>(impl_);
+        delete tensor;
+    }
+    if ( impl_index() == ImplType::DCU_Q8 ) {
+        dcu_q8_t* tensor = std::get<DCU_Q8>(impl_);
+        delete tensor;
+    }
+    if ( impl_index() == ImplType::DCU_Q4 ) {
+        dcu_q4_t* tensor = std::get<DCU_Q4>(impl_);
         delete tensor;
     }
 #endif
@@ -514,6 +539,30 @@ TransformerComputing* TensorType::impl() {
     }
 #endif
 
+#ifdef _USING_DEVICE_DCU_
+    if ( impl_index() == ImplType::DCU_FLOAT ) {
+        dcu_float_t* tensor = std::get<DCU_FLOAT>(impl_);
+        return tensor;
+    }
+    if ( impl_index() == ImplType::DCU_INT ) {
+        dcu_int_t* tensor = std::get<DCU_INT>(impl_);
+        return tensor;
+    }
+    if ( impl_index() == ImplType::DCU_FP16 ) {
+        dcu_fp16_t* tensor = std::get<DCU_FP16>(impl_);
+        return tensor;
+    }
+    if ( impl_index() == ImplType::DCU_Q8 ) {
+        dcu_q8_t* tensor = std::get<DCU_Q8>(impl_);
+        return tensor;
+    }
+    if ( impl_index() == ImplType::DCU_Q4 ) {
+        dcu_q4_t* tensor = std::get<DCU_Q4>(impl_);
+        return tensor;
+    }
+
+#endif
+
 #ifdef _USING_DEVICE_DNNL_
     if ( impl_index() == ImplType::DNNL_FLOAT ) {
         dnnl_float_t* tensor = std::get<DNNL_FLOAT>(impl_);
@@ -558,6 +607,7 @@ void* TensorType::device_data(size_t index) {
         host_q4_t* tensor = std::get<HOST_Q4>(impl_);
         return tensor->data();
     }
+
 #ifdef _USING_DEVICE_CUDA_
     if ( index == ImplType::CUDA_FLOAT ) {
         cuda_float_t* tensor = std::get<CUDA_FLOAT>(impl_);
@@ -577,6 +627,29 @@ void* TensorType::device_data(size_t index) {
     }
     if ( index == ImplType::CUDA_Q4 ) {
         cuda_q4_t* tensor = std::get<CUDA_Q4>(impl_);
+        return tensor->data();
+    }
+#endif
+
+#ifdef _USING_DEVICE_DCU_
+    if ( index == ImplType::DCU_FLOAT ) {
+        dcu_float_t* tensor = std::get<DCU_FLOAT>(impl_);
+        return tensor->data();
+    }
+    if ( index == ImplType::DCU_INT ) {
+        dcu_int_t* tensor = std::get<DCU_INT>(impl_);
+        return tensor->data();
+    }
+    if ( index == ImplType::DCU_FP16 ) {
+        dcu_fp16_t* tensor = std::get<DCU_FP16>(impl_);
+        return tensor->data();
+    }
+    if ( index == ImplType::DCU_Q8 ) {
+        dcu_q8_t* tensor = std::get<DCU_Q8>(impl_);
+        return tensor->data();
+    }
+    if ( index == ImplType::DCU_Q4 ) {
+        dcu_q4_t* tensor = std::get<DCU_Q4>(impl_);
         return tensor->data();
     }
 #endif
