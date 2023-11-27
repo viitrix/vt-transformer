@@ -6,7 +6,7 @@
 
 namespace vt {
 
-#if _USING_DEVICE_CUDA_
+#ifdef _USING_DEVICE_CUDA_
 int ComputingContext::cuda_device = -1;
 cudaStream_t ComputingContext::cuda_stream = nullptr;
 cudaStream_t ComputingContext::assist_streams[ ALL_CUDA_STREAMS ];
@@ -17,7 +17,7 @@ cudnnHandle_t ComputingContext::cudnn_handle = nullptr;
 void* ComputingContext::cuda_workspace = nullptr;
 #endif
 
-#if _using_device_dcu_
+#ifdef _USING_DEVICE_DCU_
 int ComputingContext::dcu_device = -1;
 hipStream_t ComputingContext::dcu_stream = nullptr;
 #endif

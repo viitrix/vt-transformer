@@ -4,7 +4,7 @@ FLAGS = -Wall -O3 -Wno-maybe-uninitialized -fopenmp \
 		-D_USING_DEVICE_DNNL_ \
 		-D_USING_DEVICE_DCU_ 
 
-INC = -I. -I../install/include -I../install/include/kernels 
+INC = -I. -I../install/include -I../install/include/kernels -I~/opt/dtk/include 
 
 all: libtensortype.a
 
@@ -37,7 +37,8 @@ nn_kvcache.o: computing.hpp tensortype.hpp dag.hpp nn_kvcache.cpp
 
 install: libtensortype.a
 	cp *.hpp ../install/include
-	cp $< ../install/lib
+	mkdir -p ../install/lib
+	cp $< ../install/lib/
 
 clean:
 	rm -f *.a *.o

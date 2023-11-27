@@ -12,6 +12,7 @@
 
 #ifdef _USING_DEVICE_DCU_
 #define __HIP_PLATFORM_AMD__
+#define __HIP_PLATFORM_HCC__
 #include <hip/hip_runtime.h>
 #include <hip/hip_fp16.h>
 #endif

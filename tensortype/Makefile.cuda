@@ -40,6 +40,7 @@ nn_kvcache.o: computing.hpp tensortype.hpp dag.hpp nn_kvcache.cpp
 
 install: libtensortype.a
 	cp *.hpp ../install/include
+	mkdir -p ../install/lib
 	cp $< ../install/lib
 
 clean:

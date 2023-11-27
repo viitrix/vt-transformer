@@ -15,6 +15,10 @@
 #include "cuda_tensor.hpp"
 #endif
 
+#ifdef _USING_DEVICE_CUDA_
+#include "dcu_tensor.hpp"
+#endif
+
 #include "dag.hpp"
 
 #endif
