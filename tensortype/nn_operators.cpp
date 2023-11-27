@@ -104,6 +104,20 @@ namespace op {
 #else
                 vt_panic("Can' be here!");
 #endif
+            } else if ( device == "dcu" ) {
+#ifdef _USING_DEVICE_DCU_
+                if ( dtype == vt::Float ) {
+                    t = vt::create_dcu_float(shape);
+                } else if ( dtype == vt::FP16 ) {
+                    t = vt::create_dcu_fp16(shape);
+                } else if ( dtype == vt::Int ) {
+                    t = vt::create_dcu_int(shape);
+                } else {
+                    vt_panic("Can' be here!");
+                }
+#else
+                vt_panic("Can' be here!");
+#endif
             } else if ( device == "host" ) {
                 if ( dtype == vt::Float ) {
                     t = vt::create_host_float(shape);

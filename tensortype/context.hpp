@@ -57,6 +57,12 @@
         if (s_ != MPI_SUCCESS) COMPLAIN_ERROR_AND_EXIT(#f, s_); \
     } while (0)
 
+#define HIP_CHECK(f) \
+    do { \
+        hipError_t  s_ = f; \
+        if (s_ != hipSuccess) COMPLAIN_ERROR_AND_EXIT(#f, s_); \
+    } while (0)
+
 namespace vt {
 
 #ifdef _USING_DEVICE_CUDA_
