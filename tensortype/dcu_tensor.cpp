@@ -1,5 +1,4 @@
 #include "dcu_tensor.hpp"
-#include <hip/hip_fp16.h>
 
 namespace vt {
 

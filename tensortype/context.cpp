@@ -17,6 +17,11 @@ cudnnHandle_t ComputingContext::cudnn_handle = nullptr;
 void* ComputingContext::cuda_workspace = nullptr;
 #endif
 
+#if _using_device_dcu_
+int ComputingContext::dcu_device = -1;
+hipStream_t ComputingContext::dcu_stream = nullptr;
+#endif
+
 void* ComputingContext::host_workspace = nullptr;
 size_t ComputingContext::workspace_size = 0;
 std::mt19937* ComputingContext::rng = nullptr;
@@ -46,8 +51,16 @@ void ComputingContext::boot(int cud) {
     CUDNN_CHECK(cudnnSetStream(cudnn_handle, cuda_stream));
     CUDA_CHECK( cudaMalloc(&cuda_workspace, workspace_size) );
 #endif
-    host_workspace = malloc( workspace_size );
 
+#ifdef _USING_DEVICE_DCU_
+    dcu_device = cud;
+
+    HIP_CHECK( hipSetDevice(dcu_device) );
+    HIP_CHECK( hipStreamCreate(&dcu_stream) );
+#endif
+
+
+    host_workspace = malloc( workspace_size );
     rng = new std::mt19937(1979);
 }
 
@@ -68,7 +81,6 @@ void ComputingContext::shutdown() {
     }
 #endif
 }
-
 
 #ifdef _USING_DEVICE_CUDA_
 float ComputingContext::cuda_event(int flag) {

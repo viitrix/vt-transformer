@@ -6,8 +6,6 @@
 #include "computing.hpp"
 #include "tensortype.hpp"
 
-#include <hip/hip_runtime.h>
-
 namespace vt {
 
 template <DataType _DTYPE_>

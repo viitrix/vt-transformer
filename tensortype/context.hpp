@@ -10,6 +10,12 @@
 #include <nccl.h>
 #endif
 
+#ifdef _USING_DEVICE_DCU_
+#define __HIP_PLATFORM_AMD__
+#include <hip/hip_runtime.h>
+#include <hip/hip_fp16.h>
+#endif
+
 #ifdef _USING_HPC_OPENMPI_
 #include <mpi.h>
 #endif
@@ -70,10 +76,6 @@ namespace vt {
 #define ALL_CUDA_EVENTS 8
 #endif
 
-#ifdef _USING_DEVICE_DCU_
-#define __HIP_PLATFORM_AMD__
-#endif
-
 struct ComputingContext {
 #ifdef _USING_DEVICE_CUDA_
     static int cuda_device;
@@ -84,6 +86,11 @@ struct ComputingContext {
     static cublasLtHandle_t cublasLt_handle;
     static cudnnHandle_t cudnn_handle;
     static void* cuda_workspace;
+#endif
+
+#ifdef _USING_DEVICE_DCU_
+    static int dcu_device;
+    static hipStream_t dcu_stream;
 #endif
 
     static void* host_workspace;
