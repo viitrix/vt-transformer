@@ -192,7 +192,7 @@ public:
     TensorType(cuda_q4_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Q4), impl_(tensor) {};
 #endif
 
-#ifdef _USING_DEVICE_DNNL_
+#ifdef _USING_DEVICE_DCU_
     TensorType(dcu_float_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Float), impl_(tensor) {};
     TensorType(dcu_fp16_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::FP16), impl_(tensor) {};
     TensorType(dcu_int_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Int), impl_(tensor) {};
@@ -611,7 +611,7 @@ private:
                                         cuda_q4_t*
 #endif
 
-#ifdef _USING_DEVICE_DNNL_
+#ifdef _USING_DEVICE_DCU_
                                         ,
                                         dcu_float_t*,
                                         dcu_fp16_t*,

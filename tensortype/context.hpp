@@ -64,6 +64,10 @@ namespace vt {
 #define ALL_CUDA_EVENTS 8
 #endif
 
+#ifdef _USING_DEVICE_DCU_
+#define __HIP_PLATFORM_AMD__
+#endif
+
 struct ComputingContext {
 #ifdef _USING_DEVICE_CUDA_
     static int cuda_device;
