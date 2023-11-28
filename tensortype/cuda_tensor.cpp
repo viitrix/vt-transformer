@@ -2,7 +2,7 @@
 #include <utility>
 #include <algorithm>
 
-#include <cuda_kernels.hpp>
+#include <kernels.hpp>
 #include "vt.hpp"
 #include "context.hpp"
 #include "cuda_tensor.hpp"
