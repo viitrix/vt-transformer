@@ -197,6 +197,128 @@ ComputingReturn DCUTensor<DT>::op_fill(tensor_t self, float value) {
     return OP_TODO_ERROR;
 }
 
+template<DataType DT>
+ComputingReturn DCUTensor<DT>::op_alibi(tensor_t self) {
+    int heads = self->shape()[1];
+    int tokens = self->shape()[3];
+
+    auto stream = ComputingContext::dcu_stream;
+    auto s = std::get<1>(self->op_sizeof(self));
+    if ( DT == DataType::Float ) {
+        std::vector<float> buffer;
+        vt::fill_alibi<float>(buffer, heads, tokens);
+
+        HIP_CHECK(hipMemcpyAsync(data(), buffer.data(), s,  hipMemcpyHostToDevice, stream));
+        return OP_OK;
+    }
+    if ( DT == DataType::FP16 ) {
+        std::vector<local_fp16_t> buffer;
+        vt::fill_alibi<local_fp16_t>(buffer, heads, tokens);
+        HIP_CHECK(hipMemcpyAsync(data(), buffer.data(), s,  hipMemcpyHostToDevice, stream));
+        return OP_OK;
+    }
+    return OP_TODO_ERROR;
+}
+
+template<DataType DT>
+ComputingReturn DCUTensor<DT>::op_causal_mask(tensor_t self, tensor_t out) {
+    int batch = self->shape()[0];
+    int full_tokens = self->shape()[1];
+    int new_tokens = out->shape()[2];
+
+    int* mask  = (int *)data();
+
+    auto stream = ComputingContext::dcu_stream;
+    return OP_OUTPUT_ERROR;
+}
+
+
+template<DataType DT>
+ComputingReturn DCUTensor<DT>::op_rotary_cache(tensor_t self, float base) {
+    if ( DT == DataType::Float ) {
+        // building inv_freq
+        int len = self->shape()[0];
+        int dims = self->shape()[1];
+
+        std::vector<float> cos_sin;
+        vt::fill_rotary_cache(cos_sin, len, dims, base);
+
+        auto stream = ComputingContext::dcu_stream;
+        HIP_CHECK(hipMemcpyAsync( data(), cos_sin.data(), self->items() * sizeof(float), hipMemcpyHostToDevice, stream));
+        return OP_OK;
+    }
+    return OP_OUTPUT_ERROR;
+}
+
+template<DataType DT>
+std::variant<ComputingReturn, tensor_t> DCUTensor<DT>::op_view(tensor_t self, size_t offset, const std::vector<size_t>& newShape_) {
+    ShapeType newShape(newShape_);
+    if ( DT == DataType::Float ) {
+        void *newData = (char *)data() + offset * sizeof(float);
+        auto* newDcuTensor = new DCUTensor<DataType::Float>(newShape, newData);
+        return std::make_shared<TensorType>(newDcuTensor, newShape);
+    }
+    if ( DT == DataType::Int ) {
+        void *newData = (char *)data() + offset * sizeof(int);
+        auto* newDcuTensor = new DCUTensor<DataType::Int>(newShape, newData);
+        return std::make_shared<TensorType>(newDcuTensor, newShape);
+    }
+    if ( DT == DataType::FP16 ) {
+        void *newData = (char *)data() + offset * sizeof(device_fp16_t);
+        auto* newDcuTensor = new DCUTensor<DataType::FP16>(newShape, newData);
+        return std::make_shared<TensorType>(newDcuTensor, newShape);
+    }
+    if ( DT == DataType::Q8 ) {
+        auto last_dim = self->shape().vec().back();
+        vt_assert(offset % last_dim == 0, "Q8's view must aligen with last dim");
+        vt_assert(newShape_.back() == last_dim, "Q8's view must aligen with last dim");
+
+        void *newData = (char *)data() + (offset / last_dim) * ( last_dim + sizeof(float) * 2 );
+        auto* newDcuTensor = new DCUTensor<DataType::Q8>(newShape, newData);
+        return std::make_shared<TensorType>(newDcuTensor, newShape);
+    }
+    if ( DT == DataType::Q4 ) {
+        vt_assert(offset % Q4_BLOCK_SIZE == 0, "Q4's view must aligen with Q4_BLOCK_T");
+        void *newData = (char *)data() + (offset / Q4_BLOCK_SIZE) * sizeof(q4_block_t);
+        auto* newDcuTensor = new DCUTensor<DataType::Q4>(newShape, newData);
+        return std::make_shared<TensorType>(newDcuTensor, newShape);
+    }
+    return OP_TODO_ERROR;
+}
+
+template<DataType _DT_>
+std::variant<ComputingReturn, tensor_t> DCUTensor<_DT_>::op_view_as(tensor_t self, size_t offset, const std::vector<size_t>& newShape_, const char* dtype) {
+    DataType DT = DataType_from(dtype);
+
+    ShapeType newShape(newShape_);
+
+    void *newData = nullptr;
+    if ( _DT_ == DataType::Float ) {
+        newData = (char *)data() + offset * sizeof(float);
+    } else if ( _DT_ == DataType::Int ) {
+        newData = (char *)data() + offset * sizeof(int);
+    } else if ( _DT_ == DataType::FP16 ) {
+        newData = (char *)data() + offset * sizeof(device_fp16_t);
+    } else {
+        return OP_TODO_ERROR;
+    }
+
+    if ( DT == DataType::Float ) {
+        auto* newDcuTensor = new DCUTensor<DataType::Float>(newShape, newData);
+        return std::make_shared<TensorType>(newDcuTensor, newShape);
+    }
+    if ( DT == DataType::Int ) {
+        auto* newDcuTensor = new DCUTensor<DataType::Int>(newShape, newData);
+        return std::make_shared<TensorType>(newDcuTensor, newShape);
+    }
+    if ( DT == DataType::FP16 ) {
+        auto* newDcuTensor = new DCUTensor<DataType::FP16>(newShape, newData);
+        return std::make_shared<TensorType>(newDcuTensor, newShape);
+    }
+    return OP_TODO_ERROR;
+}
+
+// ============================================
 tensor_t create_dcu_float(std::vector<size_t>& shape_) {
     ShapeType shape(shape_);
     DCUTensor<DataType::Float>* tensor = new DCUTensor<DataType::Float>(shape);

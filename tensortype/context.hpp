@@ -146,6 +146,7 @@ struct MemoryContext {
     static void shutdown();
 };
 
+// some common function and strcut
 using local_fp16_t = uint16_t;
 float fp16_to_fp32(local_fp16_t value);
 local_fp16_t fp32_to_fp16(float value);
@@ -179,6 +180,12 @@ inline float dequantize_q8(const q8_head_t* q8, const int i) {
     uint8_t qv = q8->q[i];
     return qv * q8->d + q8->m;
 }
+
+template<typename T>
+void fill_alibi(std::vector<T>&data, int heads, int tokens);
+
+template<typename T>
+void fill_rotary_cache(std::vector<T>&data, int len, int dims, float base);
 
 } // end of namespace br
 

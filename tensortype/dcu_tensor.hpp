@@ -16,7 +16,7 @@ struct DCUTensor : public TransformerComputing {
         }
     }
     DCUTensor(const ShapeType& shape);
-    DCUTensor(ShapeType& shape, void *mem) : mem_(mem), owner_(false) {
+    DCUTensor(ShapeType& shape, void *mem) : owner_(false), mem_(mem) {
         if ( _DTYPE_ == DataType::Q4 ) {
             size_t last_dim = shape.vec().back();
             vt_assert( (last_dim % Q4_BLOCK_SIZE) == 0, "Q4 tensor last dim must be 32 aligened.");
@@ -38,6 +38,12 @@ public:
     std::variant<ComputingReturn, size_t> op_sizeof(tensor_t self) override;
     ComputingReturn op_zero(tensor_t self) override;
     ComputingReturn op_fill(tensor_t self, float value) override;
+    ComputingReturn op_alibi(tensor_t self) override;
+    ComputingReturn op_causal_mask(tensor_t self, tensor_t out) override;
+    ComputingReturn op_rotary_cache(tensor_t self, float base) override;
+
+    std::variant<ComputingReturn, tensor_t> op_view(tensor_t self, size_t offset, const std::vector<size_t>& newShape) override;
+    std::variant<ComputingReturn, tensor_t> op_view_as(tensor_t self, size_t offset, const std::vector<size_t>& newShape, const char* dtype) override;
 
 protected:
     const bool owner_;

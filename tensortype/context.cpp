@@ -433,6 +433,54 @@ local_fp16_t fp32_to_fp16(float value) {
 	return (sign >> 16) | (shl1_w > UINT32_C(0xFF000000) ? UINT16_C(0x7E00) : nonsign);
 }
 
+template<>
+void fill_alibi<float>(std::vector<float>&data, int heads, int tokens) {
+    double base = 3 - log2(heads*1.0);
+    base = -1 * pow(2.0, base);
+    base = pow(2.0, base);
 
+    for (int j = 0; j < heads; j++) {
+        double slope = pow(base, (j + 1) * 1.0);
+        for (int k = 0; k < (int)tokens; k++) {
+            float v = k * 1.0 * slope;
+            data.push_back(v);
+        }
+    }
+}
+
+template<>
+void fill_alibi<local_fp16_t>(std::vector<local_fp16_t>&data, int heads, int tokens) {
+    double base = 3 - log2(heads*1.0);
+    base = -1 * pow(2.0, base);
+    base = pow(2.0, base);
+
+    for (int j = 0; j < heads; j++) {
+        double slope = pow(base, (j + 1) * 1.0);
+        for (int k = 0; k < (int)tokens; k++) {
+            float v = k * 1.0 * slope;
+            data.push_back( fp32_to_fp16(v) );
+        }
+    }
+}
+
+template<>
+void fill_rotary_cache<float>(std::vector<float>&data, int len, int dims,float base) {
+    std::vector<float> inv_freq;
+    inv_freq.resize(dims);
+    for (int i = 0; i < dims ; i += 2) {
+        float f = 1.0 / pow(base,  1.0 * i / dims);
+        inv_freq[i / 2] = f;
+        inv_freq[dims / 2 + i / 2] = f;
+    }
+
+    for (int l = 0; l < len; l++ ) {
+        for (int i = 0; i < dims; i++) {
+            //freqs.push_back( 1.0 * i * inv_freq[i] );
+            float f = 1.0 * l * inv_freq[i];
+            data.push_back( cos(f) );
+            data.push_back( sin(f) );
+        }
+    }
+}
 
 }
