@@ -15,7 +15,7 @@
 #include "cuda_tensor.hpp"
 #endif
 
-#ifdef _USING_DEVICE_CUDA_
+#ifdef _USING_DEVICE_DCU_
 #include "dcu_tensor.hpp"
 #endif
 

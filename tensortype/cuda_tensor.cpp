@@ -394,32 +394,17 @@ ComputingReturn CUDATensor<DT>::op_alibi(tensor_t self) {
     int tokens = self->shape()[3];
 
     auto stream = ComputingContext::cuda_stream;
-    double base = 3 - log2(heads*1.0);
-    base = -1 * pow(2.0, base);
-    base = pow(2.0, base);
-
     auto s = std::get<1>(self->op_sizeof(self));
     if ( DT == DataType::Float ) {
         std::vector<float> buffer;
-        for (int j = 0; j < heads; j++) {
-            double slope = pow(base, (j + 1) * 1.0);
-            for (int k = 0; k < (int)tokens; k++) {
-                buffer.push_back( k * 1.0 * slope);
-            }
-        }
+        vt::fill_alibi<float>(buffer, heads, tokens);
 
         CUDA_CHECK(cudaMemcpyAsync(data(), buffer.data(), s,  cudaMemcpyHostToDevice, stream));
         return OP_OK;
     }
     if ( DT == DataType::FP16 ) {
         std::vector<local_fp16_t> buffer;
-        for (int j = 0; j < heads; j++) {
-            double slope = pow(base, (j + 1) * 1.0);
-            for (int k = 0; k < (int)tokens; k++) {
-                float v = k * 1.0 * slope;
-                buffer.push_back( fp32_to_fp16(v) );
-            }
-        }
+        vt::fill_alibi<local_fp16_t>(buffer, heads, tokens);
         CUDA_CHECK(cudaMemcpyAsync(data(), buffer.data(), s,  cudaMemcpyHostToDevice, stream));
         return OP_OK;
     }
@@ -433,23 +418,9 @@ ComputingReturn CUDATensor<DT>::op_rotary_cache(tensor_t self, float base) {
         int len = self->shape()[0];
         int dims = self->shape()[1];
 
-        std::vector<float> inv_freq;
-        inv_freq.resize(dims);
-        for (int i = 0; i < dims ; i += 2) {
-            float f = 1.0 / pow(base,  1.0 * i / dims);
-            inv_freq[i / 2] = f;
-            inv_freq[dims / 2 + i / 2] = f;
-        }
-
         std::vector<float> cos_sin;
-        for (int l = 0; l < len; l++ ) {
-            for (int i = 0; i < dims; i++) {
-                //freqs.push_back( 1.0 * i * inv_freq[i] );
-                float f = 1.0 * l * inv_freq[i];
-                cos_sin.push_back( cos(f) );
-                cos_sin.push_back( sin(f) );
-            }
-        }
+        vt::fill_rotary_cache(cos_sin, len, dims, base);
+
         auto stream = ComputingContext::cuda_stream;
         CUDA_CHECK(cudaMemcpyAsync( data(), cos_sin.data(), self->items() * sizeof(float), cudaMemcpyHostToDevice, stream));
         return OP_OK;

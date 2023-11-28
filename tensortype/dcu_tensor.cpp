@@ -220,18 +220,6 @@ ComputingReturn DCUTensor<DT>::op_alibi(tensor_t self) {
     return OP_TODO_ERROR;
 }
 
-template<DataType DT>
-ComputingReturn DCUTensor<DT>::op_causal_mask(tensor_t self, tensor_t out) {
-    int batch = self->shape()[0];
-    int full_tokens = self->shape()[1];
-    int new_tokens = out->shape()[2];
-
-    int* mask  = (int *)data();
-
-    auto stream = ComputingContext::dcu_stream;
-    return OP_OUTPUT_ERROR;
-}
-
 
 template<DataType DT>
 ComputingReturn DCUTensor<DT>::op_rotary_cache(tensor_t self, float base) {
@@ -249,6 +237,19 @@ ComputingReturn DCUTensor<DT>::op_rotary_cache(tensor_t self, float base) {
     }
     return OP_OUTPUT_ERROR;
 }
+
+template<DataType DT>
+ComputingReturn DCUTensor<DT>::op_causal_mask(tensor_t self, tensor_t out) {
+    int batch = self->shape()[0];
+    int full_tokens = self->shape()[1];
+    int new_tokens = out->shape()[2];
+
+    int* mask  = (int *)data();
+
+    auto stream = ComputingContext::dcu_stream;
+    return OP_OUTPUT_ERROR;
+}
+
 
 template<DataType DT>
 std::variant<ComputingReturn, tensor_t> DCUTensor<DT>::op_view(tensor_t self, size_t offset, const std::vector<size_t>& newShape_) {
