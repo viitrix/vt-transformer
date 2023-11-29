@@ -2,20 +2,25 @@
 
 all: libdcu_kernels.a
 
-libdcu_kernels.a: fill.o causal_mask.o quantize.o embed.o
+FLAGS = -Wall -O3 
+
+libdcu_kernels.a: fill.o causal_mask.o quantize.o embed.o convert.o
 	ar rcs $@ $? 
 
 fill.o: fill.cpp
-	hipcc -c -o $@ $<
+	hipcc $(FLAGS) -c -o $@ $<
 
 causal_mask.o: causal_mask.cpp
-	hipcc -c -o $@ $<
+	hipcc $(FLAGS) -c -o $@ $<
 
 quantize.o: quantize.cpp
-	hipcc -c -o $@ $<
+	hipcc $(FLAGS) -c -o $@ $<
 
 embed.o: embed.cpp
-	hipcc -c -o $@ $<
+	hipcc $(FLAGS) -c -o $@ $<
+
+convert.o: convert.cpp
+	hipcc $(FLAGS) -c -o $@ $<
 
 install: libdcu_kernels.a dcu_kernels.hpp
 	cp libdcu_kernels.a ../../install/lib/

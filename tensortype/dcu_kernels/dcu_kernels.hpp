@@ -24,6 +24,9 @@ int kr_dequantize_q4(const void *input, T *out, int items, hipStream_t stream);
 template <typename T>
 int kr_embed(const int *ids, const T *table, T *out, const int len, const int hidden_size, hipStream_t stream);
 
+template <typename T, typename TT>
+int kr_convert(const T* in, TT* out, const int size, hipStream_t stream);
+
 
 
 }}

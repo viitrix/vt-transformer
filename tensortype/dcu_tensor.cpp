@@ -1,4 +1,5 @@
 #include "dcu_tensor.hpp"
+#include "host_tensor.hpp"
 #include <dcu_kernels.hpp>
 
 namespace vt {
@@ -440,6 +441,105 @@ ComputingReturn DCUTensor<_DTYPE_>::op_embed(tensor_t self, tensor_t table, tens
     return OP_OUTPUT_ERROR;
 }
 
+template<DataType DT>
+ComputingReturn DCUTensor<DT>::op_copy(tensor_t self, tensor_t src) {
+    auto s = std::get<1>(self->op_sizeof(self));
+    if ( DT == DataType::Float ) {
+        if ( src->is_host() ) {
+            void* x = src->host_float()->data();
+            void* y = data();
+
+            auto stream = ComputingContext::dcu_stream;
+            HIP_CHECK(hipMemcpyAsync(y, x, s, hipMemcpyHostToDevice, stream));
+            return OP_OK;
+        }
+        auto stream = ComputingContext::dcu_stream;
+        HIP_CHECK(hipMemcpyAsync(data(), src->dcu_float()->data(), s, hipMemcpyDeviceToDevice, stream));
+        return OP_OK;
+    }
+    if ( DT == DataType::Int ) {
+        if ( src->is_host() ) {
+            void* x = src->host_int()->data();
+            void* y = data();
+
+            auto stream = ComputingContext::dcu_stream;
+            HIP_CHECK(hipMemcpyAsync(y, x, s, hipMemcpyHostToDevice, stream));
+            return OP_OK;
+        }
+        auto stream = ComputingContext::dcu_stream;
+        HIP_CHECK(hipMemcpyAsync(data(), src->dcu_int()->data(), s, hipMemcpyDeviceToDevice, stream));
+        return OP_OK;
+    }
+    if ( DT == DataType::FP16 ) {
+        if ( src->is_host() ) {
+            void* x = src->host_fp16()->data();
+            void* y = data();
+
+            auto stream = ComputingContext::dcu_stream;
+            HIP_CHECK(hipMemcpyAsync(y, x, s, hipMemcpyHostToDevice, stream));
+            return OP_OK;
+        }
+        auto stream = ComputingContext::dcu_stream;
+        HIP_CHECK(hipMemcpyAsync(data(), src->dcu_fp16()->data(), s, hipMemcpyDeviceToDevice, stream));
+        return OP_OK;
+    }
+    if ( DT == DataType::Q8 ) {
+        if ( src->is_host() ) {
+            void* x = src->host_q8()->data();
+            void* y = data();
+
+            auto stream = ComputingContext::dcu_stream;
+            HIP_CHECK(hipMemcpyAsync(y, x, s, hipMemcpyHostToDevice, stream));
+            return OP_OK;
+        }
+        auto stream = ComputingContext::dcu_stream;
+        HIP_CHECK(hipMemcpyAsync(data(), src->dcu_q8()->data(), s, hipMemcpyDeviceToDevice, stream));
+        return OP_OK;
+    }
+    if ( DT == DataType::Q4 ) {
+        if ( src->is_host() ) {
+            void* x = src->host_q4()->data();
+            void* y = data();
+
+            auto stream = ComputingContext::dcu_stream;
+            HIP_CHECK(hipMemcpyAsync(y, x, s, hipMemcpyHostToDevice, stream));
+            return OP_OK;
+        }
+        auto stream = ComputingContext::dcu_stream;
+        HIP_CHECK(hipMemcpyAsync(data(), src->dcu_q4()->data(), s, hipMemcpyDeviceToDevice, stream));
+        return OP_OK;
+    }
+
+    return OP_TODO_ERROR;
+}
+
+template<DataType DT>
+ComputingReturn DCUTensor<DT>::op_convert(tensor_t self, tensor_t src) {
+    if ( DT == DataType::FP16 && src->is_float() ) {
+        auto stream = ComputingContext::dcu_stream;
+        dcu::kr_convert<float, device_fp16_t>((float *)src->dcu_float()->data(), (device_fp16_t *)data(), self->items(), stream);
+        return OP_OK;
+    }
+    return OP_TODO_ERROR;
+}
+
+template<DataType DT>
+ComputingReturn DCUTensor<DT>::op_scale(tensor_t self, float scale) {
+    /*
+    if (   DT == DataType::Float
+        || DT == DataType::Int
+        || DT == DataType::FP16 ) {
+        void *dst = data();
+        auto desc = create_cudnn_td_with( self->shape().vec() );
+        CUDNN_CHECK( cudnnScaleTensor( ComputingContext::cudnn_handle,
+                                        desc,
+                                        dst,
+                                        &scale) );
+        return OP_OK;
+    }
+    */
+    return OP_TODO_ERROR;
+}
 template<DataType DT>
 ComputingReturn DCUTensor<DT>::op_add(tensor_t self, tensor_t b, tensor_t c) {
 /*
