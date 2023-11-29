@@ -1,5 +1,6 @@
 #include <hip/hip_runtime.h>
 #include <hip/hip_fp16.h>
+#include "dcu_kernels.hpp"
 
 namespace vt { namespace dcu {
 
@@ -11,8 +12,10 @@ __global__ void fill(T* target, float value, int nElementNumber) {
     }
 }
 
+/*
 template<typename T>
 int kr_fill(T* target, float value, int nElementNumber, hipStream_t stream);
+*/
 
 template<>
 int kr_fill<float>(float* target, float value, int nElementNumber, hipStream_t stream) {

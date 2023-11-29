@@ -768,6 +768,9 @@ std::variant<ComputingReturn, tensor_t> CUDATensor<_DT_>::op_view_as(tensor_t se
 template<DataType DT>
 ComputingReturn CUDATensor<DT>::op_reshape(tensor_t self, size_t offset, const std::vector<size_t>& newShape_) {
     ShapeType newShape(newShape_);
+    if ( owner_ == true ) {
+        return OP_INPUT_ERROR;
+    }
 
     if ( newShape.numel() + offset > self->items()  ) {
         return OP_INPUT_ERROR;

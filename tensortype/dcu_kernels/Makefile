@@ -2,10 +2,19 @@
 
 all: libdcu_kernels.a
 
-libdcu_kernels.a: kr_fill.o
+libdcu_kernels.a: fill.o causal_mask.o quantize.o embed.o
 	ar rcs $@ $? 
 
-kr_fill.o: kr_fill.cpp
+fill.o: fill.cpp
+	hipcc -c -o $@ $<
+
+causal_mask.o: causal_mask.cpp
+	hipcc -c -o $@ $<
+
+quantize.o: quantize.cpp
+	hipcc -c -o $@ $<
+
+embed.o: embed.cpp
 	hipcc -c -o $@ $<
 
 install: libdcu_kernels.a dcu_kernels.hpp

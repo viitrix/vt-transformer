@@ -245,10 +245,16 @@ ComputingReturn DCUTensor<DT>::op_causal_mask(tensor_t self, tensor_t out) {
     int new_tokens = out->shape()[2];
 
     int* mask  = (int *)data();
-
     auto stream = ComputingContext::dcu_stream;
+    if ( out->dtype() == DataType::Float ) {
+        float* dst = (float *)out->dcu_float()->data();
+        dcu::kr_causal_mask<float>(mask, dst, batch, new_tokens, full_tokens, stream);
+        return OP_OK;
+    }
+
     return OP_OUTPUT_ERROR;
 }
+
 
 
 template<DataType DT>
@@ -316,6 +322,205 @@ std::variant<ComputingReturn, tensor_t> DCUTensor<_DT_>::op_view_as(tensor_t sel
         auto* newDcuTensor = new DCUTensor<DataType::FP16>(newShape, newData);
         return std::make_shared<TensorType>(newDcuTensor, newShape);
     }
+    return OP_TODO_ERROR;
+}
+
+template<DataType DT>
+ComputingReturn DCUTensor<DT>::op_reshape(tensor_t self, size_t offset, const std::vector<size_t>& newShape_) {
+    ShapeType newShape(newShape_);
+    if ( owner_ == true ) {
+        return OP_INPUT_ERROR;
+    }
+
+    if ( newShape.numel() + offset > self->items()  ) {
+        return OP_INPUT_ERROR;
+    }
+
+    if ( DT == DataType::Float ) {
+        mem_  = (char *)data() + offset * sizeof(float);
+        return OP_OK;
+    }
+    if ( DT == DataType::Int ) {
+        mem_  = (char *)data() + offset * sizeof(int);
+        return OP_OK;
+    }
+
+    if ( DT == DataType::FP16 ) {
+        mem_  = (char *)data() + offset * sizeof(device_fp16_t);
+        return OP_OK;
+    }
+    return OP_TODO_ERROR;
+}
+
+template <DataType _DTYPE_>
+ComputingReturn DCUTensor<_DTYPE_>::op_quantize(tensor_t self, tensor_t out) {
+    auto stream = ComputingContext::dcu_stream;
+    if ( _DTYPE_ == DataType::Float && out->is_q4() ) {
+        const float* src = (float *)data();
+        void* dst = out->dcu_q4()->data();
+        dcu::kr_quantize_q4<float>(src, dst, self->items(), stream);
+        return OP_OK;
+    }
+
+    if ( _DTYPE_ == DataType::FP16 && out->is_q4() ) {
+        const device_fp16_t* src = (device_fp16_t *)data();
+        void* dst = out->dcu_q4()->data();
+        dcu::kr_quantize_q4<device_fp16_t>(src, dst, self->items(), stream);
+        return OP_OK;
+    }
+
+    if ( _DTYPE_ == DataType::Float && out->is_q8() ) {
+        size_t feature_size = self->shape().vec().back();
+        size_t feature_num = self->items() / feature_size;
+
+        const float* src = (float *)data();
+        void* dst = out->dcu_q8()->data();
+        dcu::kr_quantize_q8<float>(src, dst, feature_num, feature_size, stream);
+        return OP_OK;
+    }
+
+    if ( _DTYPE_ == DataType::FP16 && out->is_q8() ) {
+        size_t feature_size = self->shape().vec().back();
+        size_t feature_num = self->items() / feature_size;
+
+        const device_fp16_t* src = (device_fp16_t *)data();
+        void* dst = out->dcu_q8()->data();
+        dcu::kr_quantize_q8<device_fp16_t>(src, dst, feature_num, feature_size, stream);
+        return OP_OK;
+    }
+
+    return OP_TODO_ERROR;
+}
+
+template <DataType _DTYPE_>
+ComputingReturn DCUTensor<_DTYPE_>::op_dequantize(tensor_t self, tensor_t out) {
+    auto stream = ComputingContext::dcu_stream;
+    if ( _DTYPE_ == DataType::Q4 && out->is_fp16() ) {
+        void* src = data();
+        device_fp16_t* dst =(device_fp16_t *) out->dcu_fp16()->data();
+        dcu::kr_dequantize_q4<device_fp16_t>(src, dst, self->items(), stream);
+
+        return OP_OK;
+    }
+    if ( _DTYPE_ == DataType::Q8 && out->is_fp16() ) {
+        size_t feature_size = self->shape().vec().back();
+        size_t feature_num = self->items() / feature_size;
+        void* src = data();
+        device_fp16_t* dst =(device_fp16_t *) out->dcu_fp16()->data();
+        dcu::kr_dequantize_q8<device_fp16_t>(src, dst, feature_num, feature_size, stream);
+
+        return OP_OK;
+    }
+    return OP_TODO_ERROR;
+}
+
+template <DataType _DTYPE_>
+ComputingReturn DCUTensor<_DTYPE_>::op_embed(tensor_t self, tensor_t table, tensor_t outspace) {
+    size_t batch = self->shape()[0];
+    size_t len = self->shape()[1];
+    size_t hidden = table->shape()[1];
+
+    auto stream = ComputingContext::dcu_stream;
+    int* text = (int *)data();
+
+    if ( table->dtype() == DataType::Float ) {
+        float* from = (float *)table->dcu_float()->data();
+        float* out = (float *)outspace->dcu_float()->data();
+        dcu::kr_embed<float>(text, from, out, batch*len, hidden, stream);
+
+        return OP_OK;
+    }
+    if ( table->dtype() == DataType::FP16 ) {
+        device_fp16_t* from = (device_fp16_t *)table->dcu_fp16()->data();
+        device_fp16_t* out = (device_fp16_t *)outspace->dcu_fp16()->data();
+        dcu::kr_embed<device_fp16_t>(text, from, out, batch*len, hidden, stream);
+
+        return OP_OK;
+    }
+    return OP_OUTPUT_ERROR;
+}
+
+template<DataType DT>
+ComputingReturn DCUTensor<DT>::op_add(tensor_t self, tensor_t b, tensor_t c) {
+/*
+    float alpha = 1.0;
+    float beta = 0.0;
+    cudnnOpTensorDescriptor_t opTensorDesc;
+
+    CUDNN_CHECK( cudnnCreateOpTensorDescriptor(&opTensorDesc) );
+    if ( DT == DataType::Float ) {
+        auto adesc = create_cudnn_td_with( self->shape().vec() );
+        auto bdesc = b->dcu_float()->create_cudnn_td_with( b->shape().vec() );
+        auto cdesc = c->dcu_float()->create_cudnn_td_with( c->shape().vec() );
+
+        CUDNN_CHECK( cudnnSetOpTensorDescriptor(opTensorDesc, CUDNN_OP_TENSOR_ADD, CUDNN_DATA_FLOAT, CUDNN_PROPAGATE_NAN) );
+        CUDNN_CHECK( cudnnOpTensor(ComputingContext::cudnn_handle,
+                                    opTensorDesc,
+                                    &alpha, adesc, data(),
+                                    &alpha, bdesc, b->dcu_float()->data(),
+                                    &beta,  cdesc, c->dcu_float()->data()) );
+
+        CUDNN_CHECK( cudnnDestroyOpTensorDescriptor(opTensorDesc) );
+        return OP_OK;
+    }
+    if ( DT == DataType::FP16 ) {
+        auto adesc = create_cudnn_td_with( self->shape().vec() );
+        auto bdesc = b->dcu_fp16()->create_cudnn_td_with( b->shape().vec() );
+        auto cdesc = c->dcu_fp16()->create_cudnn_td_with( c->shape().vec() );
+
+        CUDNN_CHECK( cudnnSetOpTensorDescriptor(opTensorDesc, CUDNN_OP_TENSOR_ADD, CUDNN_DATA_FLOAT, CUDNN_PROPAGATE_NAN) );
+        CUDNN_CHECK( cudnnOpTensor(ComputingContext::cudnn_handle,
+                                    opTensorDesc,
+                                    &alpha, adesc, data(),
+                                    &alpha, bdesc, b->dcu_fp16()->data(),
+                                    &beta,  cdesc, c->dcu_fp16()->data()) );
+
+        CUDNN_CHECK( cudnnDestroyOpTensorDescriptor(opTensorDesc) );
+        return OP_OK;
+    }
+*/
+    return OP_TODO_ERROR;
+}
+
+template<DataType DT>
+ComputingReturn DCUTensor<DT>::op_mul(tensor_t self, tensor_t b, tensor_t c) {
+ /*
+    float alpha = 1.0;
+    float beta = 0.0;
+    cudnnOpTensorDescriptor_t opTensorDesc;
+
+    CUDNN_CHECK( cudnnCreateOpTensorDescriptor(&opTensorDesc) );
+    if ( DT == DataType::Float ) {
+        auto adesc = create_cudnn_td_with( self->shape().vec() );
+        auto bdesc = b->dcu_float()->create_cudnn_td_with( b->shape().vec() );
+        auto cdesc = c->dcu_float()->create_cudnn_td_with( c->shape().vec() );
+
+        CUDNN_CHECK( cudnnSetOpTensorDescriptor(opTensorDesc, CUDNN_OP_TENSOR_MUL, CUDNN_DATA_FLOAT, CUDNN_PROPAGATE_NAN) );
+        CUDNN_CHECK( cudnnOpTensor(ComputingContext::cudnn_handle,
+                                    opTensorDesc,
+                                    &alpha, adesc, data(),
+                                    &alpha, bdesc, b->dcu_float()->data(),
+                                    &beta,  cdesc, c->dcu_float()->data()) );
+
+        CUDNN_CHECK( cudnnDestroyOpTensorDescriptor(opTensorDesc) );
+        return OP_OK;
+    }
+    if ( DT == DataType::FP16 ) {
+        auto adesc = create_cudnn_td_with( self->shape().vec() );
+        auto bdesc = b->dcu_fp16()->create_cudnn_td_with( b->shape().vec() );
+        auto cdesc = c->dcu_fp16()->create_cudnn_td_with( c->shape().vec() );
+
+        CUDNN_CHECK( cudnnSetOpTensorDescriptor(opTensorDesc, CUDNN_OP_TENSOR_MUL, CUDNN_DATA_FLOAT, CUDNN_PROPAGATE_NAN) );
+        CUDNN_CHECK( cudnnOpTensor(ComputingContext::cudnn_handle,
+                                    opTensorDesc,
+                                    &alpha, adesc, data(),
+                                    &alpha, bdesc, b->dcu_fp16()->data(),
+                                    &beta,  cdesc, c->dcu_fp16()->data()) );
+
+        CUDNN_CHECK( cudnnDestroyOpTensorDescriptor(opTensorDesc) );
+        return OP_OK;
+    }
+*/
     return OP_TODO_ERROR;
 }
 
