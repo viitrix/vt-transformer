@@ -27,6 +27,14 @@ int kr_embed(const int *ids, const T *table, T *out, const int len, const int hi
 template <typename T, typename TT>
 int kr_convert(const T* in, TT* out, const int size, hipStream_t stream);
 
+template <typename T>
+int kr_scale(const T* in, T* out, const float alpha, const float beta, const int n, hipStream_t stream);
+
+template <typename T, typename TT>
+int kr_add(const T* A, const TT* B, T* C, const int n, hipStream_t stream);
+
+template <typename T, typename TT>
+int kr_mul(const T* A, const TT* B, T* C, const int n, hipStream_t stream);
 
 
 }}
