@@ -604,6 +604,40 @@ ComputingReturn DCUTensor<DT>::op_mul(tensor_t self, tensor_t b, tensor_t c) {
     return OP_TODO_ERROR;
 }
 
+template<DataType DT>
+ComputingReturn DCUTensor<DT>::op_rmsnorm(tensor_t self, tensor_t scale, tensor_t norm2, tensor_t y, float eps) {
+    size_t batch = self->shape()[0];
+    size_t tokens = self->shape()[1];
+    size_t hidden = self->shape()[2];
+
+    auto stream = ComputingContext::dcu_stream;
+
+    if ( DT == DataType::Float) {
+        float* norm2_ = (float *)norm2->dcu_float()->data();
+        float* feature = (float *)self->dcu_float()->data();
+        float* w = (float *)scale->dcu_float()->data();
+        float* out = (float *)y->dcu_float()->data();
+
+        dcu::kr_rmsnorm<float>(feature, w, out, norm2_, batch * tokens, hidden, eps, stream);
+        return OP_OK;
+    }
+
+
+   if ( DT == DataType::FP16 ) {
+        device_fp16_t* norm2_ = (device_fp16_t *)norm2->dcu_fp16()->data();
+        device_fp16_t* feature = (device_fp16_t *)self->dcu_fp16()->data();
+        device_fp16_t* w = (device_fp16_t *)scale->dcu_fp16()->data();
+        device_fp16_t* out = (device_fp16_t *)y->dcu_fp16()->data();
+
+        dcu::kr_rmsnorm<device_fp16_t>(feature, w, out, norm2_, batch * tokens, hidden, eps, stream);
+        return OP_OK;
+    }
+
+    return OP_TODO_ERROR;
+}
+
+
+
 // ============================================
 tensor_t create_dcu_float(std::vector<size_t>& shape_) {
     ShapeType shape(shape_);

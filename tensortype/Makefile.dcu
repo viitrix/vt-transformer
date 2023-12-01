@@ -23,7 +23,7 @@ host_tensor.o: computing.hpp tensortype.hpp host_tensor.hpp host_tensor.cpp
 dnnl_tensor.o: computing.hpp tensortype.hpp host_tensor.hpp dnnl_tensor.hpp dnnl_tensor.cpp
 	g++ $(FLAGS) -c -o $@ $(INC) dnnl_tensor.cpp
 
-dcu_tensor.o: computing.hpp tensortype.hpp dcu_tensor.hpp dcu_tensor.cpp
+dcu_tensor.o: computing.hpp tensortype.hpp dcu_tensor.hpp dcu_tensor.hpp dcu_tensor.cpp
 	g++ $(FLAGS) -c -o $@ $(INC) dcu_tensor.cpp
 
 dag.o: tensortype.hpp dag.hpp dag.cpp

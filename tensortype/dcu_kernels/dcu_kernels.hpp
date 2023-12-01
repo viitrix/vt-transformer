@@ -36,6 +36,10 @@ int kr_add(const T* A, const TT* B, T* C, const int n, hipStream_t stream);
 template <typename T, typename TT>
 int kr_mul(const T* A, const TT* B, T* C, const int n, hipStream_t stream);
 
+template <typename T>
+int kr_rmsnorm(const T *feature, const T *w, T *out, T *norm2, const int batch, const int dim, const float eps, hipStream_t stream);
+
+
 
 }}
 
