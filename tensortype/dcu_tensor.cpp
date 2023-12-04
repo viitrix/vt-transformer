@@ -669,6 +669,27 @@ ComputingReturn DCUTensor<DT>::op_rotary_embed(tensor_t self, tensor_t cached, t
     return OP_TODO_ERROR;
 }
 
+template<DataType DT>
+ComputingReturn  DCUTensor<DT>::op_gelu(tensor_t self, tensor_t out) {
+    auto stream = ComputingContext::dcu_stream;
+
+    if ( DT == DataType::Float ) {
+        float* src = (float *)data();
+        float* dst = (float *)out->dcu_float()->data();
+
+        dcu::kr_gelu<float>(src, dst, self->items(), stream);
+        return OP_OK;
+    }
+    if ( DT == DataType::Float ) {
+        device_fp16_t* src = (device_fp16_t *)data();
+        device_fp16_t* dst = (device_fp16_t *)out->dcu_fp16()->data();
+
+        dcu::kr_gelu<device_fp16_t>(src, dst, self->items(), stream);
+        return OP_OK;
+    }
+    return OP_TODO_ERROR;
+}
+
 
 // ============================================
 tensor_t create_dcu_float(std::vector<size_t>& shape_) {

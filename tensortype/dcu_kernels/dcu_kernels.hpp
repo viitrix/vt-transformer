@@ -42,6 +42,8 @@ int kr_rmsnorm(const T *feature, const T *w, T *out, T *norm2, const int batch, 
 template <typename T>
 int kr_rotary_embed(const T *in, const float *cos_sin,const int* pos, T* out, const int bs, const int hnum, const int len, const int dims, hipStream_t stream);
 
+template <typename T>
+int kr_gelu(const T* src, T* target, int nElementNumber, hipStream_t stream);
 
 }}
 

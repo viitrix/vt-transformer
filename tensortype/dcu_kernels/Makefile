@@ -4,7 +4,7 @@ all: libdcu_kernels.a
 
 FLAGS = -Wall -O3 
 
-libdcu_kernels.a: fill.o causal_mask.o quantize.o embed.o convert.o pointwise.o rmsnorm.o rotary_embed.o
+libdcu_kernels.a: fill.o causal_mask.o quantize.o embed.o convert.o pointwise.o rmsnorm.o rotary_embed.o gelu.o
 	ar rcs $@ $? 
 
 fill.o: fill.cpp
@@ -29,6 +29,9 @@ rmsnorm.o: rmsnorm.cpp
 	hipcc $(FLAGS) -c -o $@ $<
 
 rotary_embed.o: rotary_embed.cpp
+	hipcc $(FLAGS) -c -o $@ $<
+
+gelu.o: gelu.cpp
 	hipcc $(FLAGS) -c -o $@ $<
 
 install: libdcu_kernels.a dcu_kernels.hpp
