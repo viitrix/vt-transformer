@@ -45,6 +45,11 @@ int kr_rotary_embed(const T *in, const float *cos_sin,const int* pos, T* out, co
 template <typename T>
 int kr_gelu(const T* src, T* target, int nElementNumber, hipStream_t stream);
 
+template <typename T>
+int kr_silu_product(const T *in_act, const T* in, T* out, const int items, hipStream_t stream);
+
+
+
 }}
 
 #endif

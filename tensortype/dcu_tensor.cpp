@@ -690,6 +690,31 @@ ComputingReturn  DCUTensor<DT>::op_gelu(tensor_t self, tensor_t out) {
     return OP_TODO_ERROR;
 }
 
+template<DataType DT>
+ComputingReturn  DCUTensor<DT>::op_silu_product(tensor_t self, tensor_t in, tensor_t out) {
+    auto stream = ComputingContext::dcu_stream;
+
+    if ( DT == DataType::Float ) {
+        float* src = (float *)data();
+        float* in_ = (float *)in->dcu_float()->data();
+        float* dst = (float *)out->dcu_float()->data();
+
+        dcu::kr_silu_product<float>(src, in_, dst, self->items(), stream);
+        return OP_OK;
+    }
+    if ( DT == DataType::FP16 ) {
+        auto* src = (device_fp16_t *)data();
+        auto* in_ = (device_fp16_t *)in->dcu_fp16()->data();
+        auto* dst = (device_fp16_t *)out->dcu_fp16()->data();
+
+        dcu::kr_silu_product<device_fp16_t>(src, in_, dst, self->items(), stream);
+        return OP_OK;
+    }
+
+    return OP_TODO_ERROR;
+}
+
+
 
 // ============================================
 tensor_t create_dcu_float(std::vector<size_t>& shape_) {
