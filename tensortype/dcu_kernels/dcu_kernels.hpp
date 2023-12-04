@@ -39,6 +39,8 @@ int kr_mul(const T* A, const TT* B, T* C, const int n, hipStream_t stream);
 template <typename T>
 int kr_rmsnorm(const T *feature, const T *w, T *out, T *norm2, const int batch, const int dim, const float eps, hipStream_t stream);
 
+template <typename T>
+int kr_rotary_embed(const T *in, const float *cos_sin,const int* pos, T* out, const int bs, const int hnum, const int len, const int dims, hipStream_t stream);
 
 
 }}
