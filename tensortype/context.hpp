@@ -15,6 +15,7 @@
 #define __HIP_PLATFORM_HCC__
 #include <hip/hip_runtime.h>
 #include <hip/hip_fp16.h>
+#include <hipblas/hipblas.h>
 #endif
 
 #ifdef _USING_HPC_OPENMPI_
@@ -70,6 +71,12 @@
         if (s_ != hipSuccess) COMPLAIN_ERROR_AND_EXIT(#f, s_); \
     } while (0)
 
+#define HIPBLAS_CHECK(f) \
+    do { \
+        hipblasStatus_t  s_ = f; \
+        if (s_ != HIPBLAS_STATUS_SUCCESS) COMPLAIN_ERROR_AND_EXIT(#f, s_); \
+    } while (0)
+
 namespace vt {
 
 #ifdef _USING_DEVICE_CUDA_
@@ -92,6 +99,7 @@ struct ComputingContext {
 #ifdef _USING_DEVICE_DCU_
     static int dcu_device;
     static hipStream_t dcu_stream;
+    static hipblasHandle_t hipblas_handle;
 #endif
 
     static void* host_workspace;

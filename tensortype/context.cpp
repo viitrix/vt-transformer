@@ -20,6 +20,7 @@ void* ComputingContext::cuda_workspace = nullptr;
 #ifdef _USING_DEVICE_DCU_
 int ComputingContext::dcu_device = -1;
 hipStream_t ComputingContext::dcu_stream = nullptr;
+hipblasHandle_t ComputingContext::hipblas_handle = nullptr;
 #endif
 
 void* ComputingContext::host_workspace = nullptr;
@@ -57,6 +58,8 @@ void ComputingContext::boot(int cud) {
 
     HIP_CHECK( hipSetDevice(dcu_device) );
     HIP_CHECK( hipStreamCreate(&dcu_stream) );
+    HIPBLAS_CHECK( hipblasCreate(&hipblas_handle) );
+    HIPBLAS_CHECK( hipblasSetStream(hipblas_handle, dcu_stream) );
 #endif
 
 
@@ -82,6 +85,7 @@ void ComputingContext::shutdown() {
 #endif
 
 #ifdef _USING_DEVICE_DCU_
+    HIPBLAS_CHECK( hipblasDestroy(hipblas_handle) );
     HIP_CHECK( hipStreamDestroy(dcu_stream) );
 #endif
 }

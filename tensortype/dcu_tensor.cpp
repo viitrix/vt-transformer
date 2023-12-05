@@ -605,6 +605,80 @@ ComputingReturn DCUTensor<DT>::op_mul(tensor_t self, tensor_t b, tensor_t c) {
 }
 
 template<DataType DT>
+ComputingReturn DCUTensor<DT>::op_linear(tensor_t self, tensor_t w_, tensor_t b_, tensor_t y_) {
+    auto stream = ComputingContext::dcu_stream;
+    size_t batch = self->shape()[0];
+    size_t tokens = self->shape()[1];
+    size_t inSize = self->shape()[2];
+    size_t outSize = w_->shape()[0];
+
+    float alpha = 1.0;
+    float beta = 0.0;
+
+    if ( DT == DataType::Float && w_->is_float() ) {
+        void* A = w_->dcu_float()->data();
+        void* B = data();
+        void* C = y_->dcu_float()->data();
+
+        int m = outSize;
+        int n = batch * tokens;
+        int k = inSize;
+
+        HIPBLAS_CHECK( hipblasGemmEx(ComputingContext::hipblas_handle,
+                       HIPBLAS_OP_T, HIPBLAS_OP_N,
+                       m, n, k,
+                       &alpha, A, HIPBLAS_R_32F, k,
+                       B, HIPBLAS_R_32F, k, &beta,
+                       C, HIPBLAS_R_32F, m,
+                       HIPBLAS_R_32F, HIPBLAS_GEMM_DEFAULT) );
+
+        dcu::kr_add_bias<float>((float *)C, (float *)b_->dcu_float()->data(), (float *)C,  n, m, stream);
+
+        return OP_OK;
+    }
+
+    if ( DT == DataType::Float && w_->is_q8() ) {
+        return OP_OK;
+    }
+
+    if ( DT == DataType::Float && w_->is_q4() ) {
+        return OP_OK;
+    }
+
+    if ( DT == DataType::FP16 && w_->is_fp16() ) {
+        void* A = w_->dcu_fp16()->data();
+        void* B = data();
+        void* C = y_->dcu_fp16()->data();
+
+        int m = outSize;
+        int n = batch * tokens;
+        int k = inSize;
+
+        HIPBLAS_CHECK( hipblasGemmEx(ComputingContext::hipblas_handle,
+                       HIPBLAS_OP_T, HIPBLAS_OP_N,
+                       m, n, k,
+                       &alpha, A, HIPBLAS_R_16F, k,
+                       B, HIPBLAS_R_16F, k, &beta,
+                       C, HIPBLAS_R_16F, m,
+                       HIPBLAS_R_32F, HIPBLAS_GEMM_DEFAULT) );
+
+        dcu::kr_add_bias<device_fp16_t>((device_fp16_t *)C, (device_fp16_t *)b_->dcu_fp16()->data(), (device_fp16_t *)C, n, m, stream);
+
+        return OP_OK;
+    }
+
+    if ( DT == DataType::FP16 && w_->is_q8() ) {
+        return OP_OK;
+    }
+
+    if ( DT == DataType::FP16 && w_->is_q4() ) {
+        return OP_OK;
+    }
+
+    return OP_TODO_ERROR;
+}
+
+template<DataType DT>
 ComputingReturn DCUTensor<DT>::op_rmsnorm(tensor_t self, tensor_t scale, tensor_t norm2, tensor_t y, float eps) {
     size_t batch = self->shape()[0];
     size_t tokens = self->shape()[1];

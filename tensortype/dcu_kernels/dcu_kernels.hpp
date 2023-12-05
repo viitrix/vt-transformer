@@ -51,6 +51,9 @@ int kr_gelu(const T* src, T* target, int nElementNumber, hipStream_t stream);
 template <typename T>
 int kr_silu_product(const T *in_act, const T* in, T* out, const int items, hipStream_t stream);
 
+template <typename T>
+int kr_add_bias(const T *in, const T* bias, T* out, const int length, const int feature, hipStream_t stream);
+
 }}
 
 #endif

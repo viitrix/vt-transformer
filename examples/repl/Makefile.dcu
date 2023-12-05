@@ -5,7 +5,7 @@ INC = -I../../install/include -I~/opt/dtk/include
 LINK = -L../../install/lib \
        -L/public/home/ac56jm0dor/opt/dtk/lib \
        -L/public/home/ac56jm0dor/opt/dtk/lib64 \
-       -ltensortype -lgalaxyhip -ldcu_kernels
+       -ltensortype -lgalaxyhip -lhipblas -ldcu_kernels
 
 all: repl 
 
