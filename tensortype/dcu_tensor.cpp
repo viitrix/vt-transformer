@@ -768,6 +768,166 @@ ComputingReturn  DCUTensor<DT>::op_transpose_0213(tensor_t self, tensor_t y) {
 }
 
 template<DataType DT>
+ComputingReturn  DCUTensor<DT>::op_qk(tensor_t self, tensor_t k_, tensor_t qk_) {
+    auto shape_ = self->shape().vec();
+
+    int batch = shape_[0];
+    int heads = shape_[1];
+    int ntokens = shape_[2];
+    int hhidden = shape_[3];
+    int ftokens = k_->shape()[2];
+
+    int m = ftokens;
+    int n = ntokens;
+    int k = hhidden;
+
+    float alpha = 1.0 / sqrt(hhidden);
+    float beta = 0.0;
+
+    int HnT = hhidden * ntokens ;
+    int HfT = hhidden * ftokens ;
+    int TT = ftokens * ntokens;
+
+    if ( DT == DataType::Float ) {
+        std::vector<const void *> As;
+        std::vector<const void *> Bs;
+        std::vector<void *> Cs;
+        for (int i = 0; i < batch * heads; i++) {
+            float* B = (float *)data() + i * HnT;
+            float* A = (float *)(k_->dcu_float()->data()) + i * HfT;
+            float* C = (float *)(qk_->dcu_float()->data()) + i * TT;
+            As.push_back(A);
+            Bs.push_back(B);
+            Cs.push_back(C);
+        }
+        HIPBLAS_CHECK( hipblasGemmBatchedEx( ComputingContext::hipblas_handle,
+                        HIPBLAS_OP_T, HIPBLAS_OP_N,
+                        m, n, k,
+                        &alpha, As.data(), HIPBLAS_R_32F, k,
+                        Bs.data(), HIPBLAS_R_32F, k, &beta,
+                        Cs.data(), HIPBLAS_R_32F, m,
+                        batch*heads, HIPBLAS_R_32F, HIPBLAS_GEMM_DEFAULT) );
+        return OP_OK;
+    }
+    if ( DT == DataType::FP16 ) {
+        std::vector<const void *> As;
+        std::vector<const void *> Bs;
+        std::vector<void *> Cs;
+        for (int i = 0; i < batch * heads; i++) {
+            device_fp16_t* B = (device_fp16_t *)data() + i * HnT;
+            device_fp16_t* A = (device_fp16_t *)(k_->dcu_fp16()->data()) + i * HfT;
+            device_fp16_t* C = (device_fp16_t *)(qk_->dcu_fp16()->data()) + i * TT;
+            As.push_back(A);
+            Bs.push_back(B);
+            Cs.push_back(C);
+        }
+        HIPBLAS_CHECK( hipblasGemmBatchedEx(
+                        ComputingContext::hipblas_handle,
+                        HIPBLAS_OP_T, HIPBLAS_OP_N,
+                        m, n, k,
+                        &alpha, As.data(), HIPBLAS_R_16F, k,
+                        Bs.data(), HIPBLAS_R_16F, k, &beta,
+                        Cs.data(), HIPBLAS_R_16F, m,
+                        batch*heads, HIPBLAS_R_32F, HIPBLAS_GEMM_DEFAULT) );
+        return OP_OK;
+    }
+
+    return OP_TODO_ERROR;
+}
+
+template<DataType DT>
+ComputingReturn  DCUTensor<DT>::op_attn(tensor_t self, tensor_t value_, tensor_t out_) {
+    float alpha = 1.0;
+    float beta = 0.0;
+
+    auto shape_ = self->shape().vec();
+    int batch = shape_[0];
+    int heads = shape_[1];
+    int ntokens = shape_[2];
+    int ftokens = shape_[3];
+    int hhidden = value_->shape()[3];
+
+    int m = hhidden;
+    int n = ntokens;
+    int k = ftokens;
+
+    int HfT = hhidden * ftokens;
+    int HnT = hhidden * ntokens;
+    int TT = ftokens * ntokens;
+
+    if ( value_->is_float() && self->is_float() ) {
+        std::vector<const void *> As;
+        std::vector<const void *> Bs;
+        std::vector<void *> Cs;
+        for (int i = 0; i < batch * heads; i++) {
+            float* A = (float *)(value_->dcu_float()->data()) + i * HfT;
+            float* B = (float *)data() + i * TT;
+            float* C = (float *)(out_->dcu_float()->data()) + i * HnT;
+            As.push_back(A);
+            Bs.push_back(B);
+            Cs.push_back(C);
+        }
+
+        HIPBLAS_CHECK( hipblasGemmBatchedEx(
+                        ComputingContext::hipblas_handle,
+                        HIPBLAS_OP_N, HIPBLAS_OP_N,
+                        m, n, k,
+                        &alpha, As.data(), HIPBLAS_R_32F, m,
+                        Bs.data(), HIPBLAS_R_32F, k, &beta,
+                        Cs.data(), HIPBLAS_R_32F, m,
+                        batch*heads, HIPBLAS_R_32F, HIPBLAS_GEMM_DEFAULT) );
+        return OP_OK;
+    }
+    if ( value_->is_fp16() && self->is_float() ) {
+        std::vector<const void *> As;
+        std::vector<const void *> Bs;
+        std::vector<void *> Cs;
+        for (int i = 0; i < batch * heads; i++) {
+            device_fp16_t* A = (device_fp16_t *)(value_->dcu_fp16()->data()) + i * HfT;
+            float* B = (float *)data() + i * TT;
+            device_fp16_t* C = (device_fp16_t *)(out_->dcu_fp16()->data()) + i * HnT;
+            As.push_back(A);
+            Bs.push_back(B);
+            Cs.push_back(C);
+        }
+
+        HIPBLAS_CHECK( hipblasGemmBatchedEx(
+                        ComputingContext::hipblas_handle,
+                        HIPBLAS_OP_N, HIPBLAS_OP_N,
+                        m, n, k,
+                        &alpha, As.data(), HIPBLAS_R_32F, m,
+                        Bs.data(), HIPBLAS_R_32F, k, &beta,
+                        Cs.data(), HIPBLAS_R_16F, m,
+                        batch*heads, HIPBLAS_R_32F, HIPBLAS_GEMM_DEFAULT) );
+
+        return OP_OK;
+    }
+    if ( value_->is_fp16() && self->is_fp16()  ) {
+        std::vector<const void *> As;
+        std::vector<const void *> Bs;
+        std::vector<void *> Cs;
+        for (int i = 0; i < batch * heads; i++) {
+            auto* A = (device_fp16_t *)(value_->dcu_fp16()->data()) + i * HfT;
+            auto* B = (device_fp16_t *)data() + i * TT;
+            auto* C = (device_fp16_t *)(out_->dcu_fp16()->data()) + i * HnT;
+            As.push_back(A);
+            Bs.push_back(B);
+            Cs.push_back(C);
+        }
+
+        HIPBLAS_CHECK( hipblasGemmBatchedEx(
+                        ComputingContext::hipblas_handle,
+                        HIPBLAS_OP_N, HIPBLAS_OP_N,
+                        m, n, k,
+                        &alpha, As.data(), HIPBLAS_R_32F, m,
+                        Bs.data(), HIPBLAS_R_16F, k, &beta,
+                        Cs.data(), HIPBLAS_R_16F, m,
+                        batch*heads, HIPBLAS_R_32F, HIPBLAS_GEMM_DEFAULT) );
+    }
+    return OP_TODO_ERROR;
+}
+
+template<DataType DT>
 ComputingReturn  DCUTensor<DT>::op_gelu(tensor_t self, tensor_t out) {
     auto stream = ComputingContext::dcu_stream;
 
@@ -812,7 +972,75 @@ ComputingReturn  DCUTensor<DT>::op_silu_product(tensor_t self, tensor_t in, tens
     return OP_TODO_ERROR;
 }
 
+template<DataType DT>
+std::variant<ComputingReturn,int> DCUTensor<DT>::op_all_logits(tensor_t self, tensor_t mask_,  tensor_t lm_head, tensor_t output) {
+    int batch = self->shape()[0];
+    int new_tokens = self->shape()[1];
+    int hidden_size = self->shape()[2];
+    int full_tokens = mask_->shape()[1];
 
+    int vocab_size = lm_head->shape()[0];
+
+    int m = vocab_size;
+    int n = 1;
+    int k = hidden_size;
+
+    float alpha = 1.0;
+    float beta = 0.0;
+
+    int* mask = (int *)mask_->host_int()->data();
+    int pred = 0;
+    for (int b = 0;  b < batch; b++) {
+        int* mk = &mask[b * full_tokens];
+        for ( int i = 0; i < new_tokens ; i++) {
+            int ii = full_tokens - new_tokens + i;
+            if ( mk[ii] != 2 ) {
+                continue;
+            }
+            int target = i;
+
+            if ( DT == DataType::Float ) {
+                float* dst = (float *)output->dcu_float()->data() + pred * vocab_size;
+                float* x = (float *)data() + b * new_tokens * hidden_size + target * hidden_size;
+
+                float* A = (float *)lm_head->dcu_float()->data();
+                float* B = x;
+                float* C = dst;
+
+                HIPBLAS_CHECK( hipblasGemmEx(ComputingContext::hipblas_handle,
+                    HIPBLAS_OP_T, HIPBLAS_OP_N,
+                    m, n, k,
+                    &alpha, A, HIPBLAS_R_32F, k,
+                    B, HIPBLAS_R_32F, k, &beta,
+                    C, HIPBLAS_R_32F, m,
+                    HIPBLAS_R_32F, HIPBLAS_GEMM_DEFAULT));
+
+            } else if ( DT == DataType::FP16 ) {
+                auto* dst = (device_fp16_t *)output->dcu_fp16()->data() + pred * vocab_size;
+                auto* x = (device_fp16_t *)data() + b * new_tokens * hidden_size + target * hidden_size;
+
+                auto* A = (device_fp16_t *)lm_head->dcu_fp16()->data();
+                auto* B = x;
+                auto* C = dst;
+
+                HIPBLAS_CHECK( hipblasGemmEx(ComputingContext::hipblas_handle,
+                    HIPBLAS_OP_T, HIPBLAS_OP_N,
+                    m, n, k,
+                    &alpha, A, HIPBLAS_R_16F, k,
+                    B, HIPBLAS_R_16F, k, &beta,
+                    C, HIPBLAS_R_16F, m,
+                    HIPBLAS_R_32F, HIPBLAS_GEMM_DEFAULT));
+
+            } else {
+                return OP_TODO_ERROR;
+            }
+
+            pred ++;
+        }
+     }
+
+    return pred;
+}
 
 // ============================================
 tensor_t create_dcu_float(std::vector<size_t>& shape_) {
