@@ -100,6 +100,7 @@ struct ComputingContext {
     static int dcu_device;
     static hipStream_t dcu_stream;
     static hipblasHandle_t hipblas_handle;
+    static void* dcu_workspace;
 #endif
 
     static void* host_workspace;

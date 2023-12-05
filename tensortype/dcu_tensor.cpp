@@ -1042,6 +1042,31 @@ std::variant<ComputingReturn,int> DCUTensor<DT>::op_all_logits(tensor_t self, te
     return pred;
 }
 
+template<DataType DT>
+std::variant<ComputingReturn, tensor_t>  DCUTensor<DT>::op_sampling_top3(tensor_t self, float temp) {
+    if ( DT == DataType::FP16 ) {
+        int batch = self->shape()[0];
+        int vocab_size = self->shape()[1];
+
+        std::vector<size_t> ret_shape{ (size_t)batch};
+        tensor_t ret = vt::create_host_int( ret_shape );
+
+        auto stream = ComputingContext::dcu_stream;
+        int* out = (int *)ComputingContext::dcu_workspace;
+        device_fp16_t* logits = (device_fp16_t *) self->device_data();
+
+        std::uniform_real_distribution<> dist(0.0, 1.0);
+        float randx = dist( *ComputingContext::rng );
+
+        dcu::kr_easy_top3<device_fp16_t>(logits, out, batch, vocab_size, temp, randx, stream);
+
+        HIP_CHECK(hipMemcpyAsync( ret->device_data(), out, batch * sizeof(int), hipMemcpyDeviceToHost, stream));
+
+        return ret;
+    }
+    return OP_TODO_ERROR;
+}
+
 // ============================================
 tensor_t create_dcu_float(std::vector<size_t>& shape_) {
     ShapeType shape(shape_);

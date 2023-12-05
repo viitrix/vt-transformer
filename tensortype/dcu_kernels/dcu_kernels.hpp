@@ -54,6 +54,11 @@ int kr_silu_product(const T *in_act, const T* in, T* out, const int items, hipSt
 template <typename T>
 int kr_add_bias(const T *in, const T* bias, T* out, const int length, const int feature, hipStream_t stream);
 
+template <typename T>
+int kr_easy_top3(const T *logits, int *out, const int batch, const int vocab_size, const float temperature, const float randx, hipStream_t stream);
+
+
+
 }}
 
 #endif
