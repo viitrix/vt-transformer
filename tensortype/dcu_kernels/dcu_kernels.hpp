@@ -57,7 +57,8 @@ int kr_add_bias(const T *in, const T* bias, T* out, const int length, const int 
 template <typename T>
 int kr_easy_top3(const T *logits, int *out, const int batch, const int vocab_size, const float temperature, const float randx, hipStream_t stream);
 
-
+template <typename T>
+void kr_layer_norm(T *ln_res, T *vars, T *means, const T *inp, const T *scale, const T *bias, int batch_size, int hidden_dim, float eps,  hipStream_t stream);
 
 }}
 

@@ -679,6 +679,46 @@ ComputingReturn DCUTensor<DT>::op_linear(tensor_t self, tensor_t w_, tensor_t b_
 }
 
 template<DataType DT>
+ComputingReturn DCUTensor<DT>::op_layernorm(tensor_t self, tensor_t mean, tensor_t var, tensor_t scale, tensor_t bias, tensor_t y, float eps) {
+    auto stream = ComputingContext::hip_stream;
+
+    if ( DT == DataType::Float ) {
+        auto x = this;
+        size_t batch = self->shape()[0] * self->shape()[1];
+        size_t hidden = self->shape()[2];
+
+        auto m = mean->dcu_float();
+        auto v = var->dcu_float();
+        auto s = scale->dcu_float();
+        auto b = bias->dcu_float();
+        auto out = y->dcu_float();
+
+        dcu::kr_layer_norm<float>((float *)out->data(), (float *)v->data(), (float *)m->data(),
+                                 (float *)x->data(), (float *)s->data(), (float *)b->data(), batch, hidden, eps, stream);
+
+        return OP_OK;
+    }
+    if ( DT == DataType::FP16 ) {
+        auto x = this;
+        size_t batch = self->shape()[0] * self->shape()[1];
+        size_t hidden = self->shape()[2];
+
+        auto m = mean->dcu_fp16();
+        auto v = var->dcu_fp16();
+        auto s = scale->dcu_fp16();
+        auto b = bias->dcu_fp16();
+        auto out = y->dcu_fp16();
+
+        dcu::kr_layer_norm<__half>((__half *)out->data(), (__half *)v->data(), (__half *)m->data(),
+                                 (__half *)x->data(), (__half *)s->data(), (__half *)b->data(), batch, hidden, eps, stream);
+
+        return OP_OK;
+    }
+
+    return OP_TODO_ERROR;
+}
+
+template<DataType DT>
 ComputingReturn DCUTensor<DT>::op_rmsnorm(tensor_t self, tensor_t scale, tensor_t norm2, tensor_t y, float eps) {
     size_t batch = self->shape()[0];
     size_t tokens = self->shape()[1];
