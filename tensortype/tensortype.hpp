@@ -562,7 +562,7 @@ public:
     ComputingReturn op_layernorm(tensor_t self, tensor_t mean, tensor_t var, tensor_t scale, tensor_t bias, tensor_t y, float eps) override;
     ComputingReturn op_rmsnorm(tensor_t self, tensor_t scale, tensor_t norm2, tensor_t y, float eps) override;
     ComputingReturn op_rotary_embed(tensor_t self, tensor_t cached, tensor_t pos, tensor_t y) override;
-    ComputingReturn op_transpos_0213(tensor_t self, tensor_t y) override;
+    ComputingReturn op_transpose_0213(tensor_t self, tensor_t y) override;
     ComputingReturn op_qk(tensor_t self, tensor_t k, tensor_t qk) override;
     ComputingReturn op_softmax(tensor_t self, tensor_t out) override ;
     ComputingReturn op_attn(tensor_t self, tensor_t v, tensor_t attn) override;

@@ -670,6 +670,30 @@ ComputingReturn DCUTensor<DT>::op_rotary_embed(tensor_t self, tensor_t cached, t
 }
 
 template<DataType DT>
+ComputingReturn  DCUTensor<DT>::op_transpose_0213(tensor_t self, tensor_t y) {
+    auto x = this;
+    auto stream = ComputingContext::dcu_stream;
+
+    int sz0 = self->shape()[0];
+    int sz1 = self->shape()[1];
+    int sz2 = self->shape()[2];
+    int sz3 = self->shape()[3];
+
+    if ( DT == DataType::Float ) {
+        auto out = y->dcu_float();
+        dcu::kr_transpose_0213<float>((float *)x->data(), (float *)out->data(), sz0, sz1, sz2, sz3, stream);
+        return OP_OK;
+    }
+    if ( DT == DataType::FP16 ) {
+        auto out = y->dcu_fp16();
+        dcu::kr_transpose_0213<device_fp16_t>((device_fp16_t *)x->data(), (device_fp16_t *)out->data(), sz0, sz1, sz2, sz3, stream);
+        return OP_OK;
+    }
+
+    return OP_TODO_ERROR;
+}
+
+template<DataType DT>
 ComputingReturn  DCUTensor<DT>::op_gelu(tensor_t self, tensor_t out) {
     auto stream = ComputingContext::dcu_stream;
 

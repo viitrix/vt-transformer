@@ -226,9 +226,9 @@ ComputingReturn TensorType::op_rotary_embed(tensor_t self, tensor_t cached, tens
     op_check(ret, "rotary_embed");
 }
 
-ComputingReturn TensorType::op_transpos_0213(tensor_t self, tensor_t y) {
+ComputingReturn TensorType::op_transpose_0213(tensor_t self, tensor_t y) {
     vt_assert(self.get() == this, "can't be here!");
-    auto ret = impl()->op_transpos_0213(self, y);
+    auto ret = impl()->op_transpose_0213(self, y);
     op_check(ret, "transpose_0213");
 }
 

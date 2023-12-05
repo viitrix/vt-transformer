@@ -1074,7 +1074,7 @@ ComputingReturn CUDATensor<DT>::op_rotary_embed(tensor_t self, tensor_t cached, 
 }
 
 template<DataType DT>
-ComputingReturn  CUDATensor<DT>::op_transpos_0213(tensor_t self, tensor_t y) {
+ComputingReturn  CUDATensor<DT>::op_transpose_0213(tensor_t self, tensor_t y) {
     auto x = this;
     auto stream = ComputingContext::cuda_stream;
 
