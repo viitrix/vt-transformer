@@ -680,7 +680,7 @@ ComputingReturn DCUTensor<DT>::op_linear(tensor_t self, tensor_t w_, tensor_t b_
 
 template<DataType DT>
 ComputingReturn DCUTensor<DT>::op_layernorm(tensor_t self, tensor_t mean, tensor_t var, tensor_t scale, tensor_t bias, tensor_t y, float eps) {
-    auto stream = ComputingContext::hip_stream;
+    auto stream = ComputingContext::dcu_stream;
 
     if ( DT == DataType::Float ) {
         auto x = this;

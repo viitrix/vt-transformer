@@ -6,7 +6,7 @@ FLAGS = -Wall -O3
 
 libdcu_kernels.a: fill.o causal_mask.o quantize.o embed.o convert.o pointwise.o \
 	              rmsnorm.o rotary_embed.o gelu.o silu_product.o transpose_0213.o \
-				  add_bias.o sampling.o
+				  add_bias.o sampling.o layernorm.o
 	ar rcs $@ $? 
 
 fill.o: fill.cpp
@@ -46,6 +46,9 @@ add_bias.o: add_bias.cpp
 	hipcc $(FLAGS) -c -o $@ $<
 
 sampling.o: sampling.cpp
+	hipcc $(FLAGS) -c -o $@ $<
+
+layernorm.o: layernorm.cpp
 	hipcc $(FLAGS) -c -o $@ $<
 
 install: libdcu_kernels.a dcu_kernels.hpp
