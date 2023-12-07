@@ -61,7 +61,7 @@ public:
 
     ComputingReturn op_transpose_0213(tensor_t self, tensor_t y) override;
     ComputingReturn op_qk(tensor_t self, tensor_t k, tensor_t qk) override;
-    //ComputingReturn op_softmax(tensor_t self, tensor_t out) override;
+    ComputingReturn op_softmax(tensor_t self, tensor_t out) override;
     ComputingReturn op_attn(tensor_t self, tensor_t value, tensor_t out) override;
     ComputingReturn op_gelu(tensor_t self, tensor_t dst) override;
     ComputingReturn op_silu_product(tensor_t self, tensor_t in, tensor_t dst) override;

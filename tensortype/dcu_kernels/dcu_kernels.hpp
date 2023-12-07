@@ -60,6 +60,9 @@ int kr_easy_top3(const T *logits, int *out, const int batch, const int vocab_siz
 template <typename T>
 int kr_layer_norm(T *ln_res, T *vars, T *means, const T *inp, const T *scale, const T *bias, int batch_size, int hidden_dim, float eps,  hipStream_t stream);
 
+template <typename T>
+int kr_softmax(const T *in, T *out, int length, int feature, hipStream_t stream);
+
 }}
 
 #endif
