@@ -877,50 +877,18 @@ ComputingReturn  DCUTensor<DT>::op_qk(tensor_t self, tensor_t k_, tensor_t qk_) 
 
 template<DataType DT>
 ComputingReturn  DCUTensor<DT>::op_softmax(tensor_t self, tensor_t y) {
-    if ( DT != DataType::Float && DT != DataType::FP16) {
-        return OP_TODO_ERROR;
-    }
+    auto stream = ComputingContext::dcu_stream;
+    size_t hidden = self->shape().vec().back();
+    size_t length = self->items() / hidden;
 
-    /*
-    float alpha = 1.0;
-    float beta = 0.0;
-
-    auto shape_ = self->shape().vec();
-    if ( shape_.size() == 4 )  {
-
-        size_t batch = shape_[0];
-        size_t heads = shape_[1];
-        size_t tokens = shape_[2];
-        size_t hidden = shape_[3];
-
-        void* xdata = data();
-        void* ydata = y->device_data( self->impl_index() );
-
-        auto xdesc = create_cudnn_td_with({ batch * heads * tokens, hidden, 1, 1});
-        auto ydesc = create_cudnn_td_with({ batch * heads * tokens, hidden, 1, 1});
-        CUDNN_CHECK( cudnnSoftmaxForward( ComputingContext::cudnn_handle,
-                                        CUDNN_SOFTMAX_ACCURATE, CUDNN_SOFTMAX_MODE_INSTANCE,
-                                        &alpha, xdesc, xdata, &beta, ydesc, ydata) );
-
+    if ( DT == DataType::Float ) {
+        dcu::kr_softmax<float>((float *)data(), (float *)y->dcu_float()->data(), length, hidden, stream);
         return OP_OK;
     }
-
-    if ( shape_.size() == 2 )  {
-        size_t number = shape_[0];
-        size_t tokens = shape_[1];
-
-        void* xdata = data();
-        void* ydata = y->device_data( self->impl_index() );
-
-        auto xdesc = create_cudnn_td_with({ number, tokens, 1, 1});
-        auto ydesc = create_cudnn_td_with({ number, tokens, 1, 1});
-        CUDNN_CHECK( cudnnSoftmaxForward( ComputingContext::cudnn_handle,
-                                        CUDNN_SOFTMAX_ACCURATE, CUDNN_SOFTMAX_MODE_INSTANCE,
-                                        &alpha, xdesc, xdata, &beta, ydesc, ydata) );
+    if ( DT == DataType::FP16 ) {
+        dcu::kr_softmax<device_fp16_t>((device_fp16_t *)data(), (device_fp16_t *)y->dcu_fp16()->data(), length, hidden, stream);
         return OP_OK;
     }
-    */
-
     return OP_TODO_ERROR;
 }
 
