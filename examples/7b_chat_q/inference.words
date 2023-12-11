@@ -239,7 +239,7 @@
         }
         "yb" @ "rotary_cache" @ $pos @ "yc" @  op.rotary_embed
         "cache_man" @ "_kcache_" @ "xc" @ "xfb" @ $L @ nn.ezkv_update
-        "yfb" @ "zfa" @ op.transpos_0213
+        "yfb" @ "zfa" @ op.transpose_0213
         
         ;; get query@key
         {
@@ -249,7 +249,7 @@
             "xa" @ "_w_HH_" @ "query.bias" @ "xc" @ op.linear
         }
         "yc" @ "rotary_cache" @ $pos @ "yb" @  op.rotary_embed
-        "yb" @ "zc" @ op.transpos_0213
+        "yb" @ "zc" @ op.transpose_0213
 
         ;; query@key + apply causal_mask + softmax
         "zc" @  "zfa" @  "xll" @ op.querykey
@@ -264,12 +264,12 @@
             "xa" @ "_w_HH_" @ "value.bias" @ "xb" @ op.linear
         }
         "cache_man" @ "_vcache_" @ "xb" @ "xfa" @ $L @ nn.ezkv_update
-        "yfa" @ "zfb" @ op.transpos_0213
+        "yfa" @ "zfb" @ op.transpose_0213
 
         ;; do attention and transpose back
         "xll_half" @ "xll" @ op.convert
         "xll_half" @ "zfb" @ "zb" @ op.attn          
-        "zb" @ "ya" @ op.transpos_0213          ;; attn->ya 
+        "zb" @ "ya" @ op.transpose_0213          ;; attn->ya 
     }
     
     ;; do dense & residual

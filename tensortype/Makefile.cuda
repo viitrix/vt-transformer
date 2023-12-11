@@ -5,9 +5,9 @@ FLAGS = -Wall -O3 -Wno-maybe-uninitialized -fopenmp \
 		-D_USING_DEVICE_CUDA_
 
 INC = -I. -I../install/include -I../install/include/cuda_kernels \
-	  -I/usr/local/cuda/include \
-	  -I/home/teaonly/opt/nccl/include \
-	  -I/home/teaonly/opt/cudnn/include  
+	  -I${CUDA_DIR}/include \
+	  -I${CUDNN_DIR}/include \
+	  -I${NCCL_DIR}/include
 
 all: libtensortype.a
 

@@ -1,7 +1,11 @@
 ### sentencepiece
-export VT_SOURCE=/public/home/ac56jm0dor/workspace/vt-transformer
-export SENTENCEPIECE_DIR=/public/home/ac56jm0dor/opt/sentencepiece
+export VT_SOURCE=$HOME/workspace/vt-transformer
+export SENTENCEPIECE_DIR=$HOME/opt/sentencepiece
 
 ### DCU 
-export DTK_DIR=/public/home/ac56jm0dor/opt/dtk
+export DTK_DIR=$HOME/opt/dtk
 
+### CUDA
+export CUDA_DIR=/usr/local/cuda
+export NCCL_DIR=$HOME/opt/nccl
+export CUDNN_DIR=$HOME/opt/cudnn
