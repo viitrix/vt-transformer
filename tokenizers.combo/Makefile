@@ -2,7 +2,7 @@
 
 FLAGS = -Wall -O3 -Wno-maybe-uninitialized
 
-INC = -I. -I../install/include -I/home/teaonly/opt/sentencepiece/include
+INC = -I. -I../install/include -I/public/home/ac56jm0dor/opt/sentencepiece/include
 
 all: libtokenizer_combo.a
 
@@ -20,7 +20,7 @@ qwen.o: qwen.cpp
 
 install: libtokenizer_combo.a
 	mkdir -p ../install/lib
-	cp rust/target/release/libtokenizers_c.a ../install/lib/
+	cp rust/target/release/libtokenizers_c.so ../install/lib/
 	cp libtokenizer_combo.a ../install/lib/
 	cp tokenizer_combo.hpp ../install/include
 

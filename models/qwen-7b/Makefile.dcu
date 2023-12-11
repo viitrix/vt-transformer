@@ -1,0 +1,20 @@
+.PHONY: all
+
+FLAGS = -Wall -O3 -D_USING_DEVICE_DCU_ -DUSING_DEVICE_DNNL_ 
+INC = -I../../install/include -I${DTK_DIR}/include
+LINK = -L../../install/lib \
+       -L${DTK_DIR}/lib \
+       -L${DTK_DIR}/lib64 \
+       -L${SENTENCEPIECE_DIR}/lib64 \
+       -ldl -ltensortype  -ldcu_kernels -ltokenizer_combo -ltokenizers_c -lsentencepiece -lgalaxyhip -lhipblas 
+
+all: chat 
+
+chat: chat.cpp
+	g++ $(FLAGS) -o $@ $< $(INC) $(LINK)
+
+run: chat
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${DTK_DIR}/lib:${VT_SOURCE}/install/lib:${SENTENCEPIECE_DIR}/lib64 ./chat
+
+clean:
+	rm -f chat
