@@ -8,8 +8,8 @@
 32                      "HEADS_NUM"             !
 128                     "HEAD_HIDDEN"           !
 
-8                       "MAX_BATCH"             !
-5120                    "MAX_CONTEXT"           !
+2                       "MAX_BATCH"             !
+1526                    "MAX_CONTEXT"           !
 "./fp16/"               "G_PATH"                !
 
 %def create_input_weight
@@ -138,33 +138,18 @@
     $L !!
 %end
 
-%def sync_layer_offload
-    $L !
-
-    "ln_1.weight"                       @   ($L @ "ln_1.weight" |) @                    op.copy
-    "ln_1.weight"                       @   ($L @ "ln_2.weight" |) @                    op.copy
-    "attn.qkv_proj.weight"              @   ($L @ "attn.qkv_proj.weight" |) @           op.copy
-    "attn.qkv_proj.bias"                @   ($L @ "attn.qkv_proj.bias" |) @             op.copy
-    "attn.c_proj.weight"                @   ($L @ "attn.c_proj.weight" |) @             op.copy
-    "mlp.w1.weight"                     @   ($L @ "mlp.w1.weight" |) @                  op.copy
-    "mlp.w2.weight"                     @   ($L @ "mlp.w2.weight" |) @                  op.copy
-    "mlp.c_proj.weight"                 @   ($L @ "mlp.c_proj.weight" |) @              op.copy
-
-    $L !!
-%end
-
 %def init_internal_variable
     $DEVICE !
 
     ;; activity memory
-    0.20 1024 1024 1024 * * * 1 $DEVICE @  "fp16" @ op.create  "_var_"  !
+    0.20 1024 1024 1024 * * * 1 $DEVICE @  "fp16" op.create  "_var_"  !
     
     ;; kv cached memroy
-    32 2 1800 "HIDDEN_SIZE" @ 4 $DEVICE @  "G_DTYPE" @ op.create dup "_kcache_"  !
-    32 2 1800 "HIDDEN_SIZE" @ 4 $DEVICE @  "G_DTYPE" @ op.create dup "_vcache_"  !
+    32 2 1600 "HIDDEN_SIZE" @ 4 $DEVICE @  "fp16" op.create dup "_kcache_"  !
+    32 2 1600 "HIDDEN_SIZE" @ 4 $DEVICE @  "fp16" op.create dup "_vcache_"  !
     nn.ezkv_init "cache_man" !
 
-    "MAX_TOKENS" @ "MAX_BATCH" @ * dup dup dup 
+    "MAX_CONTEXT" @ "MAX_BATCH" @ * dup dup dup 
     1 "host" "int"  op.create  "_ids_"     !
     1 "host" "int"  op.create  "_mask_"    !
     1 $DEVICE @  "int"  op.create  "_ids"      !
@@ -178,5 +163,46 @@
     $DEVICE !!
 %end
 
+%def gpu_init
+    "dcu"       init_internal_variable
+    "host"      create_input_weight
+    "dcu"       create_output_weight
+    
+    "dcu"    "L0."   create_layer_weight 
+    "dcu"    "L1."   create_layer_weight 
+    "dcu"    "L2."   create_layer_weight 
+    "dcu"    "L3."   create_layer_weight 
+    "dcu"    "L4."   create_layer_weight
+    "dcu"    "L5."   create_layer_weight 
+    "dcu"    "L6."   create_layer_weight 
+    "dcu"    "L7."   create_layer_weight 
+    "dcu"    "L8."   create_layer_weight 
+    "dcu"    "L9."   create_layer_weight
+    "dcu"    "L10."  create_layer_weight
+    "dcu"    "L11."  create_layer_weight
+    "dcu"    "L12."  create_layer_weight
+    "dcu"    "L13."  create_layer_weight
+    "dcu"    "L14."  create_layer_weight
+    "dcu"    "L15."  create_layer_weight
+    "dcu"    "L16."   create_layer_weight 
+    "dcu"    "L17."   create_layer_weight 
+    "dcu"    "L18."   create_layer_weight 
+    "dcu"    "L19."   create_layer_weight 
+    "dcu"    "L20."   create_layer_weight
+    "dcu"    "L21."   create_layer_weight 
+    "dcu"    "L22."   create_layer_weight 
+    "dcu"    "L23."   create_layer_weight 
+    "dcu"    "L24."   create_layer_weight 
+    "dcu"    "L25."   create_layer_weight
+    "dcu"    "L26."   create_layer_weight
+    "dcu"    "L27."   create_layer_weight
+    "dcu"    "L28."   create_layer_weight
+    "dcu"    "L29."   create_layer_weight
+    "dcu"    "L30."   create_layer_weight
+    "dcu"    "L31."   create_layer_weight
+%end
 
+%def gpu_main
+    "main...." ?
+%end
 

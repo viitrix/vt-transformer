@@ -129,10 +129,11 @@ private:
     vt::Tokenizer* tokenizer_;
 };
 
-void do_inference(vt::Enviroment* env, const char* init_cmd, const char* main_cmd) {
+void do_inference(vt::Enviroment* env, const char* dag_file) {
+    const char* init_cmd = "gpu_init";
+    const char* main_cmd = "gpu_main";
     {
-        std::string all_code = vt::fileToString("common.words");
-        all_code = all_code + vt::fileToString("inference.words");
+        std::string all_code = vt::fileToString(dag_file);
 
         vt::DaG* init_bin = env->build(all_code);
         env->run(init_bin);
@@ -165,6 +166,11 @@ void do_inference(vt::Enviroment* env, const char* init_cmd, const char* main_cm
 }
 
 int main(int argc, char* argv[] ) {
+    if ( argc < 2 ) {
+        std::cout << "usage: ./chat [dag_file] " << std::endl;
+        return -1;
+    }
+    const char* dag_file = argv[1];
     vt::CollectiveContext::boot_pipe(1);
 
     if ( vt::CollectiveContext::pipe_rank == 0) {
@@ -183,7 +189,7 @@ int main(int argc, char* argv[] ) {
         vt::ComputingContext::boot( 0 );
         vt::Enviroment* env = new vt::Enviroment();
 
-        do_inference(env, "init_gpu", "main_gpu");
+        do_inference(env, dag_file);
 
         delete env;
         vt::ComputingContext::shutdown();

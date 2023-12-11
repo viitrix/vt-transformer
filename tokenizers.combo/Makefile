@@ -2,7 +2,7 @@
 
 FLAGS = -Wall -O3 -Wno-maybe-uninitialized
 
-INC = -I. -I../install/include -I/public/home/ac56jm0dor/opt/sentencepiece/include
+INC = -I. -I../install/include -I${SENTENCEPIECE_DIR}/include
 
 all: libtokenizer_combo.a
 
@@ -18,7 +18,11 @@ baichuan.o: baichuan.cpp
 qwen.o: qwen.cpp
 	g++ $(FLAGS) -c -o $@ $(INC) $<
 
-install: libtokenizer_combo.a
+rust/target/release/libtokenizers_c.so:
+	cd rust
+	cargo build --release
+
+install: libtokenizer_combo.a rust/target/release/libtokenizers_c.so
 	mkdir -p ../install/lib
 	cp rust/target/release/libtokenizers_c.so ../install/lib/
 	cp libtokenizer_combo.a ../install/lib/
