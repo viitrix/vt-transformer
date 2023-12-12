@@ -10,7 +10,7 @@
 
 2                       "MAX_BATCH"             !
 1526                    "MAX_CONTEXT"           !
-"./fp16/"               "G_PATH"                !
+"./weights/"            "G_PATH"                !
 
 %def create_input_weight
     $DEVICE !
@@ -165,6 +165,7 @@
 
 %def gpu_init
     "dcu"       init_internal_variable
+ 
     "host"      create_input_weight
     "dcu"       create_output_weight
     
@@ -200,9 +201,86 @@
     "dcu"    "L29."   create_layer_weight
     "dcu"    "L30."   create_layer_weight
     "dcu"    "L31."   create_layer_weight
+    
+    "G_PATH" @ load_input_weight
+    "G_PATH" @ load_output_weight
+
+    "G_PATH" @ "h_0."  | "L0." load_layer_weight
+    "G_PATH" @ "h_1."  | "L1." load_layer_weight
+    "G_PATH" @ "h_2."  | "L2." load_layer_weight
+    "G_PATH" @ "h_3."  | "L3." load_layer_weight
+    "G_PATH" @ "h_4."  | "L4." load_layer_weight
+    "G_PATH" @ "h_5."  | "L5." load_layer_weight
+    "G_PATH" @ "h_6."  | "L6." load_layer_weight
+    "G_PATH" @ "h_7."  | "L7." load_layer_weight
+    "G_PATH" @ "h_8."  | "L8." load_layer_weight
+    "G_PATH" @ "h_9."  | "L9." load_layer_weight
+    "G_PATH" @ "h_10."  | "L10." load_layer_weight
+    "G_PATH" @ "h_11."  | "L11." load_layer_weight
+    "G_PATH" @ "h_12."  | "L12." load_layer_weight
+    "G_PATH" @ "h_13."  | "L13." load_layer_weight
+    "G_PATH" @ "h_14."  | "L14." load_layer_weight
+    "G_PATH" @ "h_15."  | "L15." load_layer_weight
+    "G_PATH" @ "h_16."  | "L16." load_layer_weight
+    "G_PATH" @ "h_17."  | "L17." load_layer_weight
+    "G_PATH" @ "h_18."  | "L18." load_layer_weight
+    "G_PATH" @ "h_19."  | "L19." load_layer_weight
+    "G_PATH" @ "h_20."  | "L20." load_layer_weight
+    "G_PATH" @ "h_21."  | "L21." load_layer_weight
+    "G_PATH" @ "h_22."  | "L22." load_layer_weight
+    "G_PATH" @ "h_23."  | "L23." load_layer_weight
+    "G_PATH" @ "h_24."  | "L24." load_layer_weight
+    "G_PATH" @ "h_25."  | "L25." load_layer_weight
+    "G_PATH" @ "h_26."  | "L26." load_layer_weight
+    "G_PATH" @ "h_27."  | "L27." load_layer_weight
+    "G_PATH" @ "h_28."  | "L28." load_layer_weight
+    "G_PATH" @ "h_29."  | "L29." load_layer_weight
+    "G_PATH" @ "h_30."  | "L30." load_layer_weight
+    "G_PATH" @ "h_31."  | "L31." load_layer_weight
+%end
+
+%def prepare_input
+    {
+        $tokens !
+        $batch !
+        
+        "_ids_"  @ 0 $batch @ $tokens @ 2 op.view  "ids_" !
+        "_mask_" @ 0 $batch @ $tokens @ 2 op.view  "mask_" !
+        
+        "ids_" @  io.pipe.read
+        "mask_" @ io.pipe.read
+
+        $batch !!
+        $tokens !!
+    }
+   
+    ;; fetch KV cache
+    "cache_man" @  "ids_" @  "mask_" @  "_ids" @ "_mask" @ nn.ezkv_match  
+    "mask" !        
+    "ids"  !
+       
+    ;; write cached mask & ids back to cpu
+    "_mask_" @ 0 "mask" @ op.get_shape op.view "mask_" !
+    "_ids_" @ 0 "ids" @ op.get_shape op.view "ids_" !
+    
+    "mask_" @ "mask" @ op.copy
+    "ids_" @ "ids" @ op.copy
+
+    {
+        "ids" @ op.get_shape drop swap drop
+        "mask" @ op.get_shape drop swap 
+        
+        ;; TODO
+        ;;create_dynamic
+    }
+
+    "mask" @ "causal_mask" @ op.causal_mask
 %end
 
 %def gpu_main
-    "main...." ?
+    prepare_input
+   
+    
+
 %end
 

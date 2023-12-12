@@ -54,6 +54,16 @@ ComputingReturn HostTensor<_DTYPE_>::op_copy(tensor_t self, tensor_t src) {
         return OP_OK;
     }
 #endif
+
+#if _USING_DEVICE_DCU_
+    if ( src->is_dcu() ) {
+        auto stream = ComputingContext::dcu_stream;
+        size_t size = std::get<1>( self->op_sizeof(self) );
+        HIP_CHECK(hipMemcpyAsync(data(), src->device_data(), size , hipMemcpyDeviceToHost, stream));
+        return OP_OK;
+    }
+#endif
+
     vt_panic("Can't be here!");
     return OP_TODO_ERROR;
 }
