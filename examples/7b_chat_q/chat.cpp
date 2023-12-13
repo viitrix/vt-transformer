@@ -12,7 +12,7 @@ const size_t MEM_CTX_SIZE = 4 * 1024 * 1024 * 1024l;
 
 struct ChatApplication {
     ChatApplication() {
-        tokenizer_ = vt::build_tokenizer_qwen("../../models/qwen/qwen.tiktoken");
+        tokenizer_ = vt::build_tokenizer_qwen("../../models/qwen-7b/qwen.tiktoken");
     }
     ~ChatApplication() {
         delete tokenizer_;

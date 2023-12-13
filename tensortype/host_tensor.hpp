@@ -49,7 +49,7 @@ struct HostTensor : public TransformerComputing {
     }
     virtual ~HostTensor() {
         if ( owner_ ) {
-            MemoryContext::free(mem_);
+            MemoryContext::free(mem_, size_);
         }
     }
     void* data() {
