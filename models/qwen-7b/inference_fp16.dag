@@ -163,6 +163,121 @@
     $DEVICE !!
 %end
 
+%def create_dynamic
+    $batch          !
+    $full_tokens    !
+    $tokens         !
+    
+    ;; xinput in GPU
+    {
+        "_var_" @ 0  $batch @  $tokens @  "HIDDEN_SIZE" @ 3 op.view  "xinput" !
+        $batch @ $tokens @ "HIDDEN_SIZE" @ * *
+    }
+
+    ;; causal mask, norm2 in GPU, extend to aligen address
+    {
+        dup
+        "_var_" @ swap $batch @ 1 $tokens @  $full_tokens @ 4 "float" op.view_as  "causal_mask"  !
+        $batch @ $tokens @ $full_tokens @ 2 * * * +
+
+        dup
+        "_var_" @ swap $batch @ $tokens @ 1 3 op.view "norm2" !
+        $batch @ $tokens @ 2 * * +                                  
+    }
+
+    ;; xa, xb, xquery/key/value, xll, x4a, x4b, all_logits
+    dup
+    "_var_" @ swap $batch @ $tokens @ "HIDDEN_SIZE" @ 3 op.view "xa" !
+    $batch @ $tokens @ "HIDDEN_SIZE" @  * * +
+    "xa" @ 0 $batch @ $tokens @ "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "ya" !
+    "xa" @ 0 $batch @ "HEADS_NUM" @ $tokens @ "HEAD_HIDDEN" @ 4 op.view "za" !
+
+    dup
+    "_var_" @ swap $batch @ $tokens @ "HIDDEN_SIZE" @ 3 op.view "xb" !
+    $batch @ $tokens @ "HIDDEN_SIZE" @  * * +
+    "xb" @ 0 $batch @ $tokens @ "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "yb" !
+    "xb" @ 0 $batch @ "HEADS_NUM" @ $tokens @ "HEAD_HIDDEN" @ 4 op.view "zb" !
+    
+    dup 
+    {
+        dup
+        "_var_" @ swap $batch @ $tokens @ "HIDDEN_SIZE" @ 3 op.view "xc" !
+        $batch @ $tokens @ "HIDDEN_SIZE" @  * * +
+        "xc" @ 0 $batch @ $tokens @ "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "yc" !
+        "xc" @ 0 $batch @ "HEADS_NUM" @ $tokens @ "HEAD_HIDDEN" @ 4 op.view "zc" !
+      
+        dup
+        "_var_" @ swap $batch @ $full_tokens @ "HIDDEN_SIZE" @ 3 op.view "xfa" !
+        $batch @ $full_tokens @ "HIDDEN_SIZE" @  * * +
+        "xfa" @ 0 $batch @ $full_tokens @ "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "yfa" !
+        "xfa" @ 0 $batch @ "HEADS_NUM" @ $full_tokens @ "HEAD_HIDDEN" @ 4 op.view "zfa" !
+
+        dup
+        "_var_" @ swap $batch @ $full_tokens @ "HIDDEN_SIZE" @ 3 op.view "xfb" !
+        $batch @ $full_tokens @ "HIDDEN_SIZE" @  * * +
+        "xfb" @ 0 $batch @ $full_tokens @ "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "yfb" !
+        "xfb" @ 0 $batch @ "HEADS_NUM" @ $full_tokens @ "HEAD_HIDDEN" @ 4 op.view "zfb" !
+
+        dup
+        "_var_" @ swap $batch @ "HEADS_NUM" @ $tokens @ $full_tokens @ 4 op.view "xll_half" !
+        $batch @ "HEADS_NUM" @ $tokens @ $full_tokens @ * * * +
+
+        "_var_" @ swap $batch @ "HEADS_NUM" @ $tokens @ $full_tokens @ 4 "float" op.view_as "xll" !
+    }  
+    dup
+    {
+   
+        dup 
+        "_var_" @ swap $batch @ $tokens @ "INTERMEDIATE_SIZE" @ 3 op.view "x4a" !
+        $batch @ $tokens @ "INTERMEDIATE_SIZE" @ * * +
+
+        "_var_" @ swap $batch @ $tokens @ "INTERMEDIATE_SIZE" @ 3 op.view "x4b" !
+    }
+    "_var_" @ swap 0 "VOCAB_SIZE" @ 2 op.view  "all_logits" !
+
+    $tokens !!
+    $batch !!
+    $full_tokens !!
+%end
+
+%def prepare_input
+    {
+        $tokens !
+        $batch !
+        
+        "_ids_"  @ 0 $batch @ $tokens @ 2 op.view  "ids_" !
+        "_mask_" @ 0 $batch @ $tokens @ 2 op.view  "mask_" !
+        
+        "ids_" @  io.pipe.read
+        "mask_" @ io.pipe.read
+
+        $batch !!
+        $tokens !!
+    }
+   
+    ;; fetch KV cache
+    "cache_man" @  "ids_" @  "mask_" @  "_ids" @ "_mask" @ nn.ezkv_match  
+    "mask" !        
+    "ids"  !
+       
+    ;; write cached mask & ids back to cpu
+    "_mask_" @ 0 "mask" @ op.get_shape op.view "mask_" !
+    "_ids_" @ 0 "ids" @ op.get_shape op.view "ids_" !
+    
+    "mask_" @ "mask" @ op.copy
+    "ids_" @ "ids" @ op.copy
+
+    {
+        "ids" @ op.get_shape drop swap drop
+        "mask" @ op.get_shape drop swap 
+        
+        create_dynamic
+    }
+    "mask" @ "causal_mask" @ op.causal_mask
+%end
+
+
+
 %def gpu_init
     "dcu"       init_internal_variable
  
@@ -239,48 +354,13 @@
     "G_PATH" @ "h_31."  | "L31." load_layer_weight
 %end
 
-%def prepare_input
-    {
-        $tokens !
-        $batch !
-        
-        "_ids_"  @ 0 $batch @ $tokens @ 2 op.view  "ids_" !
-        "_mask_" @ 0 $batch @ $tokens @ 2 op.view  "mask_" !
-        
-        "ids_" @  io.pipe.read
-        "mask_" @ io.pipe.read
-
-        $batch !!
-        $tokens !!
-    }
-   
-    ;; fetch KV cache
-    "cache_man" @  "ids_" @  "mask_" @  "_ids" @ "_mask" @ nn.ezkv_match  
-    "mask" !        
-    "ids"  !
-       
-    ;; write cached mask & ids back to cpu
-    "_mask_" @ 0 "mask" @ op.get_shape op.view "mask_" !
-    "_ids_" @ 0 "ids" @ op.get_shape op.view "ids_" !
-    
-    "mask_" @ "mask" @ op.copy
-    "ids_" @ "ids" @ op.copy
-
-    {
-        "ids" @ op.get_shape drop swap drop
-        "mask" @ op.get_shape drop swap 
-        
-        ;; TODO
-        ;;create_dynamic
-    }
-
-    "mask" @ "causal_mask" @ op.causal_mask
-%end
-
 %def gpu_main
     prepare_input
-   
-    
+ 
+    ;; embed    
+    {
+        "ids" @ "wte.weight" @ "xinput" @ op.embed
+    }
 
 %end
 
