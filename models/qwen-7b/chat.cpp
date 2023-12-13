@@ -53,8 +53,6 @@ struct ChatApplication {
             history.push_back("<|im_start|>assistant\n");
             std::vector<int> input_tokens = std::move( build_from_history(history) );
 
-            std::cout << input_tokens.size() << std::endl;
-
             std::vector<int> id;
             std::vector<int> mask;
             for (size_t i = 0; i < input_tokens.size(); i++ ) {
@@ -136,6 +134,12 @@ void do_inference(vt::Enviroment* env, const char* dag_file) {
         std::string all_code = vt::fileToString(dag_file);
 
         vt::DaG* init_bin = env->build(all_code);
+#ifdef _USING_DEVICE_CUDA_
+        env->stack().push_string("cuda");
+#endif
+#ifdef _USING_DEVICE_DCU_
+        env->stack().push_string("dcu");
+#endif
         env->run(init_bin);
         delete init_bin;
     }

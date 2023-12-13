@@ -9,8 +9,36 @@
 128                     "HEAD_HIDDEN"           !
 
 2                       "MAX_BATCH"             !
-1526                    "MAX_CONTEXT"           !
+1024                    "MAX_CONTEXT"           !
 "./weights/"            "G_PATH"                !
+
+%def init_internal_variable
+    $DEVICE !
+
+    ;; local host xinput var 
+    "MAX_CONTEXT" @ "MAX_BATCH" @ "HIDDEN_SIZE" @ * * 1 "host" "fp16" op.create "_xinput~" !
+
+    ;; activity memory
+    0.20 1024 1024 1024 * * * 1 $DEVICE @  "fp16" op.create  "_var_"  !
+    
+    ;; kv cached memroy
+    32 2 1280 "HIDDEN_SIZE" @ 4 $DEVICE @  "fp16" op.create dup "_kcache_"  !
+    32 2 1280 "HIDDEN_SIZE" @ 4 $DEVICE @  "fp16" op.create dup "_vcache_"  !
+    nn.ezkv_init "cache_man" !
+
+    "MAX_CONTEXT" @ "MAX_BATCH" @ * dup dup dup 
+    1 "host"     "int"  op.create  "_ids~"     !
+    1 "host"     "int"  op.create  "_maks~"    !
+    1 $DEVICE @  "int"  op.create  "_ids"      !
+    1 $DEVICE @  "int"  op.create  "_mask"     !
+    "MAX_CONTEXT" @ 1 $DEVICE @  "int" op.create "_position" !
+    
+    10000 "HEAD_HIDDEN" @ 2 3 $DEVICE @  "float" op.create dup 
+    "ROTARY_BASE" @ op.rotary_cache 
+    "rotary_cache" !
+
+    $DEVICE !!
+%end
 
 %def create_input_weight
     $DEVICE !
@@ -138,39 +166,16 @@
     $L !!
 %end
 
-%def init_internal_variable
-    $DEVICE !
-
-    ;; activity memory
-    0.20 1024 1024 1024 * * * 1 $DEVICE @  "fp16" op.create  "_var_"  !
-    
-    ;; kv cached memroy
-    32 2 1600 "HIDDEN_SIZE" @ 4 $DEVICE @  "fp16" op.create dup "_kcache_"  !
-    32 2 1600 "HIDDEN_SIZE" @ 4 $DEVICE @  "fp16" op.create dup "_vcache_"  !
-    nn.ezkv_init "cache_man" !
-
-    "MAX_CONTEXT" @ "MAX_BATCH" @ * dup dup dup 
-    1 "host" "int"  op.create  "_ids_"     !
-    1 "host" "int"  op.create  "_mask_"    !
-    1 $DEVICE @  "int"  op.create  "_ids"      !
-    1 $DEVICE @  "int"  op.create  "_mask"     !
-    1024 1 $DEVICE @  "int" op.create "_position" !
-    
-    10000 "HEAD_HIDDEN" @ 2 3 $DEVICE @  "float" op.create dup 
-    "ROTARY_BASE" @ op.rotary_cache 
-    "rotary_cache" !
-
-    $DEVICE !!
-%end
 
 %def create_dynamic
     $batch          !
     $full_tokens    !
     $tokens         !
     
-    ;; xinput in GPU
+    ;; xinput in GPU and host
     {
-        "_var_" @ 0  $batch @  $tokens @  "HIDDEN_SIZE" @ 3 op.view  "xinput" !
+        "_xinput~" @ 0  $batch @  $tokens @  "HIDDEN_SIZE" @ 3 op.view  "xinput~" !
+        "_var_"    @ 0  $batch @  $tokens @  "HIDDEN_SIZE" @ 3 op.view  "xinput" !
         $batch @ $tokens @ "HIDDEN_SIZE" @ * *
     }
 
@@ -245,77 +250,139 @@
         $tokens !
         $batch !
         
-        "_ids_"  @ 0 $batch @ $tokens @ 2 op.view  "ids_" !
-        "_mask_" @ 0 $batch @ $tokens @ 2 op.view  "mask_" !
+        "_ids~"  @ 0 $batch @ $tokens @ 2 op.view  "ids~" !
+        "_maks~" @ 0 $batch @ $tokens @ 2 op.view  "mask~" !
         
-        "ids_" @  io.pipe.read
-        "mask_" @ io.pipe.read
+        "ids~" @  io.pipe.read
+        "mask~" @ io.pipe.read
 
         $batch !!
         $tokens !!
     }
    
     ;; fetch KV cache
-    "cache_man" @  "ids_" @  "mask_" @  "_ids" @ "_mask" @ nn.ezkv_match  
+    "cache_man" @  "ids~" @  "mask~" @  "_ids" @ "_mask" @ nn.ezkv_match  
     "mask" !        
     "ids"  !
        
     ;; write cached mask & ids back to cpu
-    "_mask_" @ 0 "mask" @ op.get_shape op.view "mask_" !
-    "_ids_" @ 0 "ids" @ op.get_shape op.view "ids_" !
-    
-    "mask_" @ "mask" @ op.copy
-    "ids_" @ "ids" @ op.copy
+    {
+        "_maks~" @ 0 "mask" @ op.get_shape op.view "mask~" !
+        "_ids~" @ 0 "ids" @ op.get_shape op.view "ids~" !
+        "mask~" @ "mask" @ op.copy
+        "ids~" @ "ids" @ op.copy
+    }
 
     {
         "ids" @ op.get_shape drop swap drop
         "mask" @ op.get_shape drop swap 
-        
         create_dynamic
     }
+
     "mask" @ "causal_mask" @ op.causal_mask
 %end
 
+%def layer_forward
+    $L !
+    "cache_man" @  "_position" @ nn.ezkv_position  $pos !
 
+    "xinput" @ "ln_1.weight" @ "norm2" @ "xa" @ "RMS_EPS" @ op.rmsnorm
+
+    ;; attention
+    {
+        ;; get key for new tokens, combing cached tokens, position embedding
+        "xa" @ "key.weight" @ "key.bias" @ "xb" @ op.linear
+        "yb" @ "rotary_cache" @ $pos @ "yc" @  op.rotary_embed
+        "cache_man" @ "_kcache_" @ "xc" @ "xfb" @ $L @ nn.ezkv_update
+        "yfb" @ "zfa" @ op.transpose_0213
+        
+        ;; get query@key
+        "xa" @ "query.weight" @ "query.bias" @ "xc" @ op.linear
+        "yc" @ "rotary_cache" @ $pos @ "yb" @  op.rotary_embed
+        "yb" @ "zc" @ op.transpose_0213
+
+        ;; query@key + apply causal_mask + softmax
+        "zc" @  "zfa" @  "xll" @ op.querykey
+        "xll" @ "causal_mask" @ "xll" @ op.add
+        "xll" @ "xll" @ op.softmax
+        
+        ;; get value for new tokens, combing cached tokens 
+        "xa" @ "value.weight" @ "value.bias" @ "xb" @ op.linear
+        "cache_man" @ "_vcache_" @ "xb" @ "xfa" @ $L @ nn.ezkv_update
+        "yfa" @ "zfb" @ op.transpose_0213
+
+        ;; do attention and transpose back
+        "xll_half" @ "xll" @ op.convert
+        "xll_half" @ "zfb" @ "zb" @ op.attn          
+        "zb" @ "ya" @ op.transpose_0213          ;; attn->ya 
+    }
+    
+    ;; do dense & residual
+    "xa" @ "attn.c_proj.weight" @  op.null "xb" @ op.linear
+    "xb" @ "xinput" @ "xa" @ op.add
+
+    ;; post layer norm
+    "xa" @ "ln_2.weight" @ "norm2" @ "xb" @ "RMS_EPS" @ op.rmsnorm
+
+    ;; MLP
+    {
+        ;; xa atteion output
+        ;; xb passed post layernorm
+        
+        "xb" @ "mlp.w1.weight" @ op.null "x4a" @ op.linear
+        "xb" @ "mlp.w2.weight" @ op.null "x4b" @ op.linear
+        
+        "x4b" @ "x4a" @ "x4a" @ op.silu_product
+        "x4a" @ "mlp.c_proj.weight" @ op.null "xb" @ op.linear
+        
+        ;; residual
+        "xa" @ "xb" @ "xinput" @ op.add
+    }
+
+    $pos !!
+    $L !!
+%end
 
 %def gpu_init
-    "dcu"       init_internal_variable
+    "G_DEVICE" ! 
+
+    "G_DEVICE" @       init_internal_variable
  
-    "host"      create_input_weight
-    "dcu"       create_output_weight
-    
-    "dcu"    "L0."   create_layer_weight 
-    "dcu"    "L1."   create_layer_weight 
-    "dcu"    "L2."   create_layer_weight 
-    "dcu"    "L3."   create_layer_weight 
-    "dcu"    "L4."   create_layer_weight
-    "dcu"    "L5."   create_layer_weight 
-    "dcu"    "L6."   create_layer_weight 
-    "dcu"    "L7."   create_layer_weight 
-    "dcu"    "L8."   create_layer_weight 
-    "dcu"    "L9."   create_layer_weight
-    "dcu"    "L10."  create_layer_weight
-    "dcu"    "L11."  create_layer_weight
-    "dcu"    "L12."  create_layer_weight
-    "dcu"    "L13."  create_layer_weight
-    "dcu"    "L14."  create_layer_weight
-    "dcu"    "L15."  create_layer_weight
-    "dcu"    "L16."   create_layer_weight 
-    "dcu"    "L17."   create_layer_weight 
-    "dcu"    "L18."   create_layer_weight 
-    "dcu"    "L19."   create_layer_weight 
-    "dcu"    "L20."   create_layer_weight
-    "dcu"    "L21."   create_layer_weight 
-    "dcu"    "L22."   create_layer_weight 
-    "dcu"    "L23."   create_layer_weight 
-    "dcu"    "L24."   create_layer_weight 
-    "dcu"    "L25."   create_layer_weight
-    "dcu"    "L26."   create_layer_weight
-    "dcu"    "L27."   create_layer_weight
-    "dcu"    "L28."   create_layer_weight
-    "dcu"    "L29."   create_layer_weight
-    "dcu"    "L30."   create_layer_weight
-    "dcu"    "L31."   create_layer_weight
+    "host"             create_input_weight
+    "G_DEVICE" @       create_output_weight
+   
+    "G_DEVICE" @    "L0."   create_layer_weight 
+    "G_DEVICE" @    "L1."   create_layer_weight 
+    "G_DEVICE" @    "L2."   create_layer_weight 
+    "G_DEVICE" @    "L3."   create_layer_weight 
+    "G_DEVICE" @    "L4."   create_layer_weight
+    "G_DEVICE" @    "L5."   create_layer_weight 
+    "G_DEVICE" @    "L6."   create_layer_weight 
+    "G_DEVICE" @    "L7."   create_layer_weight 
+    "G_DEVICE" @    "L8."   create_layer_weight 
+    "G_DEVICE" @    "L9."   create_layer_weight
+    "G_DEVICE" @    "L10."  create_layer_weight
+    "G_DEVICE" @    "L11."  create_layer_weight
+    "G_DEVICE" @    "L12."  create_layer_weight
+    "G_DEVICE" @    "L13."  create_layer_weight
+    "G_DEVICE" @    "L14."  create_layer_weight
+    "G_DEVICE" @    "L15."  create_layer_weight
+    "G_DEVICE" @    "L16."   create_layer_weight 
+    "G_DEVICE" @    "L17."   create_layer_weight 
+    "G_DEVICE" @    "L18."   create_layer_weight 
+    "G_DEVICE" @    "L19."   create_layer_weight 
+    "G_DEVICE" @    "L20."   create_layer_weight
+    "G_DEVICE" @    "L21."   create_layer_weight 
+    "G_DEVICE" @    "L22."   create_layer_weight 
+    "G_DEVICE" @    "L23."   create_layer_weight 
+    "G_DEVICE" @    "L24."   create_layer_weight 
+    "G_DEVICE" @    "L25."   create_layer_weight
+    "G_DEVICE" @    "L26."   create_layer_weight
+    "G_DEVICE" @    "L27."   create_layer_weight
+    "G_DEVICE" @    "L28."   create_layer_weight
+    "G_DEVICE" @    "L29."   create_layer_weight
+    "G_DEVICE" @    "L30."   create_layer_weight
+    "G_DEVICE" @    "L31."   create_layer_weight
     
     "G_PATH" @ load_input_weight
     "G_PATH" @ load_output_weight
@@ -356,11 +423,60 @@
 
 %def gpu_main
     prepare_input
- 
+
     ;; embed    
     {
-        "ids" @ "wte.weight" @ "xinput" @ op.embed
+        "ids~" @ "wte.weight" @ "xinput~" @ op.embed
+        "xinput" @ "xinput~" @ op.copy
     }
+
+    "L0."   sync_layer_clone 0  layer_forward 
+    "L1."   sync_layer_clone 1  layer_forward    
+    "L2."   sync_layer_clone 2  layer_forward    
+    "L3."   sync_layer_clone 3  layer_forward 
+    "L4."   sync_layer_clone 4  layer_forward 
+    "L5."   sync_layer_clone 5  layer_forward 
+    "L6."   sync_layer_clone 6  layer_forward 
+    "L7."   sync_layer_clone 7  layer_forward 
+    "L8."   sync_layer_clone 8  layer_forward 
+    "L9."   sync_layer_clone 9  layer_forward 
+    "L10."  sync_layer_clone 10 layer_forward 
+    "L11."  sync_layer_clone 11 layer_forward 
+    "L12."  sync_layer_clone 12 layer_forward 
+    "L13."  sync_layer_clone 13 layer_forward 
+    "L14."  sync_layer_clone 14 layer_forward 
+    "L15."  sync_layer_clone 15 layer_forward 
+    "L16."  sync_layer_clone 16 layer_forward
+    "L17."  sync_layer_clone 17 layer_forward
+    "L18."  sync_layer_clone 18 layer_forward
+    "L19."  sync_layer_clone 19 layer_forward
+    "L20."  sync_layer_clone 20 layer_forward
+    "L21."  sync_layer_clone 21 layer_forward
+    "L22."  sync_layer_clone 22 layer_forward
+    "L23."  sync_layer_clone 23 layer_forward
+    "L24."  sync_layer_clone 24 layer_forward
+    "L25."  sync_layer_clone 25  layer_forward
+    "L26."  sync_layer_clone 26 layer_forward
+    "L27."  sync_layer_clone 27 layer_forward
+    "L28."  sync_layer_clone 28 layer_forward
+    "L29."  sync_layer_clone 29 layer_forward
+    "L30."  sync_layer_clone 30 layer_forward
+    "L31."  sync_layer_clone 31 layer_forward
+
+    ;; ln & output    
+    {
+        "xinput" @ "ln_f.weight" @ "norm2" @ "xb" @ "RMS_EPS" @ op.rmsnorm
+        "xb" @ "mask~" @ "lm_head.weight" @ "all_logits" @  op.all_logits 
+    }
+   
+    ;; reshape all_logits according to user's masks
+    "all_logits" @ 0 rot "VOCAB_SIZE" @ 2 op.view "all_logits" !
+
+    ;; sampling using tempture & top_p
+    "all_logits" @ "TEMPERATURE" @ op.sampling_top3
+
+    0 io.pipe.write
+
 
 %end
 

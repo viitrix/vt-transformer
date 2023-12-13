@@ -78,7 +78,7 @@
     $weights_path ! 
 
     "wte.weight" @
-    $weights_path @ "wte.bin" |
+    $weights_path @ "wte.fp16" |
     io.load
 
     $weights_path !!
@@ -92,11 +92,11 @@
     $weights_path ! 
     
     "ln_f.weight" @
-    $weights_path @ "ln_f.bin"  |
+    $weights_path @ "ln_f.fp16"  |
     io.load
 
     "lm_head.weight" @
-    $weights_path @ "lm_head.bin"  |
+    $weights_path @ "lm_head.fp16"  |
     io.load
 
     $weights_path !!
@@ -110,10 +110,10 @@
     
     "Loading... " $weights_path @ | ?
     
-    $L @ "ln_1.weight"                     | @ $weights_path @  "ln_1.weight.bin"                | io.load
-    $L @ "ln_2.weight"                     | @ $weights_path @  "ln_2.weight.bin"                | io.load
+    $L @ "ln_1.weight"                     | @ $weights_path @  "ln_1.weight.fp16"                | io.load
+    $L @ "ln_2.weight"                     | @ $weights_path @  "ln_2.weight.fp16"                | io.load
     $L @ "attn.qkv_proj.weight"            | @ $weights_path @  "attn.c_attn.weight.q4"         | io.load
-    $L @ "attn.qkv_proj.bias"              | @ $weights_path @  "attn.c_attn.bias.bin"           | io.load
+    $L @ "attn.qkv_proj.bias"              | @ $weights_path @  "attn.c_attn.bias.fp16"           | io.load
     $L @ "attn.c_proj.weight"              | @ $weights_path @  "attn.c_proj.weight.q4"         | io.load
     $L @ "mlp.w1.weight"                   | @ $weights_path @  "mlp.w1.weight.q4"              | io.load
     $L @ "mlp.w2.weight"                   | @ $weights_path @  "mlp.w2.weight.q4"              | io.load
