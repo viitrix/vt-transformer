@@ -828,62 +828,38 @@ ComputingReturn  DCUTensor<DT>::op_qk(tensor_t self, tensor_t k_, tensor_t qk_) 
     int HfT = hhidden * ftokens ;
     int TT = ftokens * ntokens;
 
-    auto stream = ComputingContext::dcu_stream;
     if ( DT == DataType::Float ) {
-        std::vector<void *> ABC;
-        ABC.resize( batch * heads * 3);
-        for (int i = 0; i < batch * heads; i++) {
-            float* B = (float *)data() + i * HnT;
-            float* A = (float *)(k_->dcu_float()->data()) + i * HfT;
-            float* C = (float *)(qk_->dcu_float()->data()) + i * TT;
-            ABC[i] = A;
-            ABC[i + batch*heads] = B;
-            ABC[i + 2*batch*heads] = C;
-        }
-        HIP_CHECK( hipMemcpyAsync(ComputingContext::dcu_workspace, ABC.data(), sizeof(void*) * ABC.size(), hipMemcpyHostToDevice, stream) );
+        void *A_ = k_->dcu_float()->data();
+        void *B_ = data();
+        void *C_ = qk_->dcu_float()->data();
 
-        void *A_ = ComputingContext::dcu_workspace;
-        void *B_ = (char *)A_ + sizeof(void *) * batch * heads;
-        void *C_ = (char *)B_ + sizeof(void *) * batch * heads;
-
-        HIPBLAS_CHECK( hipblasGemmBatchedEx(
+        HIPBLAS_CHECK( hipblasGemmStridedBatchedEx(
                         ComputingContext::hipblas_handle,
                         HIPBLAS_OP_T, HIPBLAS_OP_N,
                         m, n, k,
-                        &alpha, (const void* *)A_, HIPBLAS_R_32F, k,
-                        (const void* *)B_, HIPBLAS_R_32F, k, &beta,
-                        (void **)C_, HIPBLAS_R_32F, m,
+                        &alpha, A_, HIPBLAS_R_32F, k, HnT,
+                        B_, HIPBLAS_R_32F, k, HfT,
+                        &beta, C_, HIPBLAS_R_32F, m, TT,
                         batch*heads, HIPBLAS_R_32F, HIPBLAS_GEMM_DEFAULT) );
 
         return OP_OK;
     }
     if ( DT == DataType::FP16 ) {
 #if 1
-        std::vector<void *> ABC;
-        ABC.resize( batch * heads * 3);
-        for (int i = 0; i < batch * heads; i++) {
-            device_fp16_t* B = (device_fp16_t *)data() + i * HnT;
-            device_fp16_t* A = (device_fp16_t *)(k_->dcu_fp16()->data()) + i * HfT;
-            float* C = (float *)(qk_->dcu_float()->data()) + i * TT;
-            ABC[i] = A;
-            ABC[i + batch*heads] = B;
-            ABC[i + 2*batch*heads] = C;
-        }
-        HIP_CHECK( hipMemcpyAsync(ComputingContext::dcu_workspace, ABC.data(), sizeof(void*) * ABC.size(), hipMemcpyHostToDevice, stream) );
+        void *A_ = k_->dcu_fp16()->data();
+        void *B_ = data();
+        void *C_ = qk_->dcu_float()->data();
 
-        void *A_ = ComputingContext::dcu_workspace;
-        void *B_ = (char *)A_ + sizeof(void *) * batch * heads;
-        void *C_ = (char *)B_ + sizeof(void *) * batch * heads;
-
-        HIPBLAS_CHECK( hipblasGemmBatchedEx(
+        HIPBLAS_CHECK( hipblasGemmStridedBatchedEx(
                         ComputingContext::hipblas_handle,
                         HIPBLAS_OP_T, HIPBLAS_OP_N,
                         m, n, k,
-                        &alpha, (const void* *)A_, HIPBLAS_R_16F, k,
-                        (const void* *)B_, HIPBLAS_R_16F, k, &beta,
-                        (void **)C_, HIPBLAS_R_32F, m,
+                        &alpha, A_, HIPBLAS_R_16F, k, HnT,
+                        B_, HIPBLAS_R_16F, k, HfT,
+                        &beta, C_, HIPBLAS_R_32F, m, TT,
                         batch*heads, HIPBLAS_R_32F, HIPBLAS_GEMM_DEFAULT) );
 #else
+        // out loop and single hipblasGemmEx
         for (int i = 0; i < batch * heads; i++) {
             device_fp16_t* B = (device_fp16_t *)data() + i * HnT;
             device_fp16_t* A = (device_fp16_t *)(k_->dcu_fp16()->data()) + i * HfT;
@@ -943,92 +919,49 @@ ComputingReturn  DCUTensor<DT>::op_attn(tensor_t self, tensor_t value_, tensor_t
     int HnT = hhidden * ntokens;
     int TT = ftokens * ntokens;
 
-    auto stream = ComputingContext::dcu_stream;
     if ( value_->is_float() && self->is_float() ) {
-        std::vector<void *> ABC;
-        ABC.resize( batch * heads * 3);
-        for (int i = 0; i < batch * heads; i++) {
-            float* A = (float *)(value_->dcu_float()->data()) + i * HfT;
-            float* B = (float *)data() + i * TT;
-            float* C = (float *)(out_->dcu_float()->data()) + i * HnT;
-
-            ABC[i] = A;
-            ABC[i + batch*heads] = B;
-            ABC[i + 2*batch*heads] = C;
-        }
-        HIP_CHECK( hipMemcpyAsync(ComputingContext::dcu_workspace, ABC.data(), sizeof(void*) * ABC.size(), hipMemcpyHostToDevice, stream) );
-
-        void *A_ = ComputingContext::dcu_workspace;
-        void *B_ = (char *)A_ + sizeof(void *) * batch * heads;
-        void *C_ = (char *)B_ + sizeof(void *) * batch * heads;
-
-        HIPBLAS_CHECK( hipblasGemmBatchedEx(
+        void *A_ = value_->dcu_float()->data();
+        void *B_ = data();
+        void *C_ = out_->dcu_float()->data();
+        HIPBLAS_CHECK( hipblasGemmStridedBatchedEx(
                         ComputingContext::hipblas_handle,
                         HIPBLAS_OP_N, HIPBLAS_OP_N,
                         m, n, k,
-                        &alpha, (const void**)A_, HIPBLAS_R_32F, m,
-                        (const void**)B_, HIPBLAS_R_32F, k, &beta,
-                        (void**)C_, HIPBLAS_R_32F, m,
+                        &alpha, A_, HIPBLAS_R_32F, m, HfT,
+                        B_, HIPBLAS_R_32F, k, TT,
+                        &beta, C_, HIPBLAS_R_32F, m, HnT,
                         batch*heads, HIPBLAS_R_32F, HIPBLAS_GEMM_DEFAULT) );
+
         return OP_OK;
     }
     if ( value_->is_fp16() && self->is_float() ) {
-        std::vector<void *> ABC;
-        ABC.resize( batch * heads * 3);
-
-        for (int i = 0; i < batch * heads; i++) {
-            device_fp16_t* A = (device_fp16_t *)(value_->dcu_fp16()->data()) + i * HfT;
-            float* B = (float *)data() + i * TT;
-            device_fp16_t* C = (device_fp16_t *)(out_->dcu_fp16()->data()) + i * HnT;
-
-            ABC[i] = A;
-            ABC[i + batch*heads] = B;
-            ABC[i + 2*batch*heads] = C;
-        }
-
-        HIP_CHECK( hipMemcpyAsync(ComputingContext::dcu_workspace, ABC.data(), sizeof(void*) * ABC.size(), hipMemcpyHostToDevice, stream) );
-        void *A_ = ComputingContext::dcu_workspace;
-        void *B_ = (char *)A_ + sizeof(void *) * batch * heads;
-        void *C_ = (char *)B_ + sizeof(void *) * batch * heads;
-
-
-        HIPBLAS_CHECK( hipblasGemmBatchedEx(
+        void *A_ = value_->dcu_fp16()->data();
+        void *B_ = data();
+        void *C_ = out_->dcu_fp16()->data();
+        HIPBLAS_CHECK( hipblasGemmStridedBatchedEx(
                         ComputingContext::hipblas_handle,
                         HIPBLAS_OP_N, HIPBLAS_OP_N,
                         m, n, k,
-                        &alpha, (const void**)A_, HIPBLAS_R_32F, m,
-                        (const void**)B_, HIPBLAS_R_32F, k, &beta,
-                        (void**)C_, HIPBLAS_R_16F, m,
+                        &alpha, A_, HIPBLAS_R_16F, m, HfT,
+                        B_, HIPBLAS_R_32F, k, TT,
+                        &beta, C_, HIPBLAS_R_16F, m, HnT,
                         batch*heads, HIPBLAS_R_32F, HIPBLAS_GEMM_DEFAULT) );
 
         return OP_OK;
     }
     if ( value_->is_fp16() && self->is_fp16()  ) {
-        std::vector<void *> ABC;
-        ABC.resize( batch * heads * 3);
-
-        for (int i = 0; i < batch * heads; i++) {
-            auto* A = (device_fp16_t *)(value_->dcu_fp16()->data()) + i * HfT;
-            auto* B = (device_fp16_t *)data() + i * TT;
-            auto* C = (device_fp16_t *)(out_->dcu_fp16()->data()) + i * HnT;
-            ABC[i] = A;
-            ABC[i + batch*heads] = B;
-            ABC[i + 2*batch*heads] = C;
-        }
-
-        HIP_CHECK( hipMemcpyAsync(ComputingContext::dcu_workspace, ABC.data(), sizeof(void*) * ABC.size(), hipMemcpyHostToDevice, stream) );
-        void *A_ = ComputingContext::dcu_workspace;
-        void *B_ = (char *)A_ + sizeof(void *) * batch * heads;
-        void *C_ = (char *)B_ + sizeof(void *) * batch * heads;
-
-        HIPBLAS_CHECK( hipblasGemmBatchedEx(
+        void *A_ = value_->dcu_fp16()->data();
+        void *B_ = data();
+        void *C_ = out_->dcu_fp16()->data();
+        HIPBLAS_CHECK( hipblasGemmStridedBatchedEx(
                         ComputingContext::hipblas_handle,
                         HIPBLAS_OP_N, HIPBLAS_OP_N,
                         m, n, k,
-                        &alpha, (const void**)A_, HIPBLAS_R_32F, m,
-                        (const void**)B_, HIPBLAS_R_16F, k, &beta,
-                        (void**)C_, HIPBLAS_R_16F, m,
+                        &alpha, A_, HIPBLAS_R_16F, m, HfT,
+                        B_, HIPBLAS_R_16F, k, TT,
+                        &beta, C_, HIPBLAS_R_16F, m, HnT,
                         batch*heads, HIPBLAS_R_32F, HIPBLAS_GEMM_DEFAULT) );
+        return OP_OK;
     }
     return OP_TODO_ERROR;
 }
