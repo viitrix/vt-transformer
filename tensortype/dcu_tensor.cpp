@@ -544,32 +544,66 @@ ComputingReturn DCUTensor<DT>::op_scale(tensor_t self, float scale) {
 
 template<DataType DT>
 ComputingReturn DCUTensor<DT>::op_add(tensor_t self, tensor_t b, tensor_t c) {
-    vt_assert( self->items() == b->items() , " DCU's add don't support brodcast");
     auto stream = ComputingContext::dcu_stream;
-    if ( DT == DataType::Float && b->is_float() ) {
-        float* A = (float *)data();
-        float* B = (float *)b->dcu_float()->data();
-        float* C = (float *)c->dcu_float()->data();
+    if ( self->items() == b->items() ) {
+        if ( DT == DataType::Float && b->is_float() ) {
+            float* A = (float *)data();
+            float* B = (float *)b->dcu_float()->data();
+            float* C = (float *)c->dcu_float()->data();
 
-        dcu::kr_add<float, float>(A, B, C, self->items(), stream);
-        return OP_OK;
-    }
-    if ( DT == DataType::FP16 && b->is_fp16() ) {
-        device_fp16_t* A = (device_fp16_t *)data();
-        device_fp16_t* B = (device_fp16_t *)b->dcu_fp16()->data();
-        device_fp16_t* C = (device_fp16_t *)c->dcu_fp16()->data();
+            dcu::kr_add<float, float>(A, B, C, self->items(), stream);
+            return OP_OK;
+        }
+        if ( DT == DataType::FP16 && b->is_fp16() ) {
+            device_fp16_t* A = (device_fp16_t *)data();
+            device_fp16_t* B = (device_fp16_t *)b->dcu_fp16()->data();
+            device_fp16_t* C = (device_fp16_t *)c->dcu_fp16()->data();
 
-        dcu::kr_add<device_fp16_t, device_fp16_t>(A, B, C, self->items(), stream);
-        return OP_OK;
-    }
-    if ( DT == DataType::FP16 && b->is_float() ) {
-        device_fp16_t* A = (device_fp16_t *)data();
-        float* B = (float *)b->dcu_fp16()->data();
-        device_fp16_t* C = (device_fp16_t *)c->dcu_fp16()->data();
+            dcu::kr_add<device_fp16_t, device_fp16_t>(A, B, C, self->items(), stream);
+            return OP_OK;
+        }
+        if ( DT == DataType::FP16 && b->is_float() ) {
+            device_fp16_t* A = (device_fp16_t *)data();
+            float* B = (float *)b->dcu_fp16()->data();
+            device_fp16_t* C = (device_fp16_t *)c->dcu_fp16()->data();
 
-        dcu::kr_add<device_fp16_t, float>(A, B, C, self->items(), stream);
-        return OP_OK;
+            dcu::kr_add<device_fp16_t, float>(A, B, C, self->items(), stream);
+            return OP_OK;
+        }
+    } else {
+        auto ashape = self->shape().vec();
+        auto bshape = b->shape().vec();
+
+        if ( ashape.size() == 4 &&
+             bshape.size() == 4 &&
+             ashape[0] == bshape[0] &&
+             ashape[2] == bshape[2] &&
+             ashape[3] == bshape[3] &&
+             bshape[1] == 1 ) {
+
+            int length = ashape[0];
+            int inter = ashape[1];
+            int feature = ashape[2] * ashape[3];
+
+            if ( DT == DataType::FP16 && b->is_fp16() ) {
+                device_fp16_t* A = (device_fp16_t *)data();
+                device_fp16_t* B = (device_fp16_t *)b->dcu_fp16()->data();
+                device_fp16_t* C = (device_fp16_t *)c->dcu_fp16()->data();
+
+                dcu::kr_add_broadcast<device_fp16_t>(A, B, C, length, inter, feature, stream);
+                return OP_OK;
+            }
+            if ( DT == DataType::Float && b->is_float() ) {
+                float* A = (float *)data();
+                float* B = (float *)b->dcu_float()->data();
+                float* C = (float *)c->dcu_float()->data();
+
+                dcu::kr_add_broadcast<float>(A, B, C, length, inter, feature, stream);
+                return OP_OK;
+            }
+        }
     }
+
     return OP_TODO_ERROR;
 }
 

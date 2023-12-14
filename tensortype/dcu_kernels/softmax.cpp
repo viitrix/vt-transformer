@@ -145,7 +145,7 @@ int kr_softmax<float>(const float *in, float *out, int length, int hidden_dim, h
 template <>
 int kr_softmax<__half>(const __half *in, __half *out, int length, int hidden_dim, hipStream_t stream) {
     const int nThreads = 256;
-    if (hidden_dim % 4 != 0) {
+    if (hidden_dim % 8 != 0) {
         throw std::runtime_error("violate hidden_dim % 4 = 0");
     }
     hidden_dim >>= 3;
