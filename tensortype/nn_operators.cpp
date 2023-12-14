@@ -20,6 +20,10 @@ namespace op {
             auto stream = vt::ComputingContext::cuda_stream;
             CUDA_CHECK(cudaStreamSynchronize(stream));
 #endif
+#ifdef _USING_DEVICE_DCU_
+            auto stream = vt::ComputingContext::dcu_stream;
+            HIP_CHECK(hipStreamSynchronize(stream));
+#endif
         }
         NWORD_CREATOR_DEFINE_LR(Sync)
     };

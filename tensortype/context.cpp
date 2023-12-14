@@ -261,7 +261,7 @@ void* MemoryContext::alloc(size_t blk_size) {
     if ( blk_size + currentp > total_size ) {
         vt_panic("Can't allocate memory, out of pre-allocating");
     }
-
+    currentp += blk_size;
     void* ret = malloc(blk_size);
     return ret;
 }

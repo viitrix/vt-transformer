@@ -850,13 +850,18 @@ ComputingReturn  DCUTensor<DT>::op_qk(tensor_t self, tensor_t k_, tensor_t qk_) 
         return OP_OK;
     }
     if ( DT == DataType::FP16 ) {
+#if 0
+        //
+        // FIXME
+        // There is something error !
+        //
         std::vector<const void *> As;
         std::vector<const void *> Bs;
         std::vector<void *> Cs;
         for (int i = 0; i < batch * heads; i++) {
             device_fp16_t* B = (device_fp16_t *)data() + i * HnT;
             device_fp16_t* A = (device_fp16_t *)(k_->dcu_fp16()->data()) + i * HfT;
-            device_fp16_t* C = (device_fp16_t *)(qk_->dcu_fp16()->data()) + i * TT;
+            float* C = (float *)(qk_->dcu_float()->data()) + i * TT;
             As.push_back(A);
             Bs.push_back(B);
             Cs.push_back(C);
@@ -867,8 +872,25 @@ ComputingReturn  DCUTensor<DT>::op_qk(tensor_t self, tensor_t k_, tensor_t qk_) 
                         m, n, k,
                         &alpha, As.data(), HIPBLAS_R_16F, k,
                         Bs.data(), HIPBLAS_R_16F, k, &beta,
-                        Cs.data(), HIPBLAS_R_16F, m,
-                        batch*heads, HIPBLAS_R_32F, HIPBLAS_GEMM_DEFAULT) );
+                        Cs.data(), HIPBLAS_R_32F, m,
+                        batch*head
+                        , HIPBLAS_R_32F, HIPBLAS_GEMM_DEFAULT) );
+#else
+        for (int i = 0; i < batch * heads; i++) {
+            device_fp16_t* B = (device_fp16_t *)data() + i * HnT;
+            device_fp16_t* A = (device_fp16_t *)(k_->dcu_fp16()->data()) + i * HfT;
+            float* C = (float *)(qk_->dcu_float()->data()) + i * TT;
+
+            HIPBLAS_CHECK( hipblasGemmEx(
+                        ComputingContext::hipblas_handle,
+                        HIPBLAS_OP_T, HIPBLAS_OP_N,
+                        m, n, k,
+                        &alpha, A, HIPBLAS_R_16F, k,
+                        B, HIPBLAS_R_16F, k, &beta,
+                        C, HIPBLAS_R_32F, m,
+                        HIPBLAS_R_32F, HIPBLAS_GEMM_DEFAULT) );
+        }
+#endif
         return OP_OK;
     }
 
