@@ -11,7 +11,7 @@ __global__ void silu_product(const T* in_act, const T* in, T* out,  int items) {
     }
     float act = in_act[i];
     float in_ = in[i];
-    out[i] = (T)(act / (1.f + __expf(-act)) * in_);
+    out[i] = (T)(act / (1.f + exp(-act)) * in_);
 }
 
 template <>

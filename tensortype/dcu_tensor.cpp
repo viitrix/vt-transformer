@@ -560,6 +560,7 @@ ComputingReturn DCUTensor<DT>::op_add(tensor_t self, tensor_t b, tensor_t c) {
             device_fp16_t* C = (device_fp16_t *)c->dcu_fp16()->data();
 
             dcu::kr_add<device_fp16_t, device_fp16_t>(A, B, C, self->items(), stream);
+
             return OP_OK;
         }
         if ( DT == DataType::FP16 && b->is_float() ) {
@@ -666,7 +667,9 @@ ComputingReturn DCUTensor<DT>::op_linear(tensor_t self, tensor_t w_, tensor_t b_
                        C, HIPBLAS_R_32F, m,
                        HIPBLAS_R_32F, HIPBLAS_GEMM_DEFAULT) );
 
-        dcu::kr_add_bias<float>((float *)C, (float *)b_->dcu_float()->data(), (float *)C,  n, m, stream);
+        if ( b_ != nullptr ) {
+            dcu::kr_add_bias<float>((float *)C, (float *)b_->dcu_float()->data(), (float *)C,  n, m, stream);
+        }
 
         return OP_OK;
     }
@@ -696,7 +699,9 @@ ComputingReturn DCUTensor<DT>::op_linear(tensor_t self, tensor_t w_, tensor_t b_
                        C, HIPBLAS_R_16F, m,
                        HIPBLAS_R_32F, HIPBLAS_GEMM_DEFAULT) );
 
-        dcu::kr_add_bias<device_fp16_t>((device_fp16_t *)C, (device_fp16_t *)b_->dcu_fp16()->data(), (device_fp16_t *)C, n, m, stream);
+        if ( b_ != nullptr) {
+            dcu::kr_add_bias<device_fp16_t>((device_fp16_t *)C, (device_fp16_t *)b_->dcu_fp16()->data(), (device_fp16_t *)C, n, m, stream);
+        }
 
         return OP_OK;
     }
