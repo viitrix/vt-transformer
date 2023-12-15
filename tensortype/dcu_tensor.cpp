@@ -884,7 +884,7 @@ ComputingReturn  DCUTensor<DT>::op_qk(tensor_t self, tensor_t k_, tensor_t qk_) 
         return OP_OK;
     }
     if ( DT == DataType::FP16 ) {
-#if 1
+#if 0
         void *A_ = k_->dcu_fp16()->data();
         void *B_ = data();
         void *C_ = qk_->dcu_float()->data();
@@ -989,6 +989,7 @@ ComputingReturn  DCUTensor<DT>::op_attn(tensor_t self, tensor_t value_, tensor_t
         return OP_OK;
     }
     if ( value_->is_fp16() && self->is_fp16()  ) {
+#if 0
         void *A_ = value_->dcu_fp16()->data();
         void *B_ = data();
         void *C_ = out_->dcu_fp16()->data();
@@ -1000,6 +1001,21 @@ ComputingReturn  DCUTensor<DT>::op_attn(tensor_t self, tensor_t value_, tensor_t
                         B_, HIPBLAS_R_16F, k, TT,
                         &beta, C_, HIPBLAS_R_16F, m, HnT,
                         batch*heads, HIPBLAS_R_32F, HIPBLAS_GEMM_DEFAULT) );
+#else
+        for (int i = 0; i < batch*heads; i++) {
+            void *A_ = (device_fp16_t*)value_->dcu_fp16()->data() + i * HfT;
+            void *B_ = (device_fp16_t*)data() + i * TT;
+            void *C_ = (device_fp16_t*)out_->dcu_fp16()->data() + i * HnT;
+            HIPBLAS_CHECK( hipblasGemmEx(
+                            ComputingContext::hipblas_handle,
+                            HIPBLAS_OP_N, HIPBLAS_OP_N,
+                            m, n, k,
+                            &alpha, A_, HIPBLAS_R_16F, m,
+                            B_, HIPBLAS_R_16F, k,
+                            &beta, C_, HIPBLAS_R_16F, m,
+                            HIPBLAS_R_32F, HIPBLAS_GEMM_DEFAULT) );
+        }
+#endif
         return OP_OK;
     }
     return OP_TODO_ERROR;

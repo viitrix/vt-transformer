@@ -1,9 +1,9 @@
 .PHONY: all
 
-FLAGS = -Wall -O3 -D_USING_DEVICE_CUDA_ -DUSING_DEVICE_DNNL_ 
+FLAGS = -Wall -O3 -DUSING_DEVICE_DNNL_ 
 INC = -I../../install/include 
 
-LINK = -L../../install/lib -ltokenizer_combo -ltokenizers_c
+LINK = -L../../install/lib -L${SENTENCEPIECE_DIR}/lib -ltokenizer_combo -ltokenizers_c
 
 all: tokenizer 
 

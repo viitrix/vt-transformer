@@ -25,7 +25,7 @@ __inline__ __device__ void warpSum2(T *v0, T* v1) {
 template <typename T>
 __inline__ __device__ void blockReduceSum2(T *v0, T* v1) {
   const int num = 2;
-  static __shared__ float shared[num][32];
+  static __shared__ float shared[num][64];
   int lane_id = threadIdx.x & 0x3f;
   int wid = threadIdx.x >> 6;
 

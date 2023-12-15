@@ -6,7 +6,7 @@
 #include <tokenizer_combo.hpp>
 
 int main(int argc, const char* argv[]) {
-    auto tokenizer = vt::build_tokenizer_qwen("../../models/qwen/qwen.tiktoken");
+    auto tokenizer = vt::build_tokenizer_qwen("../../models/qwen-7b/qwen.tiktoken");
 
     std::string text = argv[1];
     auto tokens = tokenizer->encode(text);
