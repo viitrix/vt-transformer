@@ -4,24 +4,22 @@
 
 namespace vt { namespace dcu {
 
-const unsigned int WARP_REDUCE_MASK = 0xffffffff;
-
 template<typename T>
 __inline__ __device__ void warpSum2(T *v0, T* v1) {
   T val0_tmp, val1_tmp;
-#define WarpReduceSumOneStep(a)                    \
-  val0_tmp = __shfl_xor(WARP_REDUCE_MASK, *v0, a); \
-  val1_tmp = __shfl_xor(WARP_REDUCE_MASK, *v1, a); \
-  *v0 += val0_tmp;                                 \
+#define WarpReduceOneStep(a)        \
+  val0_tmp = __shfl_xor(*v0, a);    \
+  val1_tmp = __shfl_xor(*v1, a);    \
+  *v0 += val0_tmp;                  \
   *v1 += val1_tmp
 
-  WarpReduceSumOneStep(32);
-  WarpReduceSumOneStep(16);
-  WarpReduceSumOneStep(8);
-  WarpReduceSumOneStep(4);
-  WarpReduceSumOneStep(2);
-  WarpReduceSumOneStep(1);
-#undef WarpReduceSumOneStep
+  WarpReduceOneStep(32);
+  WarpReduceOneStep(16);
+  WarpReduceOneStep(8);
+  WarpReduceOneStep(4);
+  WarpReduceOneStep(2);
+  WarpReduceOneStep(1);
+#undef WarpReduceOneStep
 }
 
 template <typename T>
@@ -53,17 +51,17 @@ __inline__ __device__ void blockReduceSum2(T *v0, T* v1) {
 template<typename T>
 __inline__ __device__ void warpMax(T *v0) {
   T val0_tmp;
-#define WarpReduceSumOneStep(a)                    \
-  val0_tmp = __shfl_xor(WARP_REDUCE_MASK, *v0, a); \
+#define WarpReduceOneStep(a)     \
+  val0_tmp = __shfl_xor(*v0, a); \
   *v0 = max(val0_tmp, *v0);
 
-  WarpReduceSumOneStep(32);
-  WarpReduceSumOneStep(16);
-  WarpReduceSumOneStep(8);
-  WarpReduceSumOneStep(4);
-  WarpReduceSumOneStep(2);
-  WarpReduceSumOneStep(1);
-#undef WarpReduceSumOneStep
+  WarpReduceOneStep(32);
+  WarpReduceOneStep(16);
+  WarpReduceOneStep(8);
+  WarpReduceOneStep(4);
+  WarpReduceOneStep(2);
+  WarpReduceOneStep(1);
+#undef WarpReduceOneStep
 }
 
 template <typename T>
@@ -91,17 +89,17 @@ __inline__ __device__ void blockReduceMax(T *v0) {
 template<typename T>
 __inline__ __device__ void warpSum(T *v0) {
   T val0_tmp;
-#define WarpReduceSumOneStep(a)                    \
-  val0_tmp = __shfl_xor(WARP_REDUCE_MASK, *v0, a); \
+#define WarpReduceOneStep(a)     \
+  val0_tmp = __shfl_xor(*v0, a); \
   *v0 = *v0 + val0_tmp;
 
-  WarpReduceSumOneStep(32);
-  WarpReduceSumOneStep(16);
-  WarpReduceSumOneStep(8);
-  WarpReduceSumOneStep(4);
-  WarpReduceSumOneStep(2);
-  WarpReduceSumOneStep(1);
-#undef WarpReduceSumOneStep
+  WarpReduceOneStep(32);
+  WarpReduceOneStep(16);
+  WarpReduceOneStep(8);
+  WarpReduceOneStep(4);
+  WarpReduceOneStep(2);
+  WarpReduceOneStep(1);
+#undef WarpReduceOneStep
 }
 
 template <typename T>
