@@ -278,6 +278,16 @@ std::variant<ComputingReturn, int> TensorType::op_all_logits(tensor_t self, tens
     return ret;
 }
 
+std::variant<ComputingReturn, tensor_t> TensorType::op_sampling_top1(tensor_t self) {
+    vt_assert(self.get() == this, "can't be here!");
+    auto ret = impl()->op_sampling_top1(self);
+    if ( ret.index() == 0) {
+        ComputingReturn r = std::get<0>(ret);
+        op_check(r, "op_sampling_top1");
+    }
+    return ret;
+}
+
 std::variant<ComputingReturn, tensor_t> TensorType::op_sampling_top3(tensor_t self, float temp) {
     vt_assert(self.get() == this, "can't be here!");
     auto ret = impl()->op_sampling_top3(self, temp);

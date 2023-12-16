@@ -144,6 +144,9 @@ struct TransformerComputing {
     virtual std::variant<ComputingReturn, int> op_all_logits(tensor_t self, tensor_t mask, tensor_t lm_head, tensor_t output ) {
         return OP_TODO_ERROR;
     }
+    virtual std::variant<ComputingReturn, tensor_t> op_sampling_top1(tensor_t self) {
+        return OP_TODO_ERROR;
+    }
     virtual std::variant<ComputingReturn, tensor_t> op_sampling_top3(tensor_t self, float temp) {
         return OP_TODO_ERROR;
     }

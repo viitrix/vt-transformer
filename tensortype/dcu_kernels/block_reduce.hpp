@@ -25,7 +25,7 @@ __inline__ __device__ void warpSum2(T *v0, T* v1) {
 template <typename T>
 __inline__ __device__ void blockReduceSum2(T *v0, T* v1) {
   const int num = 2;
-  static __shared__ float shared[num][64];
+  static __shared__ float shared[num][32];
   int lane_id = threadIdx.x & 0x3f;
   int wid = threadIdx.x >> 6;
 
@@ -37,7 +37,7 @@ __inline__ __device__ void blockReduceSum2(T *v0, T* v1) {
   }
   __syncthreads();
 
-  if (threadIdx.x < (blockDim.x >> 6)) {
+  if (lane_id < (blockDim.x >> 6)) {
     *v0 = shared[0][lane_id];
     *v1 = shared[1][lane_id];
   } else {
@@ -77,7 +77,7 @@ __inline__ __device__ void blockReduceMax(T *v0) {
   }
   __syncthreads();
 
-  if (threadIdx.x < (blockDim.x >> 6)) {
+  if (lane_id < (blockDim.x >> 6)) {
     *v0 = shared[lane_id];
   } else {
     *v0 = (T)-FLT_MAX;
@@ -115,7 +115,7 @@ __inline__ __device__ void blockReduceSum(T *v0) {
   }
   __syncthreads();
 
-  if (threadIdx.x < (blockDim.x >> 6)) {
+  if (lane_id < (blockDim.x >> 6)) {
     *v0 = shared[lane_id];
   } else {
     *v0 = 0.0;

@@ -442,6 +442,15 @@ namespace op {
         NWORD_CREATOR_DEFINE_LR(AllLogits)
     };
 
+    struct SamplingTop1 : public NativeWord {
+        void run(Stack& stack) override {
+            tensor_t logits = stack.pop_tensor();
+            auto ret = logits->op_sampling_top1(logits);
+            stack.push_tensor( std::get<1>(ret) );
+        }
+        NWORD_CREATOR_DEFINE_LR(SamplingTop1);
+    };
+
     struct SamplingTop3 : public NativeWord {
         void run(Stack& stack) override {
             float temp = stack.pop_number();
@@ -723,6 +732,7 @@ void load_nn_operators(Enviroment& env) {
     env.insert_native_word("op.gelu", op::Gelu::creator);
     env.insert_native_word("op.silu_product", op::SiluProduct::creator);
     env.insert_native_word("op.all_logits", op::AllLogits::creator);
+    env.insert_native_word("op.sampling_top1", op::SamplingTop1::creator);
     env.insert_native_word("op.sampling_top3", op::SamplingTop3::creator);
     env.insert_native_word("op.loss_backward", op::LossBackward::creator);
     env.insert_native_word("op.layernorm_backward", op::LayernormBackward::creator);
