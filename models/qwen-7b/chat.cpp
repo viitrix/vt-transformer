@@ -28,7 +28,7 @@ struct ChatApplication {
         vt_assert(dummy == 1, "wait_all_ready error");
     }
 
-    const size_t max_input = 1408;
+    const size_t max_input = 512;
     const size_t max_output = 512;
 
     void run() {
