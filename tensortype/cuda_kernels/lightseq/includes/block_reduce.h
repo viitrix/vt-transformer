@@ -6,10 +6,11 @@
 #include <cuda.h>
 #include <cuda_fp16.h>
 #include <cuda_runtime.h>
+#include <float.h>
 #include "common.h"
 namespace lightseq {
 namespace cuda {
-enum class ReduceType { kMax = 0, kSum };
+enum class ReduceType { kMax = 0, kSum, kTop };
 const float REDUCE_FLOAT_INF_NEG = -100000000.f;
 const float REDUCE_FLOAT_INF_POS = 100000000.f;
 const unsigned int WARP_REDUCE_SIZE = 32;
@@ -100,6 +101,23 @@ __inline__ __device__ void warpReduce<ReduceType::kSum, 4>(float *pval) {
   WarpReduceSumOneStep(2, 32);
   WarpReduceSumOneStep(1, 32);
 #undef WarpReduceSumOneStep
+}
+
+template <>
+__inline__ __device__ void warpReduce<ReduceType::kTop, 1>(float *pval) {
+  float val0_tmp, idx_tmp;
+#define WarpReduceTopOneStep(a, b)                                 \
+  val0_tmp = __shfl_xor_sync(WARP_REDUCE_MASK, *(pval + 0), a, b); \
+  idx_tmp =  __shfl_xor_sync(WARP_REDUCE_MASK, *(pval + 1), a, b); \
+  *(pval + 0) = max(val0_tmp, pval[0]);                            \
+  *(pval + 1) = (val0_tmp == pval[0]) ? idx_tmp: pval[1];
+
+  WarpReduceTopOneStep(16, 32);
+  WarpReduceTopOneStep(8, 32);
+  WarpReduceTopOneStep(4, 32);
+  WarpReduceTopOneStep(2, 32);
+  WarpReduceTopOneStep(1, 32);
+#undef WarpReduceTopOneStep
 }
 
 template <>
@@ -287,5 +305,30 @@ __inline__ __device__ void blockReduce<ReduceType::kMax, 4>(float *pval) {
   }
   warpReduce<ReduceType::kMax, num>(pval);
 }
+
+template <>
+__inline__ __device__ void blockReduce<ReduceType::kTop, 1>(float *pval) {
+  static __shared__ float shared_val[2][32];
+  int lane_id = threadIdx.x & 0x1f;
+  int wid = threadIdx.x >> 5;
+
+  warpReduce<ReduceType::kTop, 1>(pval);
+
+  if (lane_id == 0) {
+    shared_val[0][wid] = pval[0];
+    shared_val[1][wid] = pval[1];
+  }
+  __syncthreads();
+
+  if (lane_id < (blockDim.x >> 5)) {
+    pval[0] = shared_val[0][lane_id];
+    pval[1] = shared_val[1][lane_id];
+  } else {
+    pval[0] = -FLT_MAX;
+    pval[1] = -1.0;
+  }
+  warpReduce<ReduceType::kTop, 1>(pval);
+}
+
 }  // namespace cuda
 }  // namespace lightseq

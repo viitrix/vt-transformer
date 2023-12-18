@@ -1433,6 +1433,28 @@ std::variant<ComputingReturn,int> CUDATensor<DT>::op_all_logits(tensor_t self, t
 }
 
 template<DataType DT>
+std::variant<ComputingReturn, tensor_t>  CUDATensor<DT>::op_sampling_top1(tensor_t self) {
+    if ( DT != DataType::Float && DT != DataType::FP16 ) {
+        return OP_INPUT_ERROR;
+    }
+
+    int batch = self->shape()[0];
+    int vocab_size = self->shape()[1];
+
+    std::vector<size_t> ret_shape{ (size_t)batch};
+    tensor_t ret = vt::create_host_int( ret_shape );
+
+    auto stream = ComputingContext::cuda_stream;
+    int* out = (int *)ComputingContext::cuda_workspace;
+    device_fp16_t* logits = (device_fp16_t *) self->device_data();
+
+    cuda::easy_top1<device_fp16_t>(logits, out, batch, vocab_size, stream);
+
+    CUDA_CHECK(cudaMemcpyAsync( ret->device_data(), out, batch * sizeof(int), cudaMemcpyDeviceToHost, stream));
+    return ret;
+}
+
+template<DataType DT>
 std::variant<ComputingReturn, tensor_t>  CUDATensor<DT>::op_sampling_top3(tensor_t self, float temp) {
     if ( DT != DataType::Float && DT != DataType::FP16 ) {
         return OP_INPUT_ERROR;

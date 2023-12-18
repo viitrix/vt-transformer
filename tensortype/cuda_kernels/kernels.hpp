@@ -33,6 +33,12 @@ int rms_norm(const T *feature, const T *w,
              cudaStream_t stream);
 
 template <typename T>
+int easy_top1(const T *logits, int *out,
+              const int batch,
+              const int vocab_size,
+              cudaStream_t stream);
+
+template <typename T>
 int easy_top3(const T *logits, int *out,
               const int batch,
               const int vocab_size,
