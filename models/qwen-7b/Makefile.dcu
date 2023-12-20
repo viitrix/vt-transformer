@@ -14,7 +14,7 @@ chat: chat.cpp
 	g++ $(FLAGS) -o $@ $< $(INC) $(LINK)
 
 run: chat
-	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${DTK_DIR}/lib:${VT_SOURCE}/install/lib:${SENTENCEPIECE_DIR}/lib64 ./chat ./inference_fp16.dag
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${DTK_DIR}/lib:${VT_SOURCE}/install/lib:${SENTENCEPIECE_DIR}/lib64 ./chat $(target)
 
 clean:
 	rm -f chat

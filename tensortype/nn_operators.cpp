@@ -116,6 +116,8 @@ namespace op {
                     t = vt::create_dcu_fp16(shape);
                 } else if ( dtype == vt::Int ) {
                     t = vt::create_dcu_int(shape);
+                } else if ( dtype == vt::Q4 ) {
+                    t = vt::create_dcu_q4(shape);
                 } else {
                     vt_panic("Can' be here!");
                 }
