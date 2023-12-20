@@ -19,8 +19,7 @@ qwen.o: qwen.cpp
 	g++ $(FLAGS) -c -o $@ $(INC) $<
 
 rust/target/release/libtokenizers_c.so:
-	cd rust
-	cargo build --release
+	cd rust;cargo build --release
 
 install: libtokenizer_combo.a rust/target/release/libtokenizers_c.so
 	mkdir -p ../install/lib
