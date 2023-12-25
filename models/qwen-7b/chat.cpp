@@ -84,7 +84,9 @@ struct ChatApplication {
                 mask.push_back(2);
 
                 std::string nstr = tokenizer_->decode(next);
-                std::cout << nstr << std::flush;
+                //std::cout << nstr << std::flush;
+                printf("%s", nstr.c_str());
+                fflush(stdout);
             }
             auto stop = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
