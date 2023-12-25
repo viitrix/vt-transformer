@@ -18,8 +18,8 @@ enum DataType {
     BF16 = 1,
     FP16 = 2,
     Int = 3,
-    Q8 = 4,
-    Q4 = 5,
+    Q8 = 4,     // grouped per channel
+    Q4 = 5,     // grouped 128 items with scale & min
 };
 
 inline DataType DataType_from(const char* dtype) {
