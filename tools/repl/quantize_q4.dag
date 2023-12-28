@@ -42,7 +42,7 @@
 
     {
         ("HIDDEN_SIZE" @ 3 * "HIDDEN_SIZE" @ 2)  
-        $LAYER @  "attn.c_attn.weight.bin" |
+        $LAYER @  "attn.c_attn.weight.fp16" |
         $LAYER @  "attn.c_attn.weight.q4"  |
         quantize_fp16_q4 
     }
@@ -50,28 +50,28 @@
     {
 
         ("HIDDEN_SIZE" @  "HIDDEN_SIZE" @ 2)
-        $LAYER @  "attn.c_proj.weight.bin" | 
+        $LAYER @  "attn.c_proj.weight.fp16" | 
         $LAYER @  "attn.c_proj.weight.q4"  | 
         quantize_fp16_q4 
     }
     
     {
         ("INTERMEDIATE_SIZE" @  "HIDDEN_SIZE" @ 2)
-        $LAYER @ "mlp.w1.weight.bin" |
+        $LAYER @ "mlp.w1.weight.fp16" |
         $LAYER @ "mlp.w1.weight.q4"  |
         quantize_fp16_q4 
     }
 
     {
         ("INTERMEDIATE_SIZE" @  "HIDDEN_SIZE" @ 2)
-        $LAYER @ "mlp.w2.weight.bin" |
+        $LAYER @ "mlp.w2.weight.fp16" |
         $LAYER @ "mlp.w2.weight.q4"  |
         quantize_fp16_q4 
     }
     
     {
         ("HIDDEN_SIZE" @  "INTERMEDIATE_SIZE" @ 2)
-        $LAYER @ "mlp.c_proj.weight.bin" |
+        $LAYER @ "mlp.c_proj.weight.fp16" |
         $LAYER @ "mlp.c_proj.weight.q4"  |
         quantize_fp16_q4 
     }

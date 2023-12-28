@@ -135,6 +135,8 @@ namespace op {
                     t = vt::create_host_q8(shape);
                 } else if ( dtype == vt::Q4 ) {
                     t = vt::create_host_q4(shape);
+                } else if ( dtype == vt::PQ ) {
+                    t = vt::create_host_pq(shape);
                 } else {
                     vt_panic("Can' be here!");
                 }

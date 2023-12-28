@@ -440,7 +440,10 @@ TensorType::~TensorType() {
         host_q4_t* tensor = std::get<HOST_Q4>(impl_);
         delete tensor;
     }
-
+    if ( impl_index() == ImplType::HOST_PQ ) {
+        host_pq_t* tensor = std::get<HOST_PQ>(impl_);
+        delete tensor;
+    }
 #ifdef _USING_DEVICE_CUDA_
     if ( impl_index() == ImplType::CUDA_FLOAT ) {
         cuda_float_t* tensor = std::get<CUDA_FLOAT>(impl_);
@@ -460,6 +463,10 @@ TensorType::~TensorType() {
     }
     if ( impl_index() == ImplType::CUDA_Q4 ) {
         cuda_q4_t* tensor = std::get<CUDA_Q4>(impl_);
+        delete tensor;
+    }
+    if ( impl_index() == ImplType::CUDA_Q4 ) {
+        cuda_pq_t* tensor = std::get<CUDA_PQ>(impl_);
         delete tensor;
     }
 #endif
@@ -525,6 +532,10 @@ TransformerComputing* TensorType::impl() {
         host_q4_t* tensor = std::get<HOST_Q4>(impl_);
         return tensor;
     }
+    if ( impl_index() == ImplType::HOST_PQ ) {
+        host_pq_t* tensor = std::get<HOST_PQ>(impl_);
+        return tensor;
+    }
 
 #ifdef _USING_DEVICE_CUDA_
     if ( impl_index() == ImplType::CUDA_FLOAT ) {
@@ -545,6 +556,10 @@ TransformerComputing* TensorType::impl() {
     }
     if ( impl_index() == ImplType::CUDA_Q4 ) {
         cuda_q4_t* tensor = std::get<CUDA_Q4>(impl_);
+        return tensor;
+    }
+    if ( impl_index() == ImplType::CUDA_PQ ) {
+        cuda_pq_t* tensor = std::get<CUDA_PQ>(impl_);
         return tensor;
     }
 #endif
@@ -617,6 +632,10 @@ void* TensorType::device_data(size_t index) {
         host_q4_t* tensor = std::get<HOST_Q4>(impl_);
         return tensor->data();
     }
+    if ( index == ImplType::HOST_PQ ) {
+        host_pq_t* tensor = std::get<HOST_PQ>(impl_);
+        return tensor->data();
+    }
 
 #ifdef _USING_DEVICE_CUDA_
     if ( index == ImplType::CUDA_FLOAT ) {
@@ -637,6 +656,10 @@ void* TensorType::device_data(size_t index) {
     }
     if ( index == ImplType::CUDA_Q4 ) {
         cuda_q4_t* tensor = std::get<CUDA_Q4>(impl_);
+        return tensor->data();
+    }
+    if ( index == ImplType::CUDA_PQ ) {
+        cuda_pq_t* tensor = std::get<CUDA_PQ>(impl_);
         return tensor->data();
     }
 #endif

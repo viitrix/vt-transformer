@@ -237,4 +237,49 @@ int dequantize_q8<__half>(const void *input, __half *out, int feature_num, int f
     return 0;
 }
 
+// ===================================
+template <typename T, int M>
+__global__ void dequantize_pq_kernel(const void *input, T *out, int items, int S) {
+    __shared__ __half tab[M * 256];
+
+    const int DIM = blockDim.x;
+    const int INDEX = threadIdx.x;
+    
+    const float *tab_ = (float *)input;
+    for (int i = INDEX; i < M * 256; i += DIM ) {
+        tab[i] = (__half)tab_[i]; 
+    }
+    __syncthreads();
+
+    int slices = items / M;
+    const uint8_t *v = (const uint8_t *)input + M * 256 * sizeof(float);
+    for (int i = 0; i < slices; i += DIM) {
+        int ii = v[i];
+        for(int j = 0; j < M; j++) {
+            out[i*M + j] = tab[ii * 256 + j];
+        }
+    }
+}
+
+template <typename T>
+int dequantize_pq(const void *input, T *out, int items, int M, int S, cudaStream_t stream);
+
+template <>
+int dequantize_pq<__half>(const void *input, __half *out, int items, int M, int S, cudaStream_t stream) {
+    dim3 block_size(512);
+    dim3 num_of_blocks(1);
+    
+    if ( M == 4 ) {
+        dequantize_pq_kernel<__half, 4> <<< num_of_blocks, block_size, 0, stream>>> (input, out, items, S); 
+    }
+ 
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        fprintf(stderr, "Failed to launch quantize_float_q8 kernel (error code %s)!\n", cudaGetErrorString(err));
+        exit(-1);
+    }
+    return 0;   
+} 
+
+
 }}

@@ -10,7 +10,7 @@ namespace vt {
 
 template <DataType _DTYPE_>
 struct HostTensor : public TransformerComputing {
-    HostTensor(const ShapeType& shape) : owner_(true) {
+    HostTensor(const ShapeType& shape) : owner_(true), PQ_M_(0), PQ_S_(0) {
         if ( _DTYPE_ == DataType::Float ) {
             size_ = shape.numel() * sizeof(float);
         } else if ( _DTYPE_ == DataType::Int ) {
@@ -36,7 +36,18 @@ struct HostTensor : public TransformerComputing {
 
         mem_ = MemoryContext::alloc(size_);
     }
-    HostTensor(const ShapeType& shape,  void *mem) : owner_(false), mem_(mem) {
+    HostTensor(const ShapeType& shape, const int M, const int S) : owner_(true) , PQ_M_(M), PQ_S_(S) {
+        if ( _DTYPE_ != DataType::PQ ) {
+            vt_panic("Can't be here!");
+        }
+        size_t items = shape.numel();
+        vt_assert( items % (M * S) == 0, "PQ tensor must aligened with config");
+
+        size_ = sizeof(float) * 256 * S * M + items / M;
+        mem_ = MemoryContext::alloc(size_);
+    }
+
+    HostTensor(const ShapeType& shape,  void *mem) : owner_(false), PQ_M_(0), PQ_S_(0), mem_(mem) {
         if ( _DTYPE_ == DataType::Q4 ) {
             size_t last_dim = shape.vec().back();
             vt_assert( last_dim % Q4_BLOCK_SIZE == 0, "Q4 tensor must has 32 aligened dim");
@@ -77,14 +88,17 @@ public:
 
 protected:
     const bool owner_;
+    const int PQ_M_;
+    const int PQ_S_;
+
     void* mem_;
     size_t size_;
 
     friend struct HostTensor<DataType::Float>;
-    friend struct HostTensor<DataType::BF16>;
     friend struct HostTensor<DataType::Int>;
     friend struct HostTensor<DataType::Q8>;
     friend struct HostTensor<DataType::Q4>;
+    friend struct HostTensor<DataType::PQ>;
 };
 
 

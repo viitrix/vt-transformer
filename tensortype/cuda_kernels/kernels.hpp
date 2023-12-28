@@ -25,6 +25,9 @@ template <typename T>
 int dequantize_q4(const void *input, T *out, int items, cudaStream_t stream);
 
 template <typename T>
+int dequantize_pq(const void *input, T *out, int items, int M, int S, cudaStream_t stream);
+
+template <typename T>
 int rms_norm(const T *feature, const T *w,
              T *out, T *norm2,
              const int batch,

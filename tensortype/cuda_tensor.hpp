@@ -7,12 +7,7 @@ namespace vt {
 
 template <DataType _DTYPE_>
 struct CUDATensor : public TransformerComputing {
-    virtual ~CUDATensor() {
-        if (mem_ != nullptr && owner_) {
-            CUDA_CHECK(cudaFree(mem_));
-        }
-    }
-
+    virtual ~CUDATensor();
     CUDATensor(const ShapeType& shape);
     CUDATensor(ShapeType& shape, void *mem) : mem_(mem), owner_(false) {
         if ( _DTYPE_ == DataType::Q4 ) {
@@ -23,7 +18,11 @@ struct CUDATensor : public TransformerComputing {
             size_t last_dim = shape.vec().back();
             vt_assert( last_dim > 128, "Q8 tensor last dim must > 128k");
         }
+        if ( _DTYPE_ == PQ ) {
+            vt_panic("Can't CUDA PQ type from view");
+        }
     }
+    CUDATensor(const ShapeType& shape, int M, int S);
 
     void* data() {
         return mem_;
@@ -113,6 +112,8 @@ struct CUDATensor : public TransformerComputing {
 private:
     void*                       mem_;
     const bool                  owner_;
+    int PQ_M_;
+    int PQ_S_;
 
     friend struct CUDATensor<DataType::Float>;
     friend struct CUDATensor<DataType::Int>;

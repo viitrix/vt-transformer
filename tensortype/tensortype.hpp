@@ -20,6 +20,7 @@ enum DataType {
     Int = 3,
     Q8 = 4,     // grouped per channel
     Q4 = 5,     // grouped 128 items with scale & min
+    PQ = 6,     // Focal ProductQuantizer config from impl
 };
 
 inline DataType DataType_from(const char* dtype) {
@@ -41,6 +42,9 @@ inline DataType DataType_from(const char* dtype) {
     if ( strcmp(dtype, "q4") == 0) {
         return DataType::Q4;
     }
+    if ( strcmp(dtype, "pq") == 0) {
+        return DataType::PQ;
+    }
     vt_panic("Can't be here");
     return DataType::Float;
 }
@@ -59,6 +63,8 @@ inline const char* DataType_name(DataType type_) {
             return "q8";
         case Q4:
             return "q4";
+        case PQ:
+            return "pq";
         default:
             break;
     }
@@ -149,6 +155,7 @@ using host_fp16_t = HostTensor<DataType::FP16>;
 using host_int_t = HostTensor<DataType::Int>;
 using host_q8_t = HostTensor<DataType::Q8>;
 using host_q4_t = HostTensor<DataType::Q4>;
+using host_pq_t = HostTensor<DataType::PQ>;
 
 #ifdef _USING_DEVICE_CUDA_
 template <DataType _DTYPE_> struct CUDATensor;
@@ -157,6 +164,7 @@ using cuda_fp16_t = CUDATensor<DataType::FP16>;
 using cuda_int_t = CUDATensor<DataType::Int>;
 using cuda_q8_t = CUDATensor<DataType::Q8>;
 using cuda_q4_t = CUDATensor<DataType::Q4>;
+using cuda_pq_t = CUDATensor<DataType::PQ>;
 #endif
 
 #ifdef _USING_DEVICE_DCU_
@@ -185,6 +193,7 @@ public:
     TensorType(host_int_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Int), impl_(tensor) {};
     TensorType(host_q8_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Q8), impl_(tensor) {};
     TensorType(host_q4_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Q4), impl_(tensor) {};
+    TensorType(host_pq_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::PQ), impl_(tensor) {};
 
 #ifdef _USING_DEVICE_CUDA_
     TensorType(cuda_float_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Float), impl_(tensor) {};
@@ -192,6 +201,7 @@ public:
     TensorType(cuda_int_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Int), impl_(tensor) {};
     TensorType(cuda_q8_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Q8), impl_(tensor) {};
     TensorType(cuda_q4_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Q4), impl_(tensor) {};
+    TensorType(cuda_pq_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::PQ), impl_(tensor) {};
 #endif
 
 #ifdef _USING_DEVICE_DCU_
@@ -254,6 +264,12 @@ public:
         }
         return std::get<HOST_Q4>(impl_);
     }
+    host_pq_t* host_pq() {
+        if ( impl_.index() != HOST_PQ ) {
+            vt_panic("Cant get host_pq from a tensor");
+        }
+        return std::get<HOST_PQ>(impl_);
+    }
 
 #ifdef _USING_DEVICE_CUDA_
     cuda_float_t* cuda_float() {
@@ -285,6 +301,12 @@ public:
             vt_panic("Cant get cuda_q4 from a tensor");
         }
         return std::get<CUDA_Q4>(impl_);
+    }
+    cuda_pq_t* cuda_pq() {
+        if ( impl_.index() != CUDA_PQ ) {
+            vt_panic("Cant get cuda_pq from a tensor");
+        }
+        return std::get<CUDA_PQ>(impl_);
     }
 #endif
 
@@ -358,11 +380,11 @@ public:
     }
 
     const char* device_name() {
-        if ( (impl_index() <= ImplType::HOST_Q4) && (impl_index() >= ImplType::HOST_FLOAT) ) {
+        if ( (impl_index() <= ImplType::HOST_PQ) && (impl_index() >= ImplType::HOST_FLOAT) ) {
             return "host";
         }
 #ifdef _USING_DEVICE_CUDA_
-        if ( (impl_index() <= ImplType::CUDA_Q4) && (impl_index() >= ImplType::CUDA_FLOAT) ) {
+        if ( (impl_index() <= ImplType::CUDA_PQ) && (impl_index() >= ImplType::CUDA_FLOAT) ) {
             return "cuda";
         }
 #endif
@@ -384,7 +406,7 @@ public:
 
     bool is_host() const {
         auto ii = impl_index();
-        if ( (ii >= ImplType::HOST_FLOAT) && (ii <= ImplType::HOST_Q4) ) {
+        if ( (ii >= ImplType::HOST_FLOAT) && (ii <= ImplType::HOST_PQ) ) {
             return true;
         }
         return false;
@@ -393,7 +415,7 @@ public:
 #ifdef _USING_DEVICE_CUDA_
     bool is_cuda() const {
         auto ii = impl_index();
-        if ( (ii >= ImplType::CUDA_FLOAT) && (ii <= ImplType::CUDA_Q4) ) {
+        if ( (ii >= ImplType::CUDA_FLOAT) && (ii <= ImplType::CUDA_PQ) ) {
             return true;
         }
         return false;
@@ -482,7 +504,7 @@ public:
         return false;
     }
     bool is_quantized() {
-        return is_q4() || is_q8();
+        return is_q4() || is_q8() || is_pq();
     }
     bool is_q8() const {
         if (impl_index() == ImplType::HOST_Q8) {
@@ -511,6 +533,17 @@ public:
 #endif
 #ifdef _USING_DEVICE_DCU_
         if (impl_index() == ImplType::DCU_Q4) {
+            return true;
+        }
+#endif
+        return false;
+    }
+    bool is_pq() const {
+        if (impl_index() == ImplType::HOST_PQ) {
+            return true;
+        }
+#ifdef _USING_DEVICE_CUDA_
+        if (impl_index() == ImplType::CUDA_PQ) {
             return true;
         }
 #endif
@@ -606,6 +639,7 @@ private:
         CUDA_INT,
         CUDA_Q8,
         CUDA_Q4,
+        CUDA_PQ,
 #endif
 
 #ifdef _USING_DEVICE_DCU_
@@ -625,7 +659,8 @@ private:
         HOST_FP16,
         HOST_INT,
         HOST_Q8,
-        HOST_Q4
+        HOST_Q4,
+        HOST_PQ,
     };
     using TensorImpl =   std::variant<
 #ifdef _USING_DEVICE_CUDA_
@@ -634,6 +669,7 @@ private:
                                         cuda_int_t*,
                                         cuda_q8_t*,
                                         cuda_q4_t*,
+                                        cuda_pq_t*,
 #endif
 
 #ifdef _USING_DEVICE_DCU_
@@ -653,7 +689,8 @@ private:
                                         host_fp16_t*,
                                         host_int_t*,
                                         host_q8_t*,
-                                        host_q4_t* >;
+                                        host_q4_t*,
+                                        host_pq_t* >;
     TensorImpl impl_;
 };
 
@@ -662,6 +699,7 @@ tensor_t create_host_fp16(std::vector<size_t>& shape);
 tensor_t create_host_int(std::vector<size_t>& shape);
 tensor_t create_host_q8(std::vector<size_t>& shape);
 tensor_t create_host_q4(std::vector<size_t>& shape);
+tensor_t create_host_pq(std::vector<size_t>& shape, int M = 4, int S = 1);
 
 #if _USING_DEVICE_CUDA_
 tensor_t create_cuda_float(std::vector<size_t>& shape);
@@ -669,6 +707,7 @@ tensor_t create_cuda_fp16(std::vector<size_t>& shape);
 tensor_t create_cuda_int(std::vector<size_t>& shape);
 tensor_t create_cuda_q8(std::vector<size_t>& shape);
 tensor_t create_cuda_q4(std::vector<size_t>& shape);
+tensor_t create_cuda_pq(std::vector<size_t>& shape, int M = 4, int S = 1);
 #endif
 
 #if _USING_DEVICE_DCU_

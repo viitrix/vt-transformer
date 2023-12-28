@@ -194,7 +194,7 @@ std::vector<float> load_data_from_file(const std::string& fname) {
 
 const int D = 4;
 const int K = 256;
-const int T = 128;
+const int T = 256;
 std::vector<float> train_one(std::vector<float>& src_, std::vector<uint8_t>& codes) {
     float SCALE = 0;
     for(size_t i = 0; i < src_.size(); i += D) {

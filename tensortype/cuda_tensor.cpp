@@ -12,6 +12,12 @@ namespace vt {
 
 using device_fp16_t = __half;
 
+template<DataType _DTYPE_>
+CUDATensor<_DTYPE_>::~CUDATensor() {
+    if (mem_ != nullptr && owner_) {
+        CUDA_CHECK(cudaFree(mem_));
+    }
+}
 
 template<DataType _DTYPE_>
 CUDATensor<_DTYPE_>::CUDATensor(const ShapeType& shape) : owner_(true) {
@@ -36,6 +42,11 @@ CUDATensor<_DTYPE_>::CUDATensor(const ShapeType& shape) : owner_(true) {
     } else {
         vt_panic("Don't support DataType for CUDA");
     }
+}
+
+template<DataType _DTYPE_>
+CUDATensor<_DTYPE_>::CUDATensor(const ShapeType& shape, int M, int S) : owner_(true) {
+
 }
 
 template<DataType DT>
@@ -854,6 +865,16 @@ ComputingReturn CUDATensor<_DTYPE_>::op_dequantize(tensor_t self, tensor_t out) 
         void* src = data();
         device_fp16_t* dst =(device_fp16_t *) out->cuda_fp16()->data();
         cuda::dequantize_q8<device_fp16_t>(src, dst, feature_num, feature_size, stream);
+        //std::cout << "Kernel using " << ComputingContext::cuda_event(1);
+
+        return OP_OK;
+    }
+    if ( _DTYPE_ == DataType::PQ && out->is_fp16() ) {
+        void* src = data();
+        device_fp16_t* dst =(device_fp16_t *) out->cuda_fp16()->data();
+
+        //ComputingContext::cuda_event(0);
+        //cuda::dequantize_pq<device_fp16_t>(src, dst, self->items, PQ_M_, PQ_S_, stream);
         //std::cout << "Kernel using " << ComputingContext::cuda_event(1);
 
         return OP_OK;

@@ -27,7 +27,12 @@ std::variant<ComputingReturn, size_t> HostTensor<_DTYPE_>::op_sizeof(tensor_t se
         size_t blk_num = numel / Q4_BLOCK_SIZE;
         return blk_num * sizeof( q4_block_t );
     }
-
+    if ( _DTYPE_ == DataType::PQ ) {
+        size_t items = self->items();
+        size_t ret = sizeof(float) * 256 * PQ_S_ * PQ_M_ + items / PQ_M_;
+        vt_assert( ret == size_ , " double check PQ's memory size");
+        return ret;
+    }
     return OP_TODO_ERROR;
 }
 
@@ -190,24 +195,6 @@ ComputingReturn HostTensor<_DTYPE_>::io_dump(tensor_t self) {
 
         return OP_OK;
     }
-    if ( _DTYPE_ == DataType::Q4 ) {
-        size_t block_num = self->items() / Q4_BLOCK_SIZE;
-
-        q4_block_t* d = (q4_block_t *)data();
-        std::cout << "First " << first8 << " : ";
-        for (size_t i = 0; i < 8; i++) {
-            std::cout << dequantize_q4(d, i) << " ";
-        }
-        std::cout << std::endl;
-
-        std::cout << "Last " << first8 << " : ";
-        d += block_num - 1;
-        for (size_t i = 8; i < 16; i++) {
-            std::cout << dequantize_q4(d, i) << " ";
-        }
-        std::cout << std::endl;
-        return OP_OK;
-    }
     if ( _DTYPE_ == DataType::Q8 ) {
         size_t last_dim = self->shape().vec().back();
         size_t feature_num = self->items() / last_dim;
@@ -227,7 +214,6 @@ ComputingReturn HostTensor<_DTYPE_>::io_dump(tensor_t self) {
         std::cout << std::endl;
         return OP_OK;
     }
-
     if ( _DTYPE_ == DataType::Q4 ) {
         size_t block_num = self->items() / Q4_BLOCK_SIZE;
 
@@ -240,13 +226,35 @@ ComputingReturn HostTensor<_DTYPE_>::io_dump(tensor_t self) {
 
         std::cout << "Last " << first8 << " : ";
         d += block_num - 1;
-        for (size_t i = 8; i < 16; i++) {
+        for (size_t i = Q4_BLOCK_SIZE - 8; i < Q4_BLOCK_SIZE; i++) {
             std::cout << dequantize_q4(d, i) << " ";
         }
         std::cout << std::endl;
         return OP_OK;
     }
+    if ( _DTYPE_ == DataType::PQ ) {
+        vt_assert( PQ_S_ == 1, "Current version support PQ_S as one!");
+        const float*    pqtab = (float *)mem_;
+        const uint8_t*  pqidx = (uint8_t *)mem_ + PQ_M_ * 256 * sizeof(float);
 
+        std::cout << "First " << PQ_M_ << " : ";
+        unsigned int pqi = pqidx[0];
+        const float* v = &pqtab[pqi * PQ_M_];
+        for (int i = 0; i < PQ_M_; i++) {
+            std::cout << v[i] << " ";
+        }
+        std::cout << std::endl;
+
+        std::cout << "Last " << PQ_M_ << " : ";
+        int offset = self->items() / PQ_M_;
+        pqi = pqidx[offset - 1];
+        v = &pqtab[pqi * PQ_M_];
+        for (int i = 0; i < PQ_M_; i++) {
+            std::cout << v[i] << " ";
+        }
+        std::cout << std::endl;
+        return OP_OK;
+    }
     return OP_TODO_ERROR;
 }
 
@@ -283,6 +291,10 @@ ComputingReturn HostTensor<_DTYPE_>::io_load(tensor_t self, const char* fileName
         size_t ret = inf.read( (char *)data(), s).gcount();
         vt_assert(ret == s, "file size dont't match tensor");
     } else if (_DTYPE_ == DataType::Q4 ) {
+        size_t s = std::get<1>(self->op_sizeof(self));
+        size_t ret = inf.read( (char *)data(), s).gcount();
+        vt_assert(ret == s, "file size dont't match tensor");
+    } else if (_DTYPE_ == DataType::PQ ) {
         size_t s = std::get<1>(self->op_sizeof(self));
         size_t ret = inf.read( (char *)data(), s).gcount();
         vt_assert(ret == s, "file size dont't match tensor");
@@ -394,6 +406,12 @@ tensor_t create_host_q8(std::vector<size_t>& shape_) {
 tensor_t create_host_q4(std::vector<size_t>& shape_) {
     ShapeType shape(shape_);
     HostTensor<DataType::Q4>* tensor = new HostTensor<DataType::Q4>(shape);
+    return std::make_shared<TensorType>(tensor, shape);
+}
+
+tensor_t create_host_pq(std::vector<size_t>& shape_, const int M, const int S) {
+    ShapeType shape(shape_);
+    HostTensor<DataType::PQ>* tensor = new HostTensor<DataType::PQ>(shape, M, S);
     return std::make_shared<TensorType>(tensor, shape);
 }
 
