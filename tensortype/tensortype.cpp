@@ -465,7 +465,7 @@ TensorType::~TensorType() {
         cuda_q4_t* tensor = std::get<CUDA_Q4>(impl_);
         delete tensor;
     }
-    if ( impl_index() == ImplType::CUDA_Q4 ) {
+    if ( impl_index() == ImplType::CUDA_PQ ) {
         cuda_pq_t* tensor = std::get<CUDA_PQ>(impl_);
         delete tensor;
     }
@@ -585,7 +585,6 @@ TransformerComputing* TensorType::impl() {
         dcu_q4_t* tensor = std::get<DCU_Q4>(impl_);
         return tensor;
     }
-
 #endif
 
 #ifdef _USING_DEVICE_DNNL_

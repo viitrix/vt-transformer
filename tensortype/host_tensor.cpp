@@ -237,20 +237,24 @@ ComputingReturn HostTensor<_DTYPE_>::io_dump(tensor_t self) {
         const float*    pqtab = (float *)mem_;
         const uint8_t*  pqidx = (uint8_t *)mem_ + PQ_M_ * 256 * sizeof(float);
 
-        std::cout << "First " << PQ_M_ << " : ";
-        unsigned int pqi = pqidx[0];
-        const float* v = &pqtab[pqi * PQ_M_];
-        for (int i = 0; i < PQ_M_; i++) {
-            std::cout << v[i] << " ";
+        std::cout << "First " << PQ_M_ * 2 << " : ";
+        for (int n = 0; n < 2; n++) {
+            unsigned int pqi = pqidx[n];
+            const float* v = &pqtab[pqi * PQ_M_];
+            for (int i = 0; i < PQ_M_; i++) {
+                std::cout << v[i] << " ";
+            }
         }
         std::cout << std::endl;
 
-        std::cout << "Last " << PQ_M_ << " : ";
+        std::cout << "Last " << PQ_M_ * 2 << " : ";
         int offset = self->items() / PQ_M_;
-        pqi = pqidx[offset - 1];
-        v = &pqtab[pqi * PQ_M_];
-        for (int i = 0; i < PQ_M_; i++) {
-            std::cout << v[i] << " ";
+        for (int n = offset - 2; n < offset; n++) {
+            unsigned int pqi = pqidx[n];
+            const float* v = &pqtab[pqi * PQ_M_];
+            for (int i = 0; i < PQ_M_; i++) {
+                std::cout << v[i] << " ";
+            }
         }
         std::cout << std::endl;
         return OP_OK;
