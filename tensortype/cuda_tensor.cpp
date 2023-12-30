@@ -54,6 +54,9 @@ CUDATensor<_DTYPE_>::CUDATensor(const ShapeType& shape, int M, int S) : owner_(t
 
     size_t size = sizeof(float) * 256 * S * M + items / M;
     CUDA_CHECK(cudaMalloc(&mem_, size));
+
+    PQ_tab_ = (float *)mem_;
+    PQ_idx_ = (uint8_t *)mem_ + 256 * PQ_M_ * PQ_S_ * sizeof(float);
 }
 
 template<DataType DT>
@@ -212,9 +215,9 @@ ComputingReturn CUDATensor<DT>::io_dump(tensor_t self) {
     }
     if ( DT == DataType::PQ ) {
         float tab[PQ_M_ * 256];
-        CUDA_CHECK(cudaMemcpyAsync(tab, data(), sizeof(float) * PQ_M_ * 256, cudaMemcpyDeviceToHost, stream));
+        CUDA_CHECK(cudaMemcpyAsync(tab, PQ_tab_, sizeof(float) * PQ_M_ * 256 * PQ_S_, cudaMemcpyDeviceToHost, stream));
 
-        const uint8_t*  pqidx = (uint8_t *)data() + PQ_M_ * 256 * sizeof(float);
+        const uint8_t*  pqidx = PQ_idx_;
         uint8_t v[4];
         CUDA_CHECK(cudaMemcpyAsync(v, pqidx, 4, cudaMemcpyDeviceToHost, stream));
 
@@ -402,11 +405,15 @@ std::variant<ComputingReturn, size_t> CUDATensor<_DTYPE_>::op_sizeof(tensor_t se
         return blk_num * sizeof( q4_block_t );
     }
     if ( _DTYPE_ == DataType::PQ ) {
-        auto shape = self->shape();
-        size_t numel = shape.numel();
-        size_t size = sizeof(float) * 256 * PQ_S_ * PQ_M_ + numel / PQ_M_;
+        if ( owner_ == true ) {
+            auto shape = self->shape();
+            size_t numel = shape.numel();
+            size_t size = sizeof(float) * 256 * PQ_S_ * PQ_M_ + numel / PQ_M_;
 
-        return size;
+            return size;
+        } else {
+            return OP_INPUT_ERROR;
+        }
     }
 
     return OP_TODO_ERROR;
@@ -809,6 +816,12 @@ std::variant<ComputingReturn, tensor_t> CUDATensor<DT>::op_view(tensor_t self, s
         auto* newCudaTensor = new CUDATensor<DataType::Q4>(newShape, newData);
         return std::make_shared<TensorType>(newCudaTensor, newShape);
     }
+    if ( DT == DataType::PQ ) {
+        vt_assert(offset % (PQ_M_ * PQ_S_) == 0, "PQ's view must aligen with PQ_M * PQ_S");
+        uint8_t *newIdx = PQ_idx_ + offset / (PQ_M_ * PQ_S_);
+        auto* newCudaTensor = new CUDATensor<DataType::PQ>(newShape, PQ_tab_, newIdx, PQ_M_, PQ_S_);
+        return std::make_shared<TensorType>(newCudaTensor, newShape);
+    }
     return OP_TODO_ERROR;
 }
 
@@ -938,11 +951,10 @@ ComputingReturn CUDATensor<_DTYPE_>::op_dequantize(tensor_t self, tensor_t out) 
         return OP_OK;
     }
     if ( _DTYPE_ == DataType::PQ && out->is_fp16() ) {
-        void* src = data();
         device_fp16_t* dst =(device_fp16_t *) out->cuda_fp16()->data();
 
         //ComputingContext::cuda_event(0);
-        cuda::dequantize_pq<device_fp16_t>(src, dst, self->items(), PQ_M_, PQ_S_, stream);
+        cuda::dequantize_pq<device_fp16_t>(PQ_tab_, PQ_idx_, dst, self->items(), PQ_M_, PQ_S_, stream);
         //std::cout << "Kernel using " << ComputingContext::cuda_event(1);
 
         return OP_OK;
