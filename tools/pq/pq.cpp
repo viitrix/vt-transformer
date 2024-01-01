@@ -192,21 +192,16 @@ std::vector<float> load_data_from_file(const std::string& fname) {
     return y;
 }
 
+const int S = 2048;
 const int D = 4;
 const int K = 256;
-const int T = 256;
-std::vector<float> train_one(std::vector<float>& src_, std::vector<uint8_t>& codes) {
-    float SCALE = 0;
-    for(size_t i = 0; i < src_.size(); i += D) {
-        if ( fabs(src_[i]) > SCALE ) {
-            SCALE = fabs(src_[i]);
-        }
-    }
+const int T = 128;
+std::vector<local_fp16_t> train_one(std::vector<float>& src_, std::vector<uint8_t>& codes, int s) {
     std::vector<std::array<float, D>> src;
-    for(size_t i = 0; i < src_.size(); i += D) {
+    for(size_t i = s * D; i < src_.size(); i += D * S) {
         std::array<float, D> v;
         for(int j = 0; j < D; j++) {
-            v[j] = src_[i+j] / SCALE;
+            v[j] = src_[i+j];
         }
         src.push_back(std::move(v));
     }
@@ -214,11 +209,11 @@ std::vector<float> train_one(std::vector<float>& src_, std::vector<uint8_t>& cod
     std::cout << "DKMing..." << std::endl;
 	auto cluster_data = dkm::kmeans_lloyd_parallel(src, K, T);
 
-    std::vector<float> target;
+    std::vector<local_fp16_t> target;
     auto& centers = std::get<0>(cluster_data);
     for (size_t i = 0; i < centers.size(); i++) {
         for(int j = 0; j < D; j++) {
-            target.push_back( centers[i][j] * SCALE );
+            target.push_back( fp32_to_fp16(centers[i][j]));
         }
     }
 
@@ -229,14 +224,16 @@ std::vector<float> train_one(std::vector<float>& src_, std::vector<uint8_t>& cod
         codes[i] = (uint8_t)all_codes[i];
     }
 
+#if 1
     {
         double error = 0.0;
         float max = 0.0;
         std::vector<float> vars;
         for(size_t i = 0; i < src.size(); i++) {
             float* coded_value = centers[ all_codes[i] ].data();
+
             for (int j = 0; j < D; j++) {
-                float e = fabs( coded_value[j] * SCALE - src_[i * D + j] );
+                float e = fabs( coded_value[j] - src_[i * S * D + s*D + j] );
                 error += e;
                 if ( e > max ) {
                     max = e;
@@ -244,31 +241,49 @@ std::vector<float> train_one(std::vector<float>& src_, std::vector<uint8_t>& cod
                 vars.push_back(e);
             }
         }
-        std::cout << "ERROR = " << error / src_.size() << std::endl;
+        std::cout << "ERROR = " << error / (src.size() * D) << std::endl;
         std::cout << "MAX = " << max << std::endl;
 
+
+
+        /*
         std::ofstream wf("vars.data", std::ios::out | std::ios::binary);
         wf.write((char *)vars.data(), vars.size() * sizeof(float));
         wf.close();
+        */
     }
-
+#endif
 
     return target;
 }
 
 void do_file(const std::string &fname) {
-    auto data = std::move( load_data_from_file(fname + ".fp16"));
-    vt_assert( data.size() % D == 0, "Can't convert from un aligned tensor");
+    std::vector<local_fp16_t> all_centers;
+    std::vector<uint8_t> all_values;
 
-    std::vector<uint8_t> codes;
-    auto centers = train_one(data, codes);
+    auto data = std::move( load_data_from_file(fname + ".fp16"));
+    vt_assert( data.size() % (D * S) == 0, "Can't convert from un aligned tensor");
+
+    all_values.resize( data.size() / D );
+    for(int s = 0; s < S; s++) {
+        std::vector<uint8_t> codes;
+        auto centers = train_one(data, codes, s);
+        all_centers.insert(all_centers.end(), centers.begin(), centers.end());
+        //all_values.insert(all_values.end(), codes.begin(), codes.end());
+
+        int ii = 0;
+        for ( size_t i = s; i < data.size() / D; i += S) {
+            all_values[i] = codes[ii];
+            ii++;
+        }
+    }
 
     {
         std::string out_fname = fname + ".pq";
 
         std::ofstream wf(out_fname, std::ios::out | std::ios::binary);
-        wf.write((char *)centers.data(), centers.size() * sizeof(float));
-        wf.write((char *)codes.data(), codes.size());
+        wf.write((char *)all_centers.data(), all_centers.size() * sizeof(local_fp16_t));
+        wf.write((char *)all_values.data(), all_values.size());
         wf.close();
     }
 }

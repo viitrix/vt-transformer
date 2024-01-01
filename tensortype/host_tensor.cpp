@@ -29,7 +29,7 @@ std::variant<ComputingReturn, size_t> HostTensor<_DTYPE_>::op_sizeof(tensor_t se
     }
     if ( _DTYPE_ == DataType::PQ ) {
         size_t items = self->items();
-        size_t ret = sizeof(float) * 256 * PQ_S_ * PQ_M_ + items / PQ_M_;
+        size_t ret = sizeof(local_fp16_t) * 256 * PQ_S_ * PQ_M_ + items / PQ_M_;
         vt_assert( ret == size_ , " double check PQ's memory size");
         return ret;
     }
@@ -233,16 +233,17 @@ ComputingReturn HostTensor<_DTYPE_>::io_dump(tensor_t self) {
         return OP_OK;
     }
     if ( _DTYPE_ == DataType::PQ ) {
-        vt_assert( PQ_S_ == 1, "Current version support PQ_S as one!");
-        const float*    pqtab = (float *)mem_;
-        const uint8_t*  pqidx = (uint8_t *)mem_ + PQ_M_ * 256 * sizeof(float);
+        const local_fp16_t*    pqtab = (local_fp16_t *)mem_;
+        const uint8_t*  pqidx = (uint8_t *)mem_ + PQ_M_ * PQ_S_ * 256 * sizeof(local_fp16_t);
 
         std::cout << "First " << PQ_M_ * 2 << " : ";
         for (int n = 0; n < 2; n++) {
             unsigned int pqi = pqidx[n];
-            const float* v = &pqtab[pqi * PQ_M_];
+            unsigned int sn = n % PQ_S_;
+            const local_fp16_t* t = pqtab + sn * PQ_M_ * 256;
+            const local_fp16_t* v = &t[pqi * PQ_M_];
             for (int i = 0; i < PQ_M_; i++) {
-                std::cout << v[i] << " ";
+                std::cout << fp16_to_fp32(v[i]) << " ";
             }
         }
         std::cout << std::endl;
@@ -251,9 +252,10 @@ ComputingReturn HostTensor<_DTYPE_>::io_dump(tensor_t self) {
         int offset = self->items() / PQ_M_;
         for (int n = offset - 2; n < offset; n++) {
             unsigned int pqi = pqidx[n];
-            const float* v = &pqtab[pqi * PQ_M_];
+            unsigned int sn = n % PQ_S_;
+            const local_fp16_t* v = &pqtab[pqi * PQ_M_ + sn * 256 * PQ_M_];
             for (int i = 0; i < PQ_M_; i++) {
-                std::cout << v[i] << " ";
+                std::cout << fp16_to_fp32(v[i]) << " ";
             }
         }
         std::cout << std::endl;
@@ -300,7 +302,7 @@ ComputingReturn HostTensor<_DTYPE_>::io_load(tensor_t self, const char* fileName
         vt_assert(ret == s, "file size dont't match tensor");
     } else if (_DTYPE_ == DataType::PQ ) {
         size_t s = std::get<1>(self->op_sizeof(self));
-        size_t ret = inf.read( (char *)data(), s).gcount();
+        size_t ret = inf.read( (char *)mem_, s).gcount();
         vt_assert(ret == s, "file size dont't match tensor");
     } else {
         vt_panic("DataType don't support");

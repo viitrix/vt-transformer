@@ -39,6 +39,8 @@ CUDATensor<_DTYPE_>::CUDATensor(const ShapeType& shape) : owner_(true), PQ_M_(0)
         size_t numel = shape.numel();
         size_t blk_num = numel / Q4_BLOCK_SIZE;
         CUDA_CHECK(cudaMalloc(&mem_, blk_num * sizeof( q4_block_t )));
+    } else if ( _DTYPE_ == DataType::PQ ) {
+        vt_panic("Don't use this constructor for CUDA PQ");
     } else {
         vt_panic("Don't support DataType for CUDA");
     }
@@ -52,11 +54,11 @@ CUDATensor<_DTYPE_>::CUDATensor(const ShapeType& shape, int M, int S) : owner_(t
     size_t items = shape.numel();
     vt_assert( items % (M * S) == 0, "PQ tensor must aligened with config");
 
-    size_t size = sizeof(float) * 256 * S * M + items / M;
+    size_t size = sizeof(device_fp16_t) * 256 * S * M + items / M;
     CUDA_CHECK(cudaMalloc(&mem_, size));
 
-    PQ_tab_ = (float *)mem_;
-    PQ_idx_ = (uint8_t *)mem_ + 256 * PQ_M_ * PQ_S_ * sizeof(float);
+    PQ_tab_ = (device_fp16_t *)mem_;
+    PQ_idx_ = (uint8_t *)mem_ + 256 * PQ_M_ * PQ_S_ * sizeof(device_fp16_t);
 }
 
 template<DataType DT>
@@ -214,8 +216,8 @@ ComputingReturn CUDATensor<DT>::io_dump(tensor_t self) {
         return OP_OK;
     }
     if ( DT == DataType::PQ ) {
-        float tab[PQ_M_ * 256];
-        CUDA_CHECK(cudaMemcpyAsync(tab, PQ_tab_, sizeof(float) * PQ_M_ * 256 * PQ_S_, cudaMemcpyDeviceToHost, stream));
+        device_fp16_t tab[PQ_M_ * PQ_S_ * 256];
+        CUDA_CHECK(cudaMemcpyAsync(tab, PQ_tab_, sizeof(device_fp16_t) * PQ_M_ * PQ_S_ * 256, cudaMemcpyDeviceToHost, stream));
 
         const uint8_t*  pqidx = PQ_idx_;
         uint8_t v[4];
@@ -223,8 +225,9 @@ ComputingReturn CUDATensor<DT>::io_dump(tensor_t self) {
 
         std::cout << "First " << PQ_M_ * 2 << " : ";
         for (int n = 0; n < 2; n++) {
+            unsigned int sn = n % PQ_S_;
             for (int i = 0; i < PQ_M_; i++) {
-                std::cout << tab[ v[n] * PQ_M_ + i] << " ";
+                std::cout << tab[ v[n] * PQ_M_ + i + sn * PQ_M_ * 256] << " ";
             }
         }
         std::cout << std::endl;
@@ -233,8 +236,9 @@ ComputingReturn CUDATensor<DT>::io_dump(tensor_t self) {
         CUDA_CHECK(cudaMemcpyAsync(v, &pqidx[offset-4], 4, cudaMemcpyDeviceToHost, stream));
         std::cout << "Last " << PQ_M_ * 2 << " : ";
         for (int n = 2; n < 4; n++) {
+            int sn = (offset - 4 + n) % PQ_S_;
             for (int i = 0; i < PQ_M_; i++) {
-                std::cout << tab[ v[n] * PQ_M_ + i] << " ";
+                std::cout << tab[ v[n] * PQ_M_ + i + sn * PQ_M_ * 256] << " ";
             }
         }
         std::cout << std::endl;
@@ -408,8 +412,7 @@ std::variant<ComputingReturn, size_t> CUDATensor<_DTYPE_>::op_sizeof(tensor_t se
         if ( owner_ == true ) {
             auto shape = self->shape();
             size_t numel = shape.numel();
-            size_t size = sizeof(float) * 256 * PQ_S_ * PQ_M_ + numel / PQ_M_;
-
+            size_t size = sizeof(device_fp16_t) * 256 * PQ_S_ * PQ_M_ + numel / PQ_M_;
             return size;
         } else {
             return OP_INPUT_ERROR;
@@ -934,7 +937,7 @@ ComputingReturn CUDATensor<_DTYPE_>::op_dequantize(tensor_t self, tensor_t out) 
 
         //ComputingContext::cuda_event(0);
         cuda::dequantize_q4<device_fp16_t>(src, dst, self->items(), stream);
-        //std::cout << "Kernel using " << ComputingContext::cuda_event(1);
+        //std::cout << "Kernel using " << ComputingContext::cuda_event(1) << std::endl;
 
         return OP_OK;
     }
@@ -946,7 +949,7 @@ ComputingReturn CUDATensor<_DTYPE_>::op_dequantize(tensor_t self, tensor_t out) 
         void* src = data();
         device_fp16_t* dst =(device_fp16_t *) out->cuda_fp16()->data();
         cuda::dequantize_q8<device_fp16_t>(src, dst, feature_num, feature_size, stream);
-        //std::cout << "Kernel using " << ComputingContext::cuda_event(1);
+        //std::cout << "Kernel using " << ComputingContext::cuda_event(1) << std::endl;
 
         return OP_OK;
     }
@@ -954,8 +957,8 @@ ComputingReturn CUDATensor<_DTYPE_>::op_dequantize(tensor_t self, tensor_t out) 
         device_fp16_t* dst =(device_fp16_t *) out->cuda_fp16()->data();
 
         //ComputingContext::cuda_event(0);
-        cuda::dequantize_pq<device_fp16_t>(PQ_tab_, PQ_idx_, dst, self->items(), PQ_M_, PQ_S_, stream);
-        //std::cout << "Kernel using " << ComputingContext::cuda_event(1);
+        cuda::dequantize_pq<device_fp16_t>((device_fp16_t *)PQ_tab_, PQ_idx_, dst, self->items(), PQ_M_, PQ_S_, stream);
+        //std::cout << "Kernel using " << ComputingContext::cuda_event(1) << std::endl;
 
         return OP_OK;
     }

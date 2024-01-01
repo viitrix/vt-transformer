@@ -239,39 +239,46 @@ int dequantize_q8<__half>(const void *input, __half *out, int feature_num, int f
 
 // ===================================
 template <typename T, int M>
-__global__ void dequantize_pq_kernel(const float *tab_, const uint8_t *idx, T *out, int items, int S) {
+__global__ void dequantize_pq_kernel(const __half *tab_, const uint8_t *idx, T *out, int items, int S) {
     __shared__ __half tab[M * 256];
 
+    const int SS = blockIdx.x;
     const int DIM = blockDim.x;
     const int INDEX = threadIdx.x;
     
+    int offset = SS * 256 * M;
     for (int i = INDEX; i < M * 256; i += DIM ) {
-        tab[i] = (__half)tab_[i]; 
+        tab[i] = (__half)tab_[i + offset]; 
     }
     __syncthreads();
 
-    int slice = items / M;
-    for (int i = INDEX; i < slice; i += DIM ) {
-        int ii = idx[i] * M;
-        
-        float2 *dst = (float2 *)&out[i*M];
-        float2 *src = (float2 *)&tab[ii];
+    for (int i = SS + INDEX * S; i < items / M; i += S * DIM) {
+        int ii = idx[i];
+/*    
+#pragma unroll
+        for (int j = 0; j < M; j++) {
+            out[i * M + j] = tab[ii * M + j]; 
+        }
+*/       
+        float2 *dst = (float2 *)&out[i * M];
+        float2 *src = (float2 *)&tab[ii * M];
         *dst = *src;
     }
 }
 
 template <typename T>
-int dequantize_pq(const float *tab, const uint8_t *idx, T *out, int items, int M, int S, cudaStream_t stream);
+int dequantize_pq(const void *tab, const uint8_t *idx, T *out, int items, int M, int S, cudaStream_t stream);
 
 template <>
-int dequantize_pq<__half>(const float *tab,const uint8_t *idx, __half *out, int items, int M, int S, cudaStream_t stream) {
-    dim3 block_size(1024);
-    
+int dequantize_pq<__half>(const void *tab, const uint8_t *idx, __half *out, int items, int M, int S, cudaStream_t stream) {
+    dim3 block_size(128);
+    dim3 num_of_blocks(S);
+
     if ( M == 4 ) {
-        dim3 num_of_blocks(1);
-        dequantize_pq_kernel<__half, 4> <<< num_of_blocks, block_size, 0, stream>>> (tab, idx, out, items, S); 
+        dequantize_pq_kernel<__half, 4> <<< num_of_blocks, block_size, 0, stream>>> ((__half *)tab, idx, out, items, S); 
+    } else {
+        fprintf(stderr, "dequantize_pq_kernel only support M == 4 \n");
     }
- 
     cudaError_t err = cudaGetLastError();
     if (err != cudaSuccess) {
         fprintf(stderr, "Failed to launch dequantize_pq kernel (error code %s)!\n", cudaGetErrorString(err));

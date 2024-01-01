@@ -23,7 +23,7 @@ struct CUDATensor : public TransformerComputing {
         }
     }
     CUDATensor(const ShapeType& shape, int M, int S);
-    CUDATensor(ShapeType& shape, float *tab, uint8_t* idx, int M, int S) : mem_(nullptr), owner_(false), PQ_M_(M), PQ_S_(S), PQ_tab_(tab), PQ_idx_(idx) {
+    CUDATensor(ShapeType& shape, void *tab, uint8_t* idx, int M, int S) : mem_(nullptr), owner_(false), PQ_M_(M), PQ_S_(S), PQ_tab_(tab), PQ_idx_(idx) {
         vt_assert(_DTYPE_ == DataType::PQ, "Constructor for PQ view only");
     }
     void* data() {
@@ -119,7 +119,7 @@ private:
     const bool                  owner_;
     const int PQ_M_;
     const int PQ_S_;
-    float *PQ_tab_;
+    void *PQ_tab_;
     uint8_t *PQ_idx_;
 
     friend struct CUDATensor<DataType::Float>;

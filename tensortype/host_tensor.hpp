@@ -43,11 +43,14 @@ struct HostTensor : public TransformerComputing {
         size_t items = shape.numel();
         vt_assert( items % (M * S) == 0, "PQ tensor must aligened with config");
 
-        size_ = sizeof(float) * 256 * S * M + items / M;
+        size_ = sizeof(local_fp16_t) * 256 * S * M + items / M;
         mem_ = MemoryContext::alloc(size_);
     }
 
     HostTensor(const ShapeType& shape,  void *mem) : owner_(false), PQ_M_(0), PQ_S_(0), mem_(mem) {
+        if ( _DTYPE_ == DataType::PQ ) {
+            vt_panic("Can't be here!");
+        }
         if ( _DTYPE_ == DataType::Q4 ) {
             size_t last_dim = shape.vec().back();
             vt_assert( last_dim % Q4_BLOCK_SIZE == 0, "Q4 tensor must has 32 aligened dim");
