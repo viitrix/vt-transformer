@@ -254,15 +254,15 @@ __global__ void dequantize_pq_kernel(const __half *tab_, const uint8_t *idx, T *
 
     for (int i = SS + INDEX * S; i < items / M; i += S * DIM) {
         int ii = idx[i];
-/*    
 #pragma unroll
         for (int j = 0; j < M; j++) {
             out[i * M + j] = tab[ii * M + j]; 
         }
-*/       
+        /* 
         float2 *dst = (float2 *)&out[i * M];
         float2 *src = (float2 *)&tab[ii * M];
         *dst = *src;
+        */
     }
 }
 
@@ -271,11 +271,13 @@ int dequantize_pq(const void *tab, const uint8_t *idx, T *out, int items, int M,
 
 template <>
 int dequantize_pq<__half>(const void *tab, const uint8_t *idx, __half *out, int items, int M, int S, cudaStream_t stream) {
-    dim3 block_size(128);
+    dim3 block_size(256);
     dim3 num_of_blocks(S);
 
     if ( M == 4 ) {
         dequantize_pq_kernel<__half, 4> <<< num_of_blocks, block_size, 0, stream>>> ((__half *)tab, idx, out, items, S); 
+    } else if ( M == 2) {
+        dequantize_pq_kernel<__half, 2> <<< num_of_blocks, block_size, 0, stream>>> ((__half *)tab, idx, out, items, S); 
     } else {
         fprintf(stderr, "dequantize_pq_kernel only support M == 4 \n");
     }

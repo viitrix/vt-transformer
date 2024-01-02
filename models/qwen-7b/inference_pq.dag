@@ -71,7 +71,7 @@
     (1 1 "HIDDEN_SIZE" @  3 $DEVICE @ "fp16")  op.create  $L @ "ln_1.weight" | !
     (1 1 "HIDDEN_SIZE" @  3 $DEVICE @ "fp16")  op.create  $L @ "ln_2.weight"  | !
 
-    ("HIDDEN_SIZE" @ 3 * "HIDDEN_SIZE" @ 2 4 2048 $DEVICE @  "pq" )  op.create  $L @  "attn.qkv_proj.weight" | !
+    ("HIDDEN_SIZE" @ 3 * "HIDDEN_SIZE" @ 2 2 1024 $DEVICE @  "pq" )  op.create  $L @  "attn.qkv_proj.weight" | !
     ("HIDDEN_SIZE" @ 3 *                 1 $DEVICE @  "fp16" )  op.create  $L @  "attn.qkv_proj.bias" | !
     ;
     ; dummy split to three tensors, 4096 * 4096 = 16777216
@@ -84,11 +84,11 @@
     ($L @ "attn.qkv_proj.bias" | @ ("HIDDEN_SIZE" @ )              "HIDDEN_SIZE" @ 1 op.view)  $L @  "key.bias" | !
     ($L @ "attn.qkv_proj.bias" | @ ("HIDDEN_SIZE" @ 2 *)           "HIDDEN_SIZE" @ 1 op.view)  $L @  "value.bias" | !
     
-    ("HIDDEN_SIZE" @  "HIDDEN_SIZE" @ 2 4 2048 $DEVICE @  "pq")  op.create   $L @ "attn.c_proj.weight" |  !
+    ("HIDDEN_SIZE" @  "HIDDEN_SIZE" @ 2 2 1024 $DEVICE @  "pq")  op.create   $L @ "attn.c_proj.weight" |  !
 
-    ("INTERMEDIATE_SIZE" @  "HIDDEN_SIZE" @ 2 4 2048 $DEVICE @  "pq")  op.create  $L @  "mlp.w1.weight"  | !
-    ("INTERMEDIATE_SIZE" @  "HIDDEN_SIZE" @ 2 4 2048 $DEVICE @  "pq")  op.create  $L @  "mlp.w2.weight"  | !
-    ("HIDDEN_SIZE" @  "INTERMEDIATE_SIZE" @ 2 4 2048 $DEVICE @  "pq")  op.create  $L @  "mlp.c_proj.weight" | !
+    ("INTERMEDIATE_SIZE" @  "HIDDEN_SIZE" @ 2 2 1024 $DEVICE @  "pq")  op.create  $L @  "mlp.w1.weight"  | !
+    ("INTERMEDIATE_SIZE" @  "HIDDEN_SIZE" @ 2 2 1024 $DEVICE @  "pq")  op.create  $L @  "mlp.w2.weight"  | !
+    ("HIDDEN_SIZE" @  "INTERMEDIATE_SIZE" @ 2 2 1024 $DEVICE @  "pq")  op.create  $L @  "mlp.c_proj.weight" | !
 
     $L !!
     $DEVICE !!

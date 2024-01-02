@@ -192,8 +192,8 @@ std::vector<float> load_data_from_file(const std::string& fname) {
     return y;
 }
 
-const int S = 4096;
-const int D = 4;
+const int S = 1024;
+const int D = 2;
 const int K = 256;
 const int T = 128;
 std::vector<local_fp16_t> train_one(std::vector<float>& src_, std::vector<uint8_t>& codes, int s) {
