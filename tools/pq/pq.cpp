@@ -192,7 +192,7 @@ std::vector<float> load_data_from_file(const std::string& fname) {
     return y;
 }
 
-const int S = 2048;
+const int S = 4096;
 const int D = 4;
 const int K = 256;
 const int T = 128;
@@ -224,7 +224,7 @@ std::vector<local_fp16_t> train_one(std::vector<float>& src_, std::vector<uint8_
         codes[i] = (uint8_t)all_codes[i];
     }
 
-#if 1
+#if 0
     {
         double error = 0.0;
         float max = 0.0;
@@ -244,13 +244,19 @@ std::vector<local_fp16_t> train_one(std::vector<float>& src_, std::vector<uint8_
         std::cout << "ERROR = " << error / (src.size() * D) << std::endl;
         std::cout << "MAX = " << max << std::endl;
 
+        {
+            std::ofstream wf("vars.data", std::ios::out | std::ios::binary);
+            wf.write((char *)vars.data(), vars.size() * sizeof(float));
+            wf.close();
+        }
 
-
-        /*
-        std::ofstream wf("vars.data", std::ios::out | std::ios::binary);
-        wf.write((char *)vars.data(), vars.size() * sizeof(float));
-        wf.close();
-        */
+        {
+            std::ofstream wf("centers.data", std::ios::out | std::ios::binary);
+            for (size_t i = 0; i < centers.size(); i++ ) {
+                wf.write( (char *)centers[i].data(), sizeof(float) * 2 );
+            }
+            wf.close();
+        }
     }
 #endif
 

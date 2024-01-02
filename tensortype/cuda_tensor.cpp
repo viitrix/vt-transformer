@@ -227,7 +227,7 @@ ComputingReturn CUDATensor<DT>::io_dump(tensor_t self) {
         for (int n = 0; n < 2; n++) {
             unsigned int sn = n % PQ_S_;
             for (int i = 0; i < PQ_M_; i++) {
-                std::cout << tab[ v[n] * PQ_M_ + i + sn * PQ_M_ * 256] << " ";
+                std::cout << fp16_to_fp32(tab[ v[n] * PQ_M_ + i + sn * PQ_M_ * 256]) << " ";
             }
         }
         std::cout << std::endl;
@@ -238,7 +238,7 @@ ComputingReturn CUDATensor<DT>::io_dump(tensor_t self) {
         for (int n = 2; n < 4; n++) {
             int sn = (offset - 4 + n) % PQ_S_;
             for (int i = 0; i < PQ_M_; i++) {
-                std::cout << tab[ v[n] * PQ_M_ + i + sn * PQ_M_ * 256] << " ";
+                std::cout << fp16_to_fp32(tab[ v[n] * PQ_M_ + i + sn * PQ_M_ * 256]) << " ";
             }
         }
         std::cout << std::endl;
@@ -821,7 +821,7 @@ std::variant<ComputingReturn, tensor_t> CUDATensor<DT>::op_view(tensor_t self, s
     }
     if ( DT == DataType::PQ ) {
         vt_assert(offset % (PQ_M_ * PQ_S_) == 0, "PQ's view must aligen with PQ_M * PQ_S");
-        uint8_t *newIdx = PQ_idx_ + offset / (PQ_M_ * PQ_S_);
+        uint8_t *newIdx = PQ_idx_ + offset / PQ_M_ ;
         auto* newCudaTensor = new CUDATensor<DataType::PQ>(newShape, PQ_tab_, newIdx, PQ_M_, PQ_S_);
         return std::make_shared<TensorType>(newCudaTensor, newShape);
     }
