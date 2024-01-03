@@ -29,7 +29,7 @@ std::variant<ComputingReturn, size_t> HostTensor<_DTYPE_>::op_sizeof(tensor_t se
     }
     if ( _DTYPE_ == DataType::PQ ) {
         size_t items = self->items();
-        size_t ret = sizeof(local_fp16_t) * 256 * PQ_S_ * PQ_M_ + items / PQ_M_;
+        size_t ret = sizeof(local_fp16_t) * 64 * 2 * PQ_S_  + items * 3 / 8;
         vt_assert( ret == size_ , " double check PQ's memory size");
         return ret;
     }
@@ -233,31 +233,51 @@ ComputingReturn HostTensor<_DTYPE_>::io_dump(tensor_t self) {
         return OP_OK;
     }
     if ( _DTYPE_ == DataType::PQ ) {
-        const local_fp16_t*    pqtab = (local_fp16_t *)mem_;
-        const uint8_t*  pqidx = (uint8_t *)mem_ + PQ_M_ * PQ_S_ * 256 * sizeof(local_fp16_t);
+        const size_t gsize = self->items() / PQ_S_;
 
-        std::cout << "First " << PQ_M_ * 2 << " : ";
-        for (int n = 0; n < 2; n++) {
-            unsigned int pqi = pqidx[n];
-            unsigned int sn = n % PQ_S_;
-            const local_fp16_t* t = pqtab + sn * PQ_M_ * 256;
-            const local_fp16_t* v = &t[pqi * PQ_M_];
-            for (int i = 0; i < PQ_M_; i++) {
-                std::cout << fp16_to_fp32(v[i]) << " ";
-            }
+        const local_fp16_t*    pqtab = (local_fp16_t *)mem_;
+        const uint8_t*  pqidx = (uint8_t *)mem_ + PQ_S_ * 64 * 2 * sizeof(local_fp16_t);
+
+        std::cout << "First 8 : ";
+        {
+            uint8_t a = pqidx[0];
+            uint8_t b = pqidx[1];
+            uint8_t c = pqidx[2];
+
+            int i0 = a >> 2;
+            int i1 = ( (a & 0x3) << 4)  + (b >> 4);
+            int i2 = ( (b & 0x0F) << 2) + (c >> 6);
+            int i3 = c & 0x3F;
+
+            std::cout << fp16_to_fp32(pqtab[i0*2 + 0]) << " " << fp16_to_fp32(pqtab[i0*2 + 1]) << " ";
+            std::cout << fp16_to_fp32(pqtab[i1*2 + 0]) << " " << fp16_to_fp32(pqtab[i1*2 + 1]) << " ";
+            std::cout << fp16_to_fp32(pqtab[i2*2 + 0]) << " " << fp16_to_fp32(pqtab[i2*2 + 1]) << " ";
+            std::cout << fp16_to_fp32(pqtab[i3*2 + 0]) << " " << fp16_to_fp32(pqtab[i3*2 + 1]) << " ";
         }
         std::cout << std::endl;
 
-        std::cout << "Last " << PQ_M_ * 2 << " : ";
-        int offset = self->items() / PQ_M_;
-        for (int n = offset - 2; n < offset; n++) {
-            unsigned int pqi = pqidx[n];
-            unsigned int sn = n % PQ_S_;
-            const local_fp16_t* v = &pqtab[pqi * PQ_M_ + sn * 256 * PQ_M_];
-            for (int i = 0; i < PQ_M_; i++) {
-                std::cout << fp16_to_fp32(v[i]) << " ";
-            }
+        std::cout << "Last 8 : ";
+        {
+            int offset = self->items() * 3 / 8 - 3;
+
+            uint8_t a = pqidx[0 + offset];
+            uint8_t b = pqidx[1 + offset];
+            uint8_t c = pqidx[2 + offset];
+
+            int i0 = a >> 2;
+            int i1 = ( (a & 0x3) << 4)  + (b >> 4);
+            int i2 = ( (b & 0x0F) << 2) + (c >> 6);
+            int i3 = c & 0x3F;
+
+            int s = (self->items() - 1) / gsize;
+            pqtab = pqtab + s * 128;
+
+            std::cout << fp16_to_fp32(pqtab[i0*2 + 0]) << " " << fp16_to_fp32(pqtab[i0*2 + 1]) << " ";
+            std::cout << fp16_to_fp32(pqtab[i1*2 + 0]) << " " << fp16_to_fp32(pqtab[i1*2 + 1]) << " ";
+            std::cout << fp16_to_fp32(pqtab[i2*2 + 0]) << " " << fp16_to_fp32(pqtab[i2*2 + 1]) << " ";
+            std::cout << fp16_to_fp32(pqtab[i3*2 + 0]) << " " << fp16_to_fp32(pqtab[i3*2 + 1]) << " ";
         }
+
         std::cout << std::endl;
         return OP_OK;
     }
@@ -415,9 +435,9 @@ tensor_t create_host_q4(std::vector<size_t>& shape_) {
     return std::make_shared<TensorType>(tensor, shape);
 }
 
-tensor_t create_host_pq(std::vector<size_t>& shape_, const int M, const int S) {
+tensor_t create_host_pq(std::vector<size_t>& shape_, const int S) {
     ShapeType shape(shape_);
-    HostTensor<DataType::PQ>* tensor = new HostTensor<DataType::PQ>(shape, M, S);
+    HostTensor<DataType::PQ>* tensor = new HostTensor<DataType::PQ>(shape, S);
     return std::make_shared<TensorType>(tensor, shape);
 }
 

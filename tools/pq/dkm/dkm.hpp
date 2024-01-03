@@ -139,7 +139,7 @@ std::vector<std::array<T, N>> calculate_means(const std::vector<std::array<T, N>
 	const std::vector<uint32_t>& clusters,
 	const std::vector<std::array<T, N>>& old_means,
 	uint32_t k) {
-	const float gamma = -5.0;
+	const float gamma = 0.0;
     std::vector<std::array<T, N>> means(k);
 	std::vector<T> weight(k, T());
 	for (size_t i = 0; i < std::min(clusters.size(), data.size()); ++i) {
@@ -150,8 +150,8 @@ std::vector<std::array<T, N>> calculate_means(const std::vector<std::array<T, N>
 		    w += data[i][j] * data[i][j];
         }
         w = sqrt(w);
-        if ( w < 0.01 ) {
-            w = 0.01;
+        if ( w < 0.0001 ) {
+            w = 0.0001;
         }
         if ( w > 0.99) {
             w = 0.99;

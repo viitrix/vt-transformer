@@ -10,7 +10,7 @@ namespace vt {
 
 template <DataType _DTYPE_>
 struct HostTensor : public TransformerComputing {
-    HostTensor(const ShapeType& shape) : owner_(true), PQ_M_(0), PQ_S_(0) {
+    HostTensor(const ShapeType& shape) : owner_(true), PQ_S_(0) {
         if ( _DTYPE_ == DataType::Float ) {
             size_ = shape.numel() * sizeof(float);
         } else if ( _DTYPE_ == DataType::Int ) {
@@ -36,18 +36,18 @@ struct HostTensor : public TransformerComputing {
 
         mem_ = MemoryContext::alloc(size_);
     }
-    HostTensor(const ShapeType& shape, const int M, const int S) : owner_(true) , PQ_M_(M), PQ_S_(S) {
+    HostTensor(const ShapeType& shape, const int S) : owner_(true) , PQ_S_(S) {
         if ( _DTYPE_ != DataType::PQ ) {
             vt_panic("Can't be here!");
         }
         size_t items = shape.numel();
-        vt_assert( items % (M * S) == 0, "PQ tensor must aligened with config");
+        vt_assert( items % (8 * S) == 0, "PQ tensor must aligened with config");
 
-        size_ = sizeof(local_fp16_t) * 256 * S * M + items / M;
+        size_ = sizeof(local_fp16_t) * 64 * 2 * S + items * 3 / 8;
         mem_ = MemoryContext::alloc(size_);
     }
 
-    HostTensor(const ShapeType& shape,  void *mem) : owner_(false), PQ_M_(0), PQ_S_(0), mem_(mem) {
+    HostTensor(const ShapeType& shape,  void *mem) : owner_(false), PQ_S_(0), mem_(mem) {
         if ( _DTYPE_ == DataType::PQ ) {
             vt_panic("Can't be here!");
         }
@@ -91,7 +91,6 @@ public:
 
 protected:
     const bool owner_;
-    const int PQ_M_;
     const int PQ_S_;
 
     void* mem_;

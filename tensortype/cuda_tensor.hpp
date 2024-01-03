@@ -9,7 +9,7 @@ template <DataType _DTYPE_>
 struct CUDATensor : public TransformerComputing {
     virtual ~CUDATensor();
     CUDATensor(const ShapeType& shape);
-    CUDATensor(ShapeType& shape, void *mem) : mem_(mem), owner_(false), PQ_M_(0), PQ_S_(0) {
+    CUDATensor(ShapeType& shape, void *mem) : mem_(mem), owner_(false), PQ_S_(0) {
         if ( _DTYPE_ == DataType::Q4 ) {
             size_t last_dim = shape.vec().back();
             vt_assert( (last_dim % Q4_BLOCK_SIZE) == 0, "Q4 tensor last dim must be 32 aligened.");
@@ -22,8 +22,8 @@ struct CUDATensor : public TransformerComputing {
             vt_panic("Can't CUDA PQ type from view");
         }
     }
-    CUDATensor(const ShapeType& shape, int M, int S);
-    CUDATensor(ShapeType& shape, void *tab, uint8_t* idx, int M, int S) : mem_(nullptr), owner_(false), PQ_M_(M), PQ_S_(S), PQ_tab_(tab), PQ_idx_(idx) {
+    CUDATensor(const ShapeType& shape, int S);
+    CUDATensor(ShapeType& shape, void *tab, uint8_t* idx, int S) : mem_(nullptr), owner_(false), PQ_S_(S), PQ_tab_(tab), PQ_idx_(idx) {
         vt_assert(_DTYPE_ == DataType::PQ, "Constructor for PQ view only");
     }
     void* data() {
@@ -117,7 +117,6 @@ struct CUDATensor : public TransformerComputing {
 private:
     void*                       mem_;
     const bool                  owner_;
-    const int PQ_M_;
     const int PQ_S_;
     void *PQ_tab_;
     uint8_t *PQ_idx_;

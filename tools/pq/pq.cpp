@@ -192,18 +192,14 @@ std::vector<float> load_data_from_file(const std::string& fname) {
     return y;
 }
 
-const int S = 1024;
-const int D = 2;
-const int K = 256;
-const int T = 128;
-std::vector<local_fp16_t> train_one(std::vector<float>& src_, std::vector<uint8_t>& codes, int s) {
-    std::vector<std::array<float, D>> src;
-    for(size_t i = s * D; i < src_.size(); i += D * S) {
-        std::array<float, D> v;
-        for(int j = 0; j < D; j++) {
-            v[j] = src_[i+j];
-        }
-        src.push_back(std::move(v));
+const int K = 64;
+const int T = 256;
+std::vector<local_fp16_t> train_one(std::vector<float>& src_, std::vector<uint8_t>& codes, const int s, const int S) {
+    const size_t gsize = src_.size() / S;
+
+    std::vector<std::array<float, 2>> src;
+    for(size_t i = s * gsize; i < s * gsize + gsize; i += 2) {
+        src.push_back( { src_[i + 0], src_[i + 1] } );
     }
 
     std::cout << "DKMing..." << std::endl;
@@ -212,28 +208,36 @@ std::vector<local_fp16_t> train_one(std::vector<float>& src_, std::vector<uint8_
     std::vector<local_fp16_t> target;
     auto& centers = std::get<0>(cluster_data);
     for (size_t i = 0; i < centers.size(); i++) {
-        for(int j = 0; j < D; j++) {
+        for(int j = 0; j < 2; j++) {
             target.push_back( fp32_to_fp16(centers[i][j]));
         }
     }
 
     auto all_codes = std::get<1>(cluster_data);
-    codes.resize(all_codes.size());
-    for(size_t i = 0; i < all_codes.size(); i++) {
-        vt_assert( all_codes[i] >= 0 && all_codes[i] <= 255, " bit8 codes must be !");
-        codes[i] = (uint8_t)all_codes[i];
+    std::cout << all_codes.size() << std::endl;
+    for(size_t i = 0; i < all_codes.size(); i += 4) {
+        int8_t a = all_codes[i + 0];
+        int8_t b = all_codes[i + 1];
+        int8_t c = all_codes[i + 2];
+        int8_t d = all_codes[i + 3];
+
+        uint8_t v1 = (a << 2) + (b >> 4);
+        uint8_t v2 = (b << 4) + (c >> 2);
+        uint8_t v3 = (c << 6) + d;
+        codes.push_back(v1);
+        codes.push_back(v2);
+        codes.push_back(v3);
     }
 
-#if 0
-    {
+    if ( (s == 1) || (s == S - 1) ) {
         double error = 0.0;
         float max = 0.0;
         std::vector<float> vars;
         for(size_t i = 0; i < src.size(); i++) {
             float* coded_value = centers[ all_codes[i] ].data();
 
-            for (int j = 0; j < D; j++) {
-                float e = fabs( coded_value[j] - src_[i * S * D + s*D + j] );
+            for (int j = 0; j < 2; j++) {
+                float e = fabs( coded_value[j] - src[i][j] );
                 error += e;
                 if ( e > max ) {
                     max = e;
@@ -241,7 +245,7 @@ std::vector<local_fp16_t> train_one(std::vector<float>& src_, std::vector<uint8_
                 vars.push_back(e);
             }
         }
-        std::cout << "ERROR = " << error / (src.size() * D) << std::endl;
+        std::cout << "ERROR = " << error / (src.size() * 2) << std::endl;
         std::cout << "MAX = " << max << std::endl;
 
         {
@@ -258,30 +262,23 @@ std::vector<local_fp16_t> train_one(std::vector<float>& src_, std::vector<uint8_
             wf.close();
         }
     }
-#endif
 
     return target;
 }
 
-void do_file(const std::string &fname) {
+void do_file(const std::string &fname, const int S) {
     std::vector<local_fp16_t> all_centers;
     std::vector<uint8_t> all_values;
 
     auto data = std::move( load_data_from_file(fname + ".fp16"));
-    vt_assert( data.size() % (D * S) == 0, "Can't convert from un aligned tensor");
+    vt_assert( data.size() % (8 * S) == 0, "Can't convert from un aligned tensor");
 
-    all_values.resize( data.size() / D );
     for(int s = 0; s < S; s++) {
         std::vector<uint8_t> codes;
-        auto centers = train_one(data, codes, s);
+        auto centers = train_one(data, codes, s, S);
         all_centers.insert(all_centers.end(), centers.begin(), centers.end());
-        //all_values.insert(all_values.end(), codes.begin(), codes.end());
 
-        int ii = 0;
-        for ( size_t i = s; i < data.size() / D; i += S) {
-            all_values[i] = codes[ii];
-            ii++;
-        }
+        all_values.insert(all_values.end(), codes.begin(), codes.end());
     }
 
     {
@@ -296,19 +293,23 @@ void do_file(const std::string &fname) {
 
 int main(int argc, const char* argv[]) {
     std::vector<std::string> all_files;
+    std::vector<int> all_subs;
     {
         std::ifstream in("./pq_files.txt");
         while( !in.eof() ) {
             std::string pqf;
-            in >> pqf;
-            if ( pqf != "" )
+            int sub;
+            in >> pqf >> sub;
+            if ( pqf != "" ) {
                 all_files.push_back(pqf);
+                all_subs.push_back(sub);
+            }
         }
         std::cout << "Total " << all_files.size() << " fp16 files." << std::endl;
     }
 
     for(size_t i = 0; i < all_files.size(); i++) {
-        do_file( all_files[i] );
+        do_file( all_files[i], all_subs[i] );
     }
 }
 

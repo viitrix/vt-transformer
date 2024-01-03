@@ -89,13 +89,11 @@ namespace op {
             vt::DataType dtype = DataType_from( stack.pop_string().c_str() );
             auto device = stack.pop_string();
             std::vector<size_t> shape;
-            int pq_m = 0;
             int pq_s = 0;
             if ( dtype != vt::PQ ) {
                 shape = fetch_shape(stack);
             } else {
                 pq_s = stack.pop_number();
-                pq_m = stack.pop_number();
                 shape = fetch_shape(stack);
             }
             tensor_t t;
@@ -112,7 +110,7 @@ namespace op {
                 } else if ( dtype == vt::Q4 ) {
                     t = vt::create_cuda_q4(shape);
                 } else if ( dtype == vt::PQ ) {
-                    t = vt::create_cuda_pq(shape, pq_m, pq_s);
+                    t = vt::create_cuda_pq(shape, pq_s);
                 } else {
                     vt_panic("Can' be here!");
                 }
@@ -147,7 +145,7 @@ namespace op {
                 } else if ( dtype == vt::Q4 ) {
                     t = vt::create_host_q4(shape);
                 } else if ( dtype == vt::PQ ) {
-                    t = vt::create_host_pq(shape, pq_m, pq_s);
+                    t = vt::create_host_pq(shape, pq_s);
                 } else {
                     vt_panic("Can' be here!");
                 }

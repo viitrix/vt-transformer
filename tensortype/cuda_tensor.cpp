@@ -20,7 +20,7 @@ CUDATensor<_DTYPE_>::~CUDATensor() {
 }
 
 template<DataType _DTYPE_>
-CUDATensor<_DTYPE_>::CUDATensor(const ShapeType& shape) : owner_(true), PQ_M_(0), PQ_S_(0) {
+CUDATensor<_DTYPE_>::CUDATensor(const ShapeType& shape) : owner_(true), PQ_S_(0) {
     if ( _DTYPE_ == DataType::Float ) {
         CUDA_CHECK(cudaMalloc(&mem_, shape.numel() * sizeof(float)));
     } else if ( _DTYPE_ == DataType::Int ) {
@@ -47,18 +47,18 @@ CUDATensor<_DTYPE_>::CUDATensor(const ShapeType& shape) : owner_(true), PQ_M_(0)
 }
 
 template<DataType _DTYPE_>
-CUDATensor<_DTYPE_>::CUDATensor(const ShapeType& shape, int M, int S) : owner_(true) , PQ_M_(M), PQ_S_(S) {
+CUDATensor<_DTYPE_>::CUDATensor(const ShapeType& shape, int S) : owner_(true) ,  PQ_S_(S) {
     if ( _DTYPE_ != DataType::PQ ) {
         vt_panic("Can't be here!");
     }
     size_t items = shape.numel();
-    vt_assert( items % (M * S) == 0, "PQ tensor must aligened with config");
+    vt_assert( items % (8 * PQ_S_) == 0, "PQ tensor must aligened with config");
 
-    size_t size = sizeof(device_fp16_t) * 256 * S * M + items / M;
+    size_t size = sizeof(device_fp16_t) * 128 * PQ_S_ + items * 3 / 8;
     CUDA_CHECK(cudaMalloc(&mem_, size));
 
     PQ_tab_ = (device_fp16_t *)mem_;
-    PQ_idx_ = (uint8_t *)mem_ + 256 * PQ_M_ * PQ_S_ * sizeof(device_fp16_t);
+    PQ_idx_ = (uint8_t *)mem_ + 128 * PQ_S_ * sizeof(device_fp16_t);
 }
 
 template<DataType DT>
@@ -216,32 +216,57 @@ ComputingReturn CUDATensor<DT>::io_dump(tensor_t self) {
         return OP_OK;
     }
     if ( DT == DataType::PQ ) {
-        device_fp16_t tab[PQ_M_ * PQ_S_ * 256];
-        CUDA_CHECK(cudaMemcpyAsync(tab, PQ_tab_, sizeof(device_fp16_t) * PQ_M_ * PQ_S_ * 256, cudaMemcpyDeviceToHost, stream));
+        local_fp16_t tab[PQ_S_ * 128];
+        CUDA_CHECK(cudaMemcpyAsync(tab, PQ_tab_, sizeof(device_fp16_t) * PQ_S_ * 128, cudaMemcpyDeviceToHost, stream));
+        CUDA_CHECK(cudaStreamSynchronize(stream));
 
         const uint8_t*  pqidx = PQ_idx_;
         uint8_t v[4];
         CUDA_CHECK(cudaMemcpyAsync(v, pqidx, 4, cudaMemcpyDeviceToHost, stream));
 
-        std::cout << "First " << PQ_M_ * 2 << " : ";
-        for (int n = 0; n < 2; n++) {
-            unsigned int sn = n % PQ_S_;
-            for (int i = 0; i < PQ_M_; i++) {
-                std::cout << fp16_to_fp32(tab[ v[n] * PQ_M_ + i + sn * PQ_M_ * 256]) << " ";
-            }
+        std::cout << "First 8 : ";
+        {
+            uint8_t a = v[0];
+            uint8_t b = v[1];
+            uint8_t c = v[2];
+
+            int i0 = a >> 2;
+            int i1 = ( (a & 0x3) << 4)  + (b >> 4);
+            int i2 = ( (b & 0x0F) << 2) + (c >> 6);
+            int i3 = c & 0x3F;
+
+            local_fp16_t * pqtab = &tab[0];
+            std::cout << fp16_to_fp32(pqtab[i0*2 + 0]) << " " << fp16_to_fp32(pqtab[i0*2 + 1]) << " ";
+            std::cout << fp16_to_fp32(pqtab[i1*2 + 0]) << " " << fp16_to_fp32(pqtab[i1*2 + 1]) << " ";
+            std::cout << fp16_to_fp32(pqtab[i2*2 + 0]) << " " << fp16_to_fp32(pqtab[i2*2 + 1]) << " ";
+            std::cout << fp16_to_fp32(pqtab[i3*2 + 0]) << " " << fp16_to_fp32(pqtab[i3*2 + 1]) << " ";
         }
         std::cout << std::endl;
 
-        int offset = self->items() / PQ_M_;
+        int offset = self->items() * 3 / 8;
         CUDA_CHECK(cudaMemcpyAsync(v, &pqidx[offset-4], 4, cudaMemcpyDeviceToHost, stream));
-        std::cout << "Last " << PQ_M_ * 2 << " : ";
-        for (int n = 2; n < 4; n++) {
-            int sn = (offset - 4 + n) % PQ_S_;
-            for (int i = 0; i < PQ_M_; i++) {
-                std::cout << fp16_to_fp32(tab[ v[n] * PQ_M_ + i + sn * PQ_M_ * 256]) << " ";
-            }
+
+        const size_t gsize = self->items() / PQ_S_;
+        int s = (self->items() - 1) / gsize;
+        std::cout << "Last 8 : ";
+        {
+            uint8_t a = v[1];
+            uint8_t b = v[2];
+            uint8_t c = v[3];
+
+            int i0 = a >> 2;
+            int i1 = ( (a & 0x3) << 4)  + (b >> 4);
+            int i2 = ( (b & 0x0F) << 2) + (c >> 6);
+            int i3 = c & 0x3F;
+
+            local_fp16_t * pqtab = &tab[s * 128];
+            std::cout << fp16_to_fp32(pqtab[i0*2 + 0]) << " " << fp16_to_fp32(pqtab[i0*2 + 1]) << " ";
+            std::cout << fp16_to_fp32(pqtab[i1*2 + 0]) << " " << fp16_to_fp32(pqtab[i1*2 + 1]) << " ";
+            std::cout << fp16_to_fp32(pqtab[i2*2 + 0]) << " " << fp16_to_fp32(pqtab[i2*2 + 1]) << " ";
+            std::cout << fp16_to_fp32(pqtab[i3*2 + 0]) << " " << fp16_to_fp32(pqtab[i3*2 + 1]) << " ";
         }
         std::cout << std::endl;
+
         return OP_OK;
     }
     return OP_TODO_ERROR;
@@ -412,7 +437,7 @@ std::variant<ComputingReturn, size_t> CUDATensor<_DTYPE_>::op_sizeof(tensor_t se
         if ( owner_ == true ) {
             auto shape = self->shape();
             size_t numel = shape.numel();
-            size_t size = sizeof(device_fp16_t) * 256 * PQ_S_ * PQ_M_ + numel / PQ_M_;
+            size_t size = sizeof(device_fp16_t) * 128 * PQ_S_  + numel * 3 / 8;
             return size;
         } else {
             return OP_INPUT_ERROR;
@@ -788,7 +813,6 @@ ComputingReturn CUDATensor<DT>::op_linear(tensor_t self, tensor_t w_, tensor_t b
 template<DataType DT>
 std::variant<ComputingReturn, tensor_t> CUDATensor<DT>::op_view(tensor_t self, size_t offset, const std::vector<size_t>& newShape_) {
     ShapeType newShape(newShape_);
-
     if ( DT == DataType::Float ) {
         void *newData = (char *)data() + offset * sizeof(float);
         auto* newCudaTensor = new CUDATensor<DataType::Float>(newShape, newData);
@@ -820,9 +844,16 @@ std::variant<ComputingReturn, tensor_t> CUDATensor<DT>::op_view(tensor_t self, s
         return std::make_shared<TensorType>(newCudaTensor, newShape);
     }
     if ( DT == DataType::PQ ) {
-        vt_assert(offset % (PQ_M_ * PQ_S_) == 0, "PQ's view must aligen with PQ_M * PQ_S");
-        uint8_t *newIdx = PQ_idx_ + offset / PQ_M_ ;
-        auto* newCudaTensor = new CUDATensor<DataType::PQ>(newShape, PQ_tab_, newIdx, PQ_M_, PQ_S_);
+        size_t gsize = self->items() / PQ_S_;
+        vt_assert(offset % gsize == 0, "PQ's view must aligen with PQ_S");
+        void *newTab = (char *)PQ_tab_ + offset / gsize * 128 * sizeof(device_fp16_t);
+        uint8_t *newIdx = PQ_idx_ + offset * 3 / 8;
+
+        size_t newItems = newShape.numel();
+        vt_assert(newItems % gsize == 0, "PQ's view must aligen with PQ_S");
+        int newS = newItems  / gsize;
+
+        auto* newCudaTensor = new CUDATensor<DataType::PQ>(newShape, newTab, newIdx, newS);
         return std::make_shared<TensorType>(newCudaTensor, newShape);
     }
     return OP_TODO_ERROR;
@@ -957,7 +988,7 @@ ComputingReturn CUDATensor<_DTYPE_>::op_dequantize(tensor_t self, tensor_t out) 
         device_fp16_t* dst =(device_fp16_t *) out->cuda_fp16()->data();
 
         //ComputingContext::cuda_event(0);
-        cuda::dequantize_pq<device_fp16_t>((device_fp16_t *)PQ_tab_, PQ_idx_, dst, self->items(), PQ_M_, PQ_S_, stream);
+        cuda::dequantize_pq<device_fp16_t>((device_fp16_t *)PQ_tab_, PQ_idx_, dst, self->items(), PQ_S_, stream);
         //std::cout << "Kernel using " << ComputingContext::cuda_event(1) << std::endl;
 
         return OP_OK;
@@ -2290,9 +2321,9 @@ tensor_t create_cuda_q4(std::vector<size_t>& shape_) {
     return std::make_shared<TensorType>(tensor, shape);
 }
 
-tensor_t create_cuda_pq(std::vector<size_t>& shape_, int M, int S) {
+tensor_t create_cuda_pq(std::vector<size_t>& shape_, int S) {
     ShapeType shape(shape_);
-    CUDATensor<DataType::PQ>* tensor = new CUDATensor<DataType::PQ>(shape, M, S);
+    CUDATensor<DataType::PQ>* tensor = new CUDATensor<DataType::PQ>(shape, S);
     return std::make_shared<TensorType>(tensor, shape);
 }
 

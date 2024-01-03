@@ -699,7 +699,7 @@ tensor_t create_host_fp16(std::vector<size_t>& shape);
 tensor_t create_host_int(std::vector<size_t>& shape);
 tensor_t create_host_q8(std::vector<size_t>& shape);
 tensor_t create_host_q4(std::vector<size_t>& shape);
-tensor_t create_host_pq(std::vector<size_t>& shape, int M, int S);
+tensor_t create_host_pq(std::vector<size_t>& shape, int S);
 
 #if _USING_DEVICE_CUDA_
 tensor_t create_cuda_float(std::vector<size_t>& shape);
@@ -707,7 +707,7 @@ tensor_t create_cuda_fp16(std::vector<size_t>& shape);
 tensor_t create_cuda_int(std::vector<size_t>& shape);
 tensor_t create_cuda_q8(std::vector<size_t>& shape);
 tensor_t create_cuda_q4(std::vector<size_t>& shape);
-tensor_t create_cuda_pq(std::vector<size_t>& shape, int M, int S);
+tensor_t create_cuda_pq(std::vector<size_t>& shape, int S);
 #endif
 
 #if _USING_DEVICE_DCU_
