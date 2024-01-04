@@ -2,7 +2,7 @@
 
 all: libdcu_kernels.a
 
-FLAGS = -Wall -O3 
+FLAGS = -Wall -O3  
 
 libdcu_kernels.a: fill.o causal_mask.o quantize.o embed.o convert.o pointwise.o \
 	              rmsnorm.o rotary_embed.o gelu.o silu_product.o transpose_0213.o \

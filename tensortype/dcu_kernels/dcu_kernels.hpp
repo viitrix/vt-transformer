@@ -22,6 +22,9 @@ template <typename T>
 int kr_dequantize_q4(const void *input, T *out, int items, hipStream_t stream);
 
 template <typename T>
+int kr_dequantize_pq(const void *tab, const uint8_t *idx, T *out, int items, int S, hipStream_t stream);
+
+template <typename T>
 int kr_embed(const int *ids, const T *table, T *out, const int len, const int hidden_size, hipStream_t stream);
 
 template <typename T, typename TT>

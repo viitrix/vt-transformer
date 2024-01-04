@@ -16,7 +16,8 @@ struct DCUTensor : public TransformerComputing {
         }
     }
     DCUTensor(const ShapeType& shape);
-    DCUTensor(ShapeType& shape, void *mem) : owner_(false), mem_(mem) {
+    DCUTensor(const ShapeType& shape, int S);
+    DCUTensor(ShapeType& shape, void *mem) : owner_(false), mem_(mem), PQ_S_(0) {
         if ( _DTYPE_ == DataType::Q4 ) {
             size_t last_dim = shape.vec().back();
             vt_assert( (last_dim % Q4_BLOCK_SIZE) == 0, "Q4 tensor last dim must be 32 aligened.");
@@ -25,8 +26,17 @@ struct DCUTensor : public TransformerComputing {
             size_t last_dim = shape.vec().back();
             vt_assert( last_dim > 128, "Q8 tensor last dim must > 128");
         }
+        if ( _DTYPE_ == PQ ) {
+            vt_panic("Can't DCU PQ type from this constructor!");
+        }
+    }
+    DCUTensor(ShapeType& shape, void *tab, uint8_t* idx, int S) : owner_(false), mem_(nullptr), PQ_S_(S), PQ_tab_(tab), PQ_idx_(idx) {
+        vt_assert(_DTYPE_ == DataType::PQ, "Constructor for PQ view only");
     }
     void* data() {
+        if ( _DTYPE_ == PQ && owner_ == false) {
+            vt_panic("Can't use DCU mem_ from PQ view  ");
+        }
         return mem_;
     }
 
@@ -73,6 +83,9 @@ protected:
     const bool owner_;
     void* mem_;
     size_t size_;
+    const int PQ_S_;
+    void *PQ_tab_;
+    uint8_t *PQ_idx_;
 
     friend struct DCUTensor<DataType::Float>;
     friend struct DCUTensor<DataType::BF16>;

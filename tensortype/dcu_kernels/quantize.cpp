@@ -12,6 +12,70 @@
 
 namespace vt { namespace dcu {
 
+template <typename T>
+__global__ void dequantize_pq(const __half *tab_, const uint8_t *idx, T *out, int items, int S) {
+    __shared__ __half tab[128];
+
+    const int SS = blockIdx.x;
+    const int DIM = blockDim.x;
+    const int INDEX = threadIdx.x;
+
+    int offset = SS * 128;
+    for (int i = INDEX; i < 128; i += DIM ) {
+        tab[i] = (__half)tab_[offset + i];
+    }
+    __syncthreads();
+
+    const int gsize = items / S;
+    int *src;
+    int *dst;
+    for (int i = gsize * SS + INDEX*3; i < gsize * SS + gsize; i += DIM*3) {
+        uint8_t a = idx[i + 0];
+        uint8_t b = idx[i + 1];
+        uint8_t c = idx[i + 2];
+
+        uint8_t i0 = a >> 2;
+        uint8_t i1 = ( (a & 0x3) << 4)  + (b >> 4);
+        uint8_t i2 = ( (b & 0x0F) << 2) + (c >> 6);
+        uint8_t i3 = c & 0x3F;
+
+        int ii = i / 3 * 8;
+        src = (int *)&tab[i0 * 2];
+        dst = (int *)&out[ii + 0 ];
+        *dst = *src;
+
+        src = (int *)&tab[i1 * 2];
+        dst = (int *)&out[ii + 2];
+        *dst = *src;
+
+        src = (int *)&tab[i2 * 2];
+        dst = (int *)&out[ii + 4];
+        *dst = *src;
+
+        src = (int *)&tab[i3 * 2];
+        dst = (int *)&out[ii + 6];
+        *dst = *src;
+    }
+}
+
+template <>
+int kr_dequantize_pq<__half>(const void *tab, const uint8_t *idx, __half *out, int items, int S, hipStream_t stream) {
+    dim3 block_size(256);
+    dim3 num_of_blocks(S);
+
+    items = items * 3 / 8;
+    dequantize_pq<__half> <<< num_of_blocks, block_size, 0, stream>>> ((__half *)tab, idx, out, items, S);
+
+    hipError_t err = hipGetLastError();
+    if (err != hipSuccess) {
+        fprintf(stderr, "Failed to launch dequantize_pq kernel (error code %s)!\n", hipGetErrorString(err));
+        exit(-1);
+    }
+
+    return 0;
+}
+// ===================================================
+
 template<typename T>
 __global__ void quantize_q4_kernel(const T *in, void *out, int items) {
     size_t blk = blockIdx.x * blockDim.x + threadIdx.x;

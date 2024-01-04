@@ -492,6 +492,10 @@ TensorType::~TensorType() {
         dcu_q4_t* tensor = std::get<DCU_Q4>(impl_);
         delete tensor;
     }
+    if ( impl_index() == ImplType::DCU_PQ ) {
+        dcu_pq_t* tensor = std::get<DCU_PQ>(impl_);
+        delete tensor;
+    }
 #endif
 
 #ifdef _USING_DEVICE_DNNL_
@@ -583,6 +587,10 @@ TransformerComputing* TensorType::impl() {
     }
     if ( impl_index() == ImplType::DCU_Q4 ) {
         dcu_q4_t* tensor = std::get<DCU_Q4>(impl_);
+        return tensor;
+    }
+    if ( impl_index() == ImplType::DCU_PQ ) {
+        dcu_pq_t* tensor = std::get<DCU_PQ>(impl_);
         return tensor;
     }
 #endif
@@ -682,6 +690,10 @@ void* TensorType::device_data(size_t index) {
     }
     if ( index == ImplType::DCU_Q4 ) {
         dcu_q4_t* tensor = std::get<DCU_Q4>(impl_);
+        return tensor->data();
+    }
+    if ( index == ImplType::DCU_PQ ) {
+        dcu_pq_t* tensor = std::get<DCU_PQ>(impl_);
         return tensor->data();
     }
 #endif

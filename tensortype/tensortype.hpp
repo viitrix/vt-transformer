@@ -174,6 +174,7 @@ using dcu_fp16_t = DCUTensor<DataType::FP16>;
 using dcu_int_t = DCUTensor<DataType::Int>;
 using dcu_q8_t = DCUTensor<DataType::Q8>;
 using dcu_q4_t = DCUTensor<DataType::Q4>;
+using dcu_pq_t = DCUTensor<DataType::PQ>;
 #endif
 
 #ifdef _USING_DEVICE_DNNL_
@@ -210,6 +211,7 @@ public:
     TensorType(dcu_int_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Int), impl_(tensor) {};
     TensorType(dcu_q8_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Q8), impl_(tensor) {};
     TensorType(dcu_q4_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Q4), impl_(tensor) {};
+    TensorType(dcu_pq_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::PQ), impl_(tensor) {};
 #endif
 
 #ifdef _USING_DEVICE_DNNL_
@@ -341,6 +343,12 @@ public:
         }
         return std::get<DCU_Q4>(impl_);
     }
+    dcu_pq_t* dcu_pq() {
+        if ( impl_.index() != DCU_PQ ) {
+            vt_panic("Cant get dcu_q4 from a tensor");
+        }
+        return std::get<DCU_PQ>(impl_);
+    }
 #endif
 
 #if _USING_DEVICE_DNNL_
@@ -390,7 +398,7 @@ public:
 #endif
 
 #ifdef _USING_DEVICE_DCU_
-        if ( (impl_index() <= ImplType::DCU_Q4) && (impl_index() >= ImplType::DCU_FLOAT) ) {
+        if ( (impl_index() <= ImplType::DCU_PQ) && (impl_index() >= ImplType::DCU_FLOAT) ) {
             return "dcu";
         }
 #endif
@@ -425,7 +433,7 @@ public:
 #ifdef _USING_DEVICE_DCU_
     bool is_dcu() const {
         auto ii = impl_index();
-        if ( (ii >= ImplType::DCU_FLOAT) && (ii <= ImplType::DCU_Q4) ) {
+        if ( (ii >= ImplType::DCU_FLOAT) && (ii <= ImplType::DCU_PQ) ) {
             return true;
         }
         return false;
@@ -547,6 +555,11 @@ public:
             return true;
         }
 #endif
+#ifdef _USING_DEVICE_DCU_
+        if (impl_index() == ImplType::DCU_PQ) {
+            return true;
+        }
+#endif
         return false;
     }
 
@@ -648,6 +661,7 @@ private:
         DCU_INT,
         DCU_Q8,
         DCU_Q4,
+        DCU_PQ,
 #endif
 
 #ifdef _USING_DEVICE_DNNL_
@@ -678,6 +692,7 @@ private:
                                         dcu_int_t*,
                                         dcu_q8_t*,
                                         dcu_q4_t*,
+                                        dcu_pq_t*,
 #endif
 
 #ifdef _USING_DEVICE_DNNL_
@@ -716,6 +731,7 @@ tensor_t create_dcu_fp16(std::vector<size_t>& shape);
 tensor_t create_dcu_int(std::vector<size_t>& shape);
 tensor_t create_dcu_q8(std::vector<size_t>& shape);
 tensor_t create_dcu_q4(std::vector<size_t>& shape);
+tensor_t create_dcu_pq(std::vector<size_t>& shape, int S);
 #endif
 
 #if _USING_DEVICE_DNNL_

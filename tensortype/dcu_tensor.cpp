@@ -7,7 +7,7 @@ namespace vt {
 using device_fp16_t = __half;
 
 template<DataType _DTYPE_>
-DCUTensor<_DTYPE_>::DCUTensor(const ShapeType& shape) : owner_(true) {
+DCUTensor<_DTYPE_>::DCUTensor(const ShapeType& shape) : owner_(true), PQ_S_(0) {
     if ( _DTYPE_ == DataType::Float ) {
         HIP_CHECK(hipMalloc(&mem_, shape.numel() * sizeof(float)));
     } else if ( _DTYPE_ == DataType::Int ) {
@@ -26,9 +26,26 @@ DCUTensor<_DTYPE_>::DCUTensor(const ShapeType& shape) : owner_(true) {
         size_t numel = shape.numel();
         size_t blk_num = numel / Q4_BLOCK_SIZE;
         HIP_CHECK(hipMalloc(&mem_, blk_num * sizeof( q4_block_t )));
+    } else if ( _DTYPE_ == DataType::PQ ) {
+        vt_panic("Don't use this constructor for DCU PQ");
     } else {
         vt_panic("Don't support DataType for HIP");
     }
+}
+
+template<DataType _DTYPE_>
+DCUTensor<_DTYPE_>::DCUTensor(const ShapeType& shape, int S) : owner_(true) ,  PQ_S_(S) {
+    if ( _DTYPE_ != DataType::PQ ) {
+        vt_panic("Can't be here!");
+    }
+    size_t items = shape.numel();
+    vt_assert( items % (8 * PQ_S_) == 0, "PQ tensor must aligened with config");
+
+    size_t size = sizeof(device_fp16_t) * 128 * PQ_S_ + items * 3 / 8;
+    HIP_CHECK(hipMalloc(&mem_, size));
+
+    PQ_tab_ = (device_fp16_t *)mem_;
+    PQ_idx_ = (uint8_t *)mem_ + 128 * PQ_S_ * sizeof(device_fp16_t);
 }
 
 template<DataType DT>
@@ -125,6 +142,59 @@ ComputingReturn DCUTensor<DT>::io_dump(tensor_t self) {
         std::cout << std::endl;
         return OP_OK;
     }
+    if ( DT == DataType::PQ ) {
+        local_fp16_t tab[PQ_S_ * 128];
+        HIP_CHECK(hipMemcpyAsync(tab, PQ_tab_, sizeof(device_fp16_t) * PQ_S_ * 128, hipMemcpyDeviceToHost, stream));
+
+        const uint8_t*  pqidx = PQ_idx_;
+        uint8_t v[4];
+        HIP_CHECK(hipMemcpyAsync(v, pqidx, 4, hipMemcpyDeviceToHost, stream));
+
+        std::cout << "First 8 : ";
+        {
+            uint8_t a = v[0];
+            uint8_t b = v[1];
+            uint8_t c = v[2];
+
+            int i0 = a >> 2;
+            int i1 = ( (a & 0x3) << 4)  + (b >> 4);
+            int i2 = ( (b & 0x0F) << 2) + (c >> 6);
+            int i3 = c & 0x3F;
+
+            local_fp16_t * pqtab = &tab[0];
+            std::cout << fp16_to_fp32(pqtab[i0*2 + 0]) << " " << fp16_to_fp32(pqtab[i0*2 + 1]) << " ";
+            std::cout << fp16_to_fp32(pqtab[i1*2 + 0]) << " " << fp16_to_fp32(pqtab[i1*2 + 1]) << " ";
+            std::cout << fp16_to_fp32(pqtab[i2*2 + 0]) << " " << fp16_to_fp32(pqtab[i2*2 + 1]) << " ";
+            std::cout << fp16_to_fp32(pqtab[i3*2 + 0]) << " " << fp16_to_fp32(pqtab[i3*2 + 1]) << " ";
+        }
+        std::cout << std::endl;
+
+        int offset = self->items() * 3 / 8;
+        HIP_CHECK(hipMemcpyAsync(v, &pqidx[offset-4], 4, hipMemcpyDeviceToHost, stream));
+
+        const size_t gsize = self->items() / PQ_S_;
+        int s = (self->items() - 1) / gsize;
+        std::cout << "Last 8 : ";
+        {
+            uint8_t a = v[1];
+            uint8_t b = v[2];
+            uint8_t c = v[3];
+
+            int i0 = a >> 2;
+            int i1 = ( (a & 0x3) << 4)  + (b >> 4);
+            int i2 = ( (b & 0x0F) << 2) + (c >> 6);
+            int i3 = c & 0x3F;
+
+            local_fp16_t * pqtab = &tab[s * 128];
+            std::cout << fp16_to_fp32(pqtab[i0*2 + 0]) << " " << fp16_to_fp32(pqtab[i0*2 + 1]) << " ";
+            std::cout << fp16_to_fp32(pqtab[i1*2 + 0]) << " " << fp16_to_fp32(pqtab[i1*2 + 1]) << " ";
+            std::cout << fp16_to_fp32(pqtab[i2*2 + 0]) << " " << fp16_to_fp32(pqtab[i2*2 + 1]) << " ";
+            std::cout << fp16_to_fp32(pqtab[i3*2 + 0]) << " " << fp16_to_fp32(pqtab[i3*2 + 1]) << " ";
+        }
+        std::cout << std::endl;
+
+        return OP_OK;
+    }
     return OP_TODO_ERROR;
 }
 
@@ -164,6 +234,16 @@ std::variant<ComputingReturn, size_t> DCUTensor<_DTYPE_>::op_sizeof(tensor_t sel
         size_t numel = shape.numel();
         size_t blk_num = numel / Q4_BLOCK_SIZE;
         return blk_num * sizeof( q4_block_t );
+    }
+    if ( _DTYPE_ == DataType::PQ ) {
+        if ( owner_ == true ) {
+            auto shape = self->shape();
+            size_t numel = shape.numel();
+            size_t size = sizeof(device_fp16_t) * 128 * PQ_S_  + numel * 3 / 8;
+            return size;
+        } else {
+            return OP_INPUT_ERROR;
+        }
     }
     return OP_TODO_ERROR;
 }
@@ -291,6 +371,20 @@ std::variant<ComputingReturn, tensor_t> DCUTensor<DT>::op_view(tensor_t self, si
         auto* newDcuTensor = new DCUTensor<DataType::Q4>(newShape, newData);
         return std::make_shared<TensorType>(newDcuTensor, newShape);
     }
+    if ( DT == DataType::PQ ) {
+        size_t gsize = self->items() / PQ_S_;
+        vt_assert(offset % gsize == 0, "PQ's view must aligen with PQ_S");
+        void *newTab = (char *)PQ_tab_ + offset / gsize * 128 * sizeof(device_fp16_t);
+        uint8_t *newIdx = PQ_idx_ + offset * 3 / 8;
+
+        size_t newItems = newShape.numel();
+        vt_assert(newItems % gsize == 0, "PQ's view must aligen with PQ_S");
+        int newS = newItems  / gsize;
+
+        auto* newDcuTensor = new DCUTensor<DataType::PQ>(newShape, newTab, newIdx, newS);
+        return std::make_shared<TensorType>(newDcuTensor, newShape);
+    }
+
     return OP_TODO_ERROR;
 }
 
@@ -409,6 +503,13 @@ ComputingReturn DCUTensor<_DTYPE_>::op_dequantize(tensor_t self, tensor_t out) {
         void* src = data();
         device_fp16_t* dst =(device_fp16_t *) out->dcu_fp16()->data();
         dcu::kr_dequantize_q8<device_fp16_t>(src, dst, feature_num, feature_size, stream);
+
+        return OP_OK;
+    }
+    if ( _DTYPE_ == DataType::PQ && out->is_fp16() ) {
+        device_fp16_t* dst =(device_fp16_t *) out->dcu_fp16()->data();
+
+        dcu::kr_dequantize_pq<device_fp16_t>((device_fp16_t *)PQ_tab_, PQ_idx_, dst, self->items(), PQ_S_, stream);
 
         return OP_OK;
     }
@@ -1239,6 +1340,12 @@ tensor_t create_dcu_q8(std::vector<size_t>& shape_) {
 tensor_t create_dcu_q4(std::vector<size_t>& shape_) {
     ShapeType shape(shape_);
     DCUTensor<DataType::Q4>* tensor = new DCUTensor<DataType::Q4>(shape);
+    return std::make_shared<TensorType>(tensor, shape);
+}
+
+tensor_t create_dcu_pq(std::vector<size_t>& shape_, int S) {
+    ShapeType shape(shape_);
+    DCUTensor<DataType::PQ>* tensor = new DCUTensor<DataType::PQ>(shape, S);
     return std::make_shared<TensorType>(tensor, shape);
 }
 
