@@ -19,7 +19,7 @@
     "MAX_CONTEXT" @ "MAX_BATCH" @ "HIDDEN_SIZE" @ * * 1 "host" "fp16" op.create "_xinput~" !
 
     ;; activity memory
-    0.20 1024 1024 1024 * * * 1 $DEVICE @ "fp16" op.create  "_var_"  !
+    0.25 1024 1024 1024 * * * 1 $DEVICE @ "fp16" op.create  "_var_"  !
   
     ;; internal dequantized shared memory
     "INTERMEDIATE_SIZE" @ dup 2 $DEVICE @ "fp16" op.create "_w_" !
@@ -29,8 +29,8 @@
     "_w_" @  0 ("HIDDEN_SIZE" @        "INTERMEDIATE_SIZE" @ 2) op.view  "_w_HI_" !
 
     ;; kv cached memroy
-    32 2 1280 "HIDDEN_SIZE" @ 4 $DEVICE @  "fp16" op.create dup "_kcache_"  !
-    32 2 1280 "HIDDEN_SIZE" @ 4 $DEVICE @  "fp16" op.create dup "_vcache_"  !
+    40 2 1280 "HIDDEN_SIZE" @ 4 $DEVICE @  "fp16" op.create dup "_kcache_"  !
+    40 2 1280 "HIDDEN_SIZE" @ 4 $DEVICE @  "fp16" op.create dup "_vcache_"  !
     nn.ezkv_init "cache_man" !
 
     "MAX_CONTEXT" @ "MAX_BATCH" @ * dup dup dup 
@@ -71,7 +71,7 @@
     (1 1 "HIDDEN_SIZE" @  3 $DEVICE @ "fp16")  op.create  $L @ "ln_1.weight" | !
     (1 1 "HIDDEN_SIZE" @  3 $DEVICE @ "fp16")  op.create  $L @ "ln_2.weight"  | !
 
-    ("HIDDEN_SIZE" @ 3 * "HIDDEN_SIZE" @ 2 3072 $DEVICE @  "pq" )  op.create  $L @  "attn.qkv_proj.weight" | !
+    ("HIDDEN_SIZE" @ 3 * "HIDDEN_SIZE" @ 2 3840 $DEVICE @  "pq" )  op.create  $L @  "attn.qkv_proj.weight" | !
     ("HIDDEN_SIZE" @ 3 *                 1 $DEVICE @  "fp16" )  op.create  $L @  "attn.qkv_proj.bias" | !
     ;
     ; dummy split to three tensors
@@ -84,11 +84,11 @@
     ($L @ "attn.qkv_proj.bias" | @ ("HIDDEN_SIZE" @ )              "HIDDEN_SIZE" @ 1 op.view)  $L @  "key.bias" | !
     ($L @ "attn.qkv_proj.bias" | @ ("HIDDEN_SIZE" @ 2 *)           "HIDDEN_SIZE" @ 1 op.view)  $L @  "value.bias" | !
     
-    ("HIDDEN_SIZE" @  "HIDDEN_SIZE" @ 2 1024 $DEVICE @  "pq")  op.create   $L @ "attn.c_proj.weight" |  !
+    ("HIDDEN_SIZE" @  "HIDDEN_SIZE" @ 2 1280 $DEVICE @  "pq")  op.create   $L @ "attn.c_proj.weight" |  !
 
-    ("INTERMEDIATE_SIZE" @  "HIDDEN_SIZE" @ 2 2048 $DEVICE @  "pq")  op.create  $L @  "mlp.w1.weight"  | !
-    ("INTERMEDIATE_SIZE" @  "HIDDEN_SIZE" @ 2 2048 $DEVICE @  "pq")  op.create  $L @  "mlp.w2.weight"  | !
-    ("HIDDEN_SIZE" @  "INTERMEDIATE_SIZE" @ 2 2048 $DEVICE @  "pq")  op.create  $L @  "mlp.c_proj.weight" | !
+    ("INTERMEDIATE_SIZE" @  "HIDDEN_SIZE" @ 2 2560 $DEVICE @  "pq")  op.create  $L @  "mlp.w1.weight"  | !
+    ("INTERMEDIATE_SIZE" @  "HIDDEN_SIZE" @ 2 2560 $DEVICE @  "pq")  op.create  $L @  "mlp.w2.weight"  | !
+    ("HIDDEN_SIZE" @  "INTERMEDIATE_SIZE" @ 2 2560 $DEVICE @  "pq")  op.create  $L @  "mlp.c_proj.weight" | !
 
     $L !!
     $DEVICE !!
