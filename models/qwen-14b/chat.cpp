@@ -12,7 +12,7 @@ const size_t MEM_CTX_SIZE = 4 * 1024 * 1024 * 1024l;
 
 struct ChatApplication {
     ChatApplication() {
-        tokenizer_ = vt::build_tokenizer_qwen("../../models/qwen/qwen.tiktoken");
+        tokenizer_ = vt::build_tokenizer_qwen("./qwen.tiktoken");
     }
     ~ChatApplication() {
         delete tokenizer_;
@@ -20,20 +20,15 @@ struct ChatApplication {
 
     void write_all(const void* buf, size_t nbyte) {
         vt_assert( vt::CollectiveContext::pipe_write(1, buf, nbyte) > 0, "write_all error");
-        vt_assert( vt::CollectiveContext::pipe_write(2, buf, nbyte) > 0, "write_all error");
     }
 
     void wait_all_ready() {
         int dummy = -1;
         vt::CollectiveContext::pipe_read(&dummy, sizeof(int));
         vt_assert(dummy == 1, "wait_all_ready error");
-
-        dummy = -1;
-        vt::CollectiveContext::pipe_read(&dummy, sizeof(int));
-        vt_assert(dummy == 1, "wait_all_ready error");
     }
 
-    const size_t max_input = 1408;
+    const size_t max_input = 512;
     const size_t max_output = 512;
 
     void run() {
@@ -57,8 +52,6 @@ struct ChatApplication {
             history.push_back(new_user);
             history.push_back("<|im_start|>assistant\n");
             std::vector<int> input_tokens = std::move( build_from_history(history) );
-
-            std::cout << input_tokens.size() << std::endl;
 
             std::vector<int> id;
             std::vector<int> mask;
@@ -91,7 +84,9 @@ struct ChatApplication {
                 mask.push_back(2);
 
                 std::string nstr = tokenizer_->decode(next);
-                std::cout << nstr << std::flush;
+                //std::cout << nstr << std::flush;
+                printf("%s", nstr.c_str());
+                fflush(stdout);
             }
             auto stop = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
@@ -99,7 +94,7 @@ struct ChatApplication {
             std::string talk = tokenizer_->decode( out_tokens );
             std::cout << "\n====== Generated " << out_tokens.size() << " tokens, using " << duration.count() / 1000.0 << " seconds, ";
             std::cout << (next == tokenizer_->token_eos()) << " eos ending ===== " << std::endl;
-            std::cout << talk << std::endl;
+            //std::cout << talk << std::endl;
 
             talk = talk + "<|im_end|>\n";
             history.push_back(talk);
@@ -134,12 +129,19 @@ private:
     vt::Tokenizer* tokenizer_;
 };
 
-void do_inference(vt::Enviroment* env, const char* init_cmd, const char* main_cmd) {
+void do_inference(vt::Enviroment* env, const char* dag_file) {
+    const char* init_cmd = "gpu_init";
+    const char* main_cmd = "gpu_main";
     {
-        std::string all_code = vt::fileToString("common.words");
-        all_code = all_code + vt::fileToString("inference.words");
+        std::string all_code = vt::fileToString(dag_file);
 
         vt::DaG* init_bin = env->build(all_code);
+#ifdef _USING_DEVICE_CUDA_
+        env->stack().push_string("cuda");
+#endif
+#ifdef _USING_DEVICE_DCU_
+        env->stack().push_string("dcu");
+#endif
         env->run(init_bin);
         delete init_bin;
     }
@@ -170,7 +172,12 @@ void do_inference(vt::Enviroment* env, const char* init_cmd, const char* main_cm
 }
 
 int main(int argc, char* argv[] ) {
-    vt::CollectiveContext::boot_pipe(2);
+    if ( argc < 2 ) {
+        std::cout << "usage: ./chat [dag_file] " << std::endl;
+        return -1;
+    }
+    const char* dag_file = argv[1];
+    vt::CollectiveContext::boot_pipe(1);
 
     if ( vt::CollectiveContext::pipe_rank == 0) {
         ChatApplication* app = new ChatApplication();
@@ -185,20 +192,10 @@ int main(int argc, char* argv[] ) {
         }
     } else if ( vt::CollectiveContext::pipe_rank == 1) {
         vt::MemoryContext::boot( MEM_CTX_SIZE );
-        vt::ComputingContext::boot( vt::CollectiveContext::nccl_rank );
+        vt::ComputingContext::boot( 0 );
         vt::Enviroment* env = new vt::Enviroment();
 
-        do_inference(env, "init_gpu_0", "main_gpu_0");
-
-        delete env;
-        vt::ComputingContext::shutdown();
-        vt::MemoryContext::shutdown();
-    } else if ( vt::CollectiveContext::pipe_rank == 2) {
-        vt::MemoryContext::boot( MEM_CTX_SIZE );
-        vt::ComputingContext::boot( vt::CollectiveContext::nccl_rank );
-        vt::Enviroment* env = new vt::Enviroment();
-
-        do_inference(env, "init_gpu_1", "main_gpu_1");
+        do_inference(env, dag_file);
 
         delete env;
         vt::ComputingContext::shutdown();

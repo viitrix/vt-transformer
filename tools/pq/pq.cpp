@@ -295,7 +295,7 @@ int main(int argc, const char* argv[]) {
     std::vector<std::string> all_files;
     std::vector<int> all_subs;
     {
-        std::ifstream in("./pq_files.txt");
+        std::ifstream in(argv[1]);
         while( !in.eof() ) {
             std::string pqf;
             int sub;
