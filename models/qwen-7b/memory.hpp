@@ -43,7 +43,7 @@ struct MemoryCounting : public vt::NativeWord {
         all = (all + 1024*1024) - all % (1024 * 1024);
 
         size_t oneG = 1024 * 1024 * 1024;
-        size_t kv = 32 * tokens * HIDDEN_SIZE * 2;
+        size_t kv = 32 * batch * tokens * HIDDEN_SIZE * 2;
         std::cout << "Allocating " << all * 2.0 / oneG << " GB for internal memory." << std::endl;
         std::cout << "Allocating " << kv * 2.0 / oneG << " GB for kv caches memory." << std::endl;
         stack.push_number(all);
