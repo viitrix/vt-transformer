@@ -8,6 +8,8 @@
 #include <tokenizer_combo.hpp>
 #include <tensortype_inc.hpp>
 
+#include "memory.hpp"
+
 const size_t MEM_CTX_SIZE = 4 * 1024 * 1024 * 1024l;
 
 struct ChatApplication {
@@ -171,6 +173,8 @@ void do_inference(vt::Enviroment* env, const char* dag_file) {
     delete target_cmd;
 }
 
+
+
 int main(int argc, char* argv[] ) {
     if ( argc < 2 ) {
         std::cout << "usage: ./chat [dag_file] " << std::endl;
@@ -194,6 +198,7 @@ int main(int argc, char* argv[] ) {
         vt::MemoryContext::boot( MEM_CTX_SIZE );
         vt::ComputingContext::boot( 0 );
         vt::Enviroment* env = new vt::Enviroment();
+        env->insert_native_word("app.mem", MemoryCounting::creator);
 
         do_inference(env, dag_file);
 

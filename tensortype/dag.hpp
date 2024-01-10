@@ -481,8 +481,8 @@ private:
 };
 
 #define NWORD_CREATOR_DEFINE_LR(CLS)         \
-static NativeWord* creator(Enviroment& env) {   \
-    NativeWord* wd = new CLS();                \
+static NativeWord* creator(vt::Enviroment& env) {   \
+    vt::NativeWord* wd = new CLS();                \
     return wd;                                 \
 }
 

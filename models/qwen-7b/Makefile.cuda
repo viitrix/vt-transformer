@@ -17,7 +17,7 @@ LINK = -L../../install/lib \
 
 all: chat 
 
-chat: chat.cpp
+chat: chat.cpp memory.hpp
 	g++ $(FLAGS) -o $@ $< $(INC) $(LINK)
 
 run: chat 

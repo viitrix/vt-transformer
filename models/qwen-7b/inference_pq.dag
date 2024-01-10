@@ -8,7 +8,7 @@
 32                      "HEADS_NUM"             !
 128                     "HEAD_HIDDEN"           !
 
-2                       "MAX_BATCH"             !
+5                       "MAX_BATCH"             !
 1024                    "MAX_CONTEXT"           !
 "./weights/"            "G_PATH"                !
 
@@ -19,8 +19,9 @@
     "MAX_CONTEXT" @ "MAX_BATCH" @ "HIDDEN_SIZE" @ * * 1 "host" "fp16" op.create "_xinput~" !
 
     ;; activity memory
-    0.20 1024 1024 1024 * * * 1 $DEVICE @ "fp16" op.create  "_var_"  !
-  
+    ;;0.20 1024 1024 1024 * * * 1 $DEVICE @ "fp16" op.create  "_var_"  !
+    "MAX_BATCH" @ "MAX_CONTEXT" @ app.mem 1 $DEVICE @ "fp16" op.create  "_var_"  !
+
     ;; internal dequantized shared memory
     "INTERMEDIATE_SIZE" @ dup 2 $DEVICE @ "fp16" op.create "_w_" !
 
@@ -29,8 +30,8 @@
     "_w_" @  0 ("HIDDEN_SIZE" @        "INTERMEDIATE_SIZE" @ 2) op.view  "_w_HI_" !
 
     ;; kv cached memroy
-    32 2 1280 "HIDDEN_SIZE" @ 4 $DEVICE @  "fp16" op.create dup "_kcache_"  !
-    32 2 1280 "HIDDEN_SIZE" @ 4 $DEVICE @  "fp16" op.create dup "_vcache_"  !
+    32 "MAX_BATCH" @ "MAX_CONTEXT" @ "HIDDEN_SIZE" @ 4 $DEVICE @  "fp16" op.create dup "_kcache_"  !
+    32 "MAX_BATCH" @ "MAX_CONTEXT" @ "HIDDEN_SIZE" @ 4 $DEVICE @  "fp16" op.create dup "_vcache_"  !
     nn.ezkv_init "cache_man" !
 
     "MAX_CONTEXT" @ "MAX_BATCH" @ * dup dup dup 
