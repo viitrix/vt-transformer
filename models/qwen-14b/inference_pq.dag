@@ -10,7 +10,7 @@
 
 2                       "MAX_BATCH"             !
 1024                    "MAX_CONTEXT"           !
-"./weights/"            "G_PATH"                !
+"./qwen-14b/"            "G_PATH"                !
 
 %def init_internal_variable
     $DEVICE !
