@@ -15,13 +15,19 @@ LINK = -L../../install/lib \
 	   -ltokenizer_combo -ltokenizers_c -lsentencepiece \
 	   -ltensortype -lcuda_kernels -lnccl -lcudnn -lcudart -lcublas -lcublasLt 
 
-all: chat 
+all: chat  bench
 
 chat: chat.cpp memory.hpp
+	g++ $(FLAGS) -o $@ $< $(INC) $(LINK)
+
+bench: bench.cpp memory.hpp
 	g++ $(FLAGS) -o $@ $< $(INC) $(LINK)
 
 run: chat 
 	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${CUDA_DIR}/lib64:${NCCL_DIR}/lib:${CUDNN_DIR}/lib:${VT_SOURCE}/install/lib:${SENTENCEPIECE_DIR}/lib64 ./chat $(target)
 
+test: bench 
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${CUDA_DIR}/lib64:${NCCL_DIR}/lib:${CUDNN_DIR}/lib:${VT_SOURCE}/install/lib:${SENTENCEPIECE_DIR}/lib64 ./bench $(target)
+
 clean:
-	rm -f chat 
+	rm -f chat bech 
