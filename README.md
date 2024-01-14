@@ -24,8 +24,8 @@ A new Transformer framework for edge computing, based on pure c++, supports infe
 
 ### 以下是完成以及计划进行移植的开源大模型
 
-- [x] Qwen-7b
-- [x] Qwen-14b
+- [x] Qwen-7b   模型权重下载 model/qwen-7b/README.md 
+- [x] Qwen-14b  模型权重下载 model/qwen-14b/README.md
 - [ ] Qwen-70b
 - [ ] Qwen-VL
 - [ ] Whisper2
@@ -59,7 +59,7 @@ VT-Transformer架构上包括 TensorType 异构计算、 DAG 计算图执行引�
 
 ### 说明文档（TODO）
 
-* DAG 语法说明以及引擎 API
+* [DAG 语法说明](docs/DAG_reference.md)
 * 如何适配一个新的硬件平台
 * 如何移植一个新的 Transformer 模型
 
