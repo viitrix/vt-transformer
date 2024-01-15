@@ -55,6 +55,7 @@ softmax.o: softmax.cpp
 	hipcc $(FLAGS) -c -o $@ $<
 
 install: libdcu_kernels.a dcu_kernels.hpp
+	mkdir -p ../../install/lib	
 	cp libdcu_kernels.a ../../install/lib/
 	cp dcu_kernels.hpp ../../install/include/
 

@@ -256,7 +256,7 @@ namespace nn {
 
         tensor_t get_sub_cache(tensor_t kv_cache, int b, int l ) {
             int ci = batched_caches_[b];
-            size_t offset = l * cached_number * cached_tokens * hidden_size + ci * cached_tokens * hidden_size;
+            size_t offset = (size_t)l * cached_number * cached_tokens * hidden_size + ci * cached_tokens * hidden_size;
             std::vector<size_t> sub_shape{(size_t)cached_tokens, (size_t)hidden_size};
 
             auto ret = kv_cache->op_view(kv_cache, offset, sub_shape);
