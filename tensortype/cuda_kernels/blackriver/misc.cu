@@ -136,7 +136,7 @@ int rsqrt<__half>(const __half *in, __half *out, const int len, float eps, cudaS
 //----------------
 __global__ void rotary_embed_float(const float *in, const float *cos_sin, const int* pos, float *out, 
                                    const int bs, const int hnum, const int len, const int dims) {
-    int e = blockIdx.x * blockDim.x + threadIdx.x;
+    size_t e = blockIdx.x * blockDim.x + threadIdx.x;
     if ( e >= bs * len * hnum ) {
         return;
     }
@@ -144,7 +144,7 @@ __global__ void rotary_embed_float(const float *in, const float *cos_sin, const 
     out = out + e * dims;
 
     int b = e / (len * hnum);
-    int l = e / hnum + pos[b];
+    int l = (e - b * len * hum) / hnum + pos[b];
     cos_sin = cos_sin + l * dims * 2;
     
     for (int i = 0; i < dims / 2; i++) {
@@ -174,7 +174,7 @@ int rotary_embed<float>( const float *in, const float *cos_sin, const int* pos, 
 
 __global__ void rotary_embed_fp16(const __half *in, const float *cos_sin, const int* pos,  __half *out,  
                                    const int bs, const int hnum, const int len, const int dims) {
-    int e = blockIdx.x * blockDim.x + threadIdx.x;
+    size_t e = blockIdx.x * blockDim.x + threadIdx.x;
     if ( e >= bs * len * hnum ) {
         return;
     }
@@ -182,7 +182,7 @@ __global__ void rotary_embed_fp16(const __half *in, const float *cos_sin, const 
     out = out + e * dims;
 
     int b = e / (len * hnum);
-    int l = e / hnum + pos[b];
+    int l = (e - b * len * hum) / hnum + pos[b];
     cos_sin = cos_sin + l * dims * 2;
 
     for (int i = 0; i < dims / 2; i++) {

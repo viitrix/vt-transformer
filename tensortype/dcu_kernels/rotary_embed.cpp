@@ -14,7 +14,7 @@ template<typename T>
     out = out + e * dims;
 
     int b = e / (len * hnum);
-    int l = e / hnum + pos[b];
+    int l = (e - b * len * hnum) / hnum + pos[b];
     cos_sin = cos_sin + l * dims * 2;
 
     for (int i = 0; i < dims / 2; i++) {

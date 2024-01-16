@@ -30,8 +30,8 @@
     "_w_" @  0 ("HIDDEN_SIZE" @        "INTERMEDIATE_SIZE" @ 2) op.view  "_w_HI_" !
 
     ;; kv cached memroy
-    32 "MAX_BATCH" @ "MAX_CONTEXT" @ "HIDDEN_SIZE" @ 4 $DEVICE @  "fp16" op.create dup "_kcache_"  !
-    32 "MAX_BATCH" @ "MAX_CONTEXT" @ "HIDDEN_SIZE" @ 4 $DEVICE @  "fp16" op.create dup "_vcache_"  !
+    32 "MAX_BATCH" @ "MAX_CONTEXT" @ 16 + "HIDDEN_SIZE" @ 4 $DEVICE @  "fp16" op.create dup "_kcache_"  !
+    32 "MAX_BATCH" @ "MAX_CONTEXT" @ 16 + "HIDDEN_SIZE" @ 4 $DEVICE @  "fp16" op.create dup "_vcache_"  !
     nn.ezkv_init "cache_man" !
 
     "MAX_CONTEXT" @ "MAX_BATCH" @ * dup dup dup 
