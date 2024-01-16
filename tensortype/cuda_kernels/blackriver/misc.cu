@@ -144,7 +144,7 @@ __global__ void rotary_embed_float(const float *in, const float *cos_sin, const 
     out = out + e * dims;
 
     int b = e / (len * hnum);
-    int l = (e - b * len * hum) / hnum + pos[b];
+    int l = (e - b * len * hnum) / hnum + pos[b];
     cos_sin = cos_sin + l * dims * 2;
     
     for (int i = 0; i < dims / 2; i++) {
@@ -182,7 +182,7 @@ __global__ void rotary_embed_fp16(const __half *in, const float *cos_sin, const 
     out = out + e * dims;
 
     int b = e / (len * hnum);
-    int l = (e - b * len * hum) / hnum + pos[b];
+    int l = (e - b * len * hnum) / hnum + pos[b];
     cos_sin = cos_sin + l * dims * 2;
 
     for (int i = 0; i < dims / 2; i++) {
