@@ -24,4 +24,4 @@ test: bench
 
 
 clean:
-	rm -f chat
+	rm -f chat bench

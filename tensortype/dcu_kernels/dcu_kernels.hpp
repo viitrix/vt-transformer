@@ -16,19 +16,19 @@ template <typename T>
 int kr_dequantize_q8(const void *input, T *out, int feature_num, int feature_size, hipStream_t stream);
 
 template <typename T>
-int kr_quantize_q4(const T *input, void *out, int items, hipStream_t stream);
+int kr_quantize_q4(const T *input, void *out, const size_t items, hipStream_t stream);
 
 template <typename T>
-int kr_dequantize_q4(const void *input, T *out, int items, hipStream_t stream);
+int kr_dequantize_q4(const void *input, T *out, const size_t items, hipStream_t stream);
 
 template <typename T>
-int kr_dequantize_pq(const void *tab, const uint8_t *idx, T *out, int items, int S, hipStream_t stream);
+int kr_dequantize_pq(const void *tab, const uint8_t *idx, T *out, const size_t items, int S, hipStream_t stream);
 
 template <typename T>
 int kr_embed(const int *ids, const T *table, T *out, const int len, const int hidden_size, hipStream_t stream);
 
 template <typename T, typename TT>
-int kr_convert(const T* in, TT* out, const int size, hipStream_t stream);
+int kr_convert(const T* in, TT* out, const size_t items, hipStream_t stream);
 
 template <typename T>
 int kr_scale(const T* in, T* out, const float alpha, const float beta, const int n, hipStream_t stream);
@@ -58,7 +58,7 @@ template <typename T>
 int kr_add_bias(const T *in, const T* bias, T* out, const int length, const int feature, hipStream_t stream);
 
 template <typename T>
-int kr_add_broadcast(const T *in, const T* bias, T* out, const int length, const int inter, const int feature, hipStream_t stream);
+int kr_add_broadcast(const T *in, const T* bias, T* out, const int length, const size_t inter, const size_t feature, hipStream_t stream);
 
 template <typename T>
 int kr_easy_top1(const T *logits, int *out, const int batch, const int vocab_size, hipStream_t stream);

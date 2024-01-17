@@ -13,7 +13,7 @@
 namespace vt { namespace dcu {
 
 template <typename T>
-__global__ void dequantize_pq(const __half *tab_, const uint8_t *idx, T *out, int items, int S) {
+__global__ void dequantize_pq(const __half *tab_, const uint8_t *idx, T *out, const size_t items, int S) {
     __shared__ __half tab[128];
 
     const int SS = blockIdx.x;
@@ -59,11 +59,11 @@ __global__ void dequantize_pq(const __half *tab_, const uint8_t *idx, T *out, in
 }
 
 template <>
-int kr_dequantize_pq<__half>(const void *tab, const uint8_t *idx, __half *out, int items, int S, hipStream_t stream) {
+int kr_dequantize_pq<__half>(const void *tab, const uint8_t *idx, __half *out, const size_t items_, int S, hipStream_t stream) {
     dim3 block_size(256);
     dim3 num_of_blocks(S);
 
-    items = items * 3 / 8;
+    size_t items = items_ * 3 / 8;
     dequantize_pq<__half> <<< num_of_blocks, block_size, 0, stream>>> ((__half *)tab, idx, out, items, S);
 
     hipError_t err = hipGetLastError();
@@ -77,7 +77,7 @@ int kr_dequantize_pq<__half>(const void *tab, const uint8_t *idx, __half *out, i
 // ===================================================
 
 template<typename T>
-__global__ void quantize_q4_kernel(const T *in, void *out, int items) {
+__global__ void quantize_q4_kernel(const T *in, void *out, const size_t items) {
     size_t blk = blockIdx.x * blockDim.x + threadIdx.x;
     if ( blk * Q4_BLOCK_SIZE >= items ) {
         return;
@@ -114,7 +114,7 @@ __global__ void quantize_q4_kernel(const T *in, void *out, int items) {
 }
 
 template <>
-int kr_quantize_q4<float>(const float *in, void *out, int items, hipStream_t stream) {
+int kr_quantize_q4<float>(const float *in, void *out, const size_t items, hipStream_t stream) {
     int blk_num = items / Q4_BLOCK_SIZE;
 
     dim3 block_size(256);
@@ -131,7 +131,7 @@ int kr_quantize_q4<float>(const float *in, void *out, int items, hipStream_t str
 }
 
 template <>
-int kr_quantize_q4<__half>(const __half *in, void *out, int items, hipStream_t stream) {
+int kr_quantize_q4<__half>(const __half *in, void *out, const size_t items, hipStream_t stream) {
     int blk_num = items / Q4_BLOCK_SIZE;
 
     dim3 block_size(256);
@@ -148,7 +148,7 @@ int kr_quantize_q4<__half>(const __half *in, void *out, int items, hipStream_t s
 }
 
 template<typename T>
-__global__ void dequantize_q4_kernel(const void *in, T *out, int items) {
+__global__ void dequantize_q4_kernel(const void *in, T *out, const size_t items) {
     size_t blk = blockIdx.x;
     int idx = threadIdx.x;
     if ( blk * Q4_BLOCK_SIZE >= items ) {
@@ -179,7 +179,7 @@ __global__ void dequantize_q4_kernel(const void *in, T *out, int items) {
 }
 
 template <>
-int kr_dequantize_q4<__half>(const void *in, __half *out, int items, hipStream_t stream) {
+int kr_dequantize_q4<__half>(const void *in, __half *out, const size_t items, hipStream_t stream) {
     dim3 block_size(Q4_BLOCK_SIZE);
     dim3 num_of_blocks((items + block_size.x - 1) / block_size.x);
 

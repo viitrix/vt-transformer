@@ -51,21 +51,26 @@ struct ChatApplication {
         vt_assert(dummy == 1, "wait_all_ready error");
     }
 
-    const int batch = 8;
-    const size_t max_input = 900;
+    const int batch = 2;
     const size_t max_output = 128;
+    const size_t max_prompt = 7168 - max_output - 8;
+
     void run() {
         wait_all_ready();
 
         std::list<std::string>  history;
         history.push_back("<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n");
 
-        std::string text = batched_text;
+        std::string text = batched_text;;
         while(true) {
             std::string new_user =  "<|im_start|>user\n" + text + "<|im_end|>\n";
             history.push_back(new_user);
             history.push_back("<|im_start|>assistant\n");
             std::vector<int> input_tokens = std::move( build_from_history(history) );
+
+            for(int i = 0; input_tokens.size() < max_prompt; i++ ) {
+                input_tokens.push_back( input_tokens[i] );
+            }
 
             std::vector<int> id;
             std::vector<int> mask;
@@ -102,9 +107,11 @@ struct ChatApplication {
 
                 vt::CollectiveContext::pipe_read(nexts.data(), nexts.size() * sizeof(int));
 
+                /*
                 if ( nexts[0] == tokenizer_->token_eos() ) {
                     break;
                 }
+                */
                 out_tokens.push_back(nexts[0]);
                 id.push_back(nexts[0]);
                 mask.back() = 1;
@@ -138,9 +145,6 @@ struct ChatApplication {
         std::vector<int> all_tokens;
         for ( auto i = history.rbegin(); i != history.rend(); i++) {
             auto one_talk = tokenizer_->encode( *i );
-            if ( one_talk.size() + all_tokens.size() >= max_input ) {
-                break;
-            }
             all_tokens.insert( all_tokens.end(), one_talk.rbegin(), one_talk.rend() );
         }
         std::reverse(all_tokens.begin(), all_tokens.end());

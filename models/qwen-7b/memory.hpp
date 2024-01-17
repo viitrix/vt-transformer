@@ -10,7 +10,7 @@ struct MemoryCounting : public vt::NativeWord {
     void run(vt::Stack& stack) override {
         size_t tokens = stack.pop_number();
         size_t batch = stack.pop_number();
-        size_t full_tokens = tokens * 2;
+        size_t full_tokens = tokens + 8;
 
         size_t xinput = batch * tokens * HIDDEN_SIZE;
         size_t causal_mask = batch * tokens * full_tokens;

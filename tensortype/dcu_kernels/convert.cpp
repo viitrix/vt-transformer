@@ -4,8 +4,8 @@
 
 namespace vt { namespace dcu {
 
-__global__ void float_to_fp16(const float *in, __half* out, const int items) {
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
+__global__ void float_to_fp16(const float *in, __half* out, const size_t items) {
+    size_t i = blockIdx.x * blockDim.x + threadIdx.x;
     if ( i >= items ) {
         return;
     }
@@ -13,7 +13,7 @@ __global__ void float_to_fp16(const float *in, __half* out, const int items) {
 }
 
 template<>
-int kr_convert<float, __half>(const float* in, __half* out, const int items, hipStream_t stream) {
+int kr_convert<float, __half>(const float* in, __half* out, const size_t items, hipStream_t stream) {
     dim3 block_size(256);
 	dim3 num_of_blocks((items + block_size.x - 1) / block_size.x);
 
