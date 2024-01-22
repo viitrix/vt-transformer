@@ -2,15 +2,19 @@
 
 FLAGS = -Wall -O3 -D_USING_DEVICE_CUDA_ -DUSING_DEVICE_DNNL_ 
 INC = -I../../install/include \
-	  -I/usr/local/cuda/include \
-	  -I/home/teaonly/opt/nccl/include \
-	  -I/home/teaonly/opt/cudnn/include 
+	  -I${CUDA_DIR}/include \
+	  -I${NCCL_DIR}/include \
+	  -I${CUDNN_DIR}/include 
+
 LINK = -L../../install/lib \
-	   -L/usr/local/cuda/lib64 \
-       -L/home/teaonly/opt/nccl/lib \
-	   -L/home/teaonly/opt/cudnn/lib \
+	   -L${CUDA_DIR}/lib64 \
+       -L${NCCL_DIR}/lib \
+	   -L${SENTENCEPIECE_DIR}/lib \
+	   -L${CUDA_DIR}/lib \
 	   -L/usr/lib/x86_64-linux-gnu \
+	   -ltokenizer_combo -ltokenizers_c -lsentencepiece \
 	   -ltensortype -lcuda_kernels -lnccl -lcudnn -lcudart -lcublas -lcublasLt 
+
 
 all: repl 
 
@@ -18,7 +22,7 @@ repl: repl.cpp
 	g++ $(FLAGS) -o $@ $< $(INC) $(LINK)
 
 run: repl 
-	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/home/teaonly/opt/nccl/lib:/home/teaonly/opt/dnnl/lib:/home/teaonly/opt/cudnn/lib:/usr/lib/x86_64-linux-gnu ./repl ${target}
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${CUDA_DIR}/lib64:${NCCL_DIR}/lib:${CUDNN_DIR}/lib:${VT_SOURCE}/install/lib:${SENTENCEPIECE_DIR}/lib64 ./repl $(target)
 
 clean:
 	rm -f repl 

@@ -1,9 +1,9 @@
 #ifndef _MEMORY_HPP_
 
-const int VOCAB_SIZE = 151936;
-const int HIDDEN_SIZE = 4096;
-const int INTERMEDIATE_SIZE = 11008;
-const int HEADS_NUM = 32;
+const int VOCAB_SIZE = 152064;
+const int HIDDEN_SIZE = 8192;
+const int INTERMEDIATE_SIZE = 24576;
+const int HEADS_NUM = 64;
 const int HEAD_HIDDEN = 128;
 
 struct MemoryCounting : public vt::NativeWord {

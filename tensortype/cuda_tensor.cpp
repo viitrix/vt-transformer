@@ -542,6 +542,11 @@ ComputingReturn CUDATensor<DT>::op_causal_mask(tensor_t self, tensor_t out) {
         cuda::causal_mask<float>(mask, dst, batch, new_tokens, full_tokens, stream);
         return OP_OK;
     }
+    if ( out->dtype() == DataType::FP16 ) {
+        device_fp16_t* dst = (device_fp16_t *)out->cuda_fp16()->data();
+        cuda::causal_mask<device_fp16_t>(mask, dst, batch, new_tokens, full_tokens, stream);
+        return OP_OK;
+    }
     return OP_OUTPUT_ERROR;
 }
 
@@ -1055,8 +1060,8 @@ ComputingReturn CUDATensor<DT>::op_add(tensor_t self, tensor_t b, tensor_t c) {
         CUDNN_CHECK( cudnnOpTensor(ComputingContext::cudnn_handle,
                                     opTensorDesc,
                                     &alpha, adesc, data(),
-                                    &alpha, bdesc, b->cuda_fp16()->data(),
-                                    &beta,  cdesc, c->cuda_fp16()->data()) );
+                                    &alpha, bdesc, b->device_data(),
+                                    &beta,  cdesc, c->device_data()) );
 
         CUDNN_CHECK( cudnnDestroyOpTensorDescriptor(opTensorDesc) );
         return OP_OK;
@@ -1283,34 +1288,34 @@ ComputingReturn  CUDATensor<DT>::op_qk(tensor_t self, tensor_t k_, tensor_t qk_)
         return OP_OK;
     }
     if ( DT == DataType::FP16 ) {
-#if 0
-        for (int i = 0; i < batch * heads; i++) {
-            device_fp16_t* B = (device_fp16_t *)data() + i * HnT;
-            device_fp16_t* A = (device_fp16_t *)(k_->cuda_fp16()->data()) + i * HfT;
-            float* C = (float *)(qk_->cuda_float()->data()) + i * TT;
-            cuda::LtSgemm(ComputingContext::cublasLt_handle,
+        if ( qk_->is_float() ) {
+            device_fp16_t* B = (device_fp16_t *)data();
+            device_fp16_t* A = (device_fp16_t *)(k_->cuda_fp16()->data());
+            float* C = (float *)(qk_->cuda_float()->data());
+            cuda::LtSgemmBatched(ComputingContext::cublasLt_handle,
                     CUBLAS_OP_T, CUBLAS_OP_N,
                     m, n, k,
                     &alpha, A, CUDA_R_16F, k,
                     B, CUDA_R_16F, k, &beta,
-                    C, CUDA_R_32F, m,
+                    C, CUDA_R_32F, m, batch * heads,
                     ComputingContext::cuda_workspace,
                     ComputingContext::workspace_size);
+            return OP_OK;
         }
-#else
-        device_fp16_t* B = (device_fp16_t *)data();
-        device_fp16_t* A = (device_fp16_t *)(k_->cuda_fp16()->data());
-        float* C = (float *)(qk_->cuda_float()->data());
-        cuda::LtSgemmBatched(ComputingContext::cublasLt_handle,
-                CUBLAS_OP_T, CUBLAS_OP_N,
-                m, n, k,
-                &alpha, A, CUDA_R_16F, k,
-                B, CUDA_R_16F, k, &beta,
-                C, CUDA_R_32F, m, batch * heads,
-                ComputingContext::cuda_workspace,
-                ComputingContext::workspace_size);
-#endif
-        return OP_OK;
+        if ( qk_->is_fp16() ) {
+            device_fp16_t* B = (device_fp16_t *)data();
+            device_fp16_t* A = (device_fp16_t *)(k_->cuda_fp16()->data());
+            device_fp16_t* C = (device_fp16_t *)(qk_->cuda_fp16()->data());
+            cuda::LtSgemmBatched(ComputingContext::cublasLt_handle,
+                    CUBLAS_OP_T, CUBLAS_OP_N,
+                    m, n, k,
+                    &alpha, A, CUDA_R_16F, k,
+                    B, CUDA_R_16F, k, &beta,
+                    C, CUDA_R_16F, m, batch * heads,
+                    ComputingContext::cuda_workspace,
+                    ComputingContext::workspace_size);
+            return OP_OK;
+        }
     }
 
     return OP_TODO_ERROR;

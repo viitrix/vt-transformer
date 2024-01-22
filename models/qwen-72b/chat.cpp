@@ -22,16 +22,18 @@ struct ChatApplication {
 
     void write_all(const void* buf, size_t nbyte) {
         vt_assert( vt::CollectiveContext::pipe_write(1, buf, nbyte) > 0, "write_all error");
-        vt_assert( vt::CollectiveContext::pipe_write(2, buf, nbyte) > 0, "write_all error");
+        //vt_assert( vt::CollectiveContext::pipe_write(2, buf, nbyte) > 0, "write_all error");
     }
 
     void wait_all_ready() {
         int dummy = -1;
         vt::CollectiveContext::pipe_read(&dummy, sizeof(int));
         vt_assert(dummy == 1, "wait_all_ready error");
+        /*
         dummy = -1;
         vt::CollectiveContext::pipe_read(&dummy, sizeof(int));
         vt_assert(dummy == 1, "wait_all_ready error");
+        */
     }
 
     const size_t max_input = 512;
@@ -175,8 +177,6 @@ void do_inference(vt::Enviroment* env, const char* dag_file, const char* init_cm
     delete target_cmd;
 }
 
-
-
 int main(int argc, char* argv[] ) {
     if ( argc < 2 ) {
         std::cout << "usage: ./chat [dag_file] " << std::endl;
@@ -209,6 +209,7 @@ int main(int argc, char* argv[] ) {
         vt::MemoryContext::shutdown();
 
     } else if ( vt::CollectiveContext::pipe_rank == 2) {
+        /*
         vt::MemoryContext::boot( MEM_CTX_SIZE );
         vt::ComputingContext::boot( 1 );
         vt::Enviroment* env = new vt::Enviroment();
@@ -219,6 +220,8 @@ int main(int argc, char* argv[] ) {
         delete env;
         vt::ComputingContext::shutdown();
         vt::MemoryContext::shutdown();
+        */
+
     }
 
     vt::CollectiveContext::shutdown();

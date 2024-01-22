@@ -1,14 +1,14 @@
 1e-06                   "RMS_EPS"               !
-10000.0                 "ROTARY_BASE"           !
+1000000.0               "ROTARY_BASE"           !
 2.5                     "TEMPERATURE"           !
 
-151936                  "VOCAB_SIZE"            !
-4096                    "HIDDEN_SIZE"           !
-11008                   "INTERMEDIATE_SIZE"     !
-32                      "HEADS_NUM"             !
+152064                  "VOCAB_SIZE"            !
+8192                    "HIDDEN_SIZE"           !
+24576                   "INTERMEDIATE_SIZE"     !
+64                      "HEADS_NUM"             !
 128                     "HEAD_HIDDEN"           !
 
-8                       "MAX_BATCH"             !
+2                       "MAX_BATCH"             !
 1024                    "MAX_CONTEXT"           !
 "./weights/"            "G_PATH"                !
 
@@ -22,8 +22,8 @@
     "MAX_BATCH" @ "MAX_CONTEXT" @ app.mem 1 $DEVICE @ "fp16" op.create  "_var_"  !
     
     ;; kv cached memroy
-    32 "MAX_BATCH" @ "MAX_CONTEXT" @ 16 + "HIDDEN_SIZE" @ 4 $DEVICE @  "fp16" op.create dup "_kcache_"  !
-    32 "MAX_BATCH" @ "MAX_CONTEXT" @ 16 + "HIDDEN_SIZE" @ 4 $DEVICE @  "fp16" op.create dup "_vcache_"  !
+    40 "MAX_BATCH" @ "MAX_CONTEXT" @ 16 + "HIDDEN_SIZE" @ 4 $DEVICE @  "fp16" op.create dup "_kcache_"  !
+    40 "MAX_BATCH" @ "MAX_CONTEXT" @ 16 + "HIDDEN_SIZE" @ 4 $DEVICE @  "fp16" op.create dup "_vcache_"  !
     nn.ezkv_init "cache_man" !
 
     "MAX_CONTEXT" @ "MAX_BATCH" @ * dup dup dup 
@@ -67,7 +67,7 @@
     ("HIDDEN_SIZE" @ 3 * "HIDDEN_SIZE" @ 2 $DEVICE @  "fp16" )  op.create  $L @  "attn.qkv_proj.weight" | !
     ("HIDDEN_SIZE" @ 3 *                 1 $DEVICE @  "fp16" )  op.create  $L @  "attn.qkv_proj.bias" | !
     ;
-    ; dummy split to three tensors, 4096 * 4096 = 16777216
+    ; dummy split to three tensors 
     ;
     ($L @ "attn.qkv_proj.weight" | @ 0                             "HIDDEN_SIZE" @ dup 2 op.view)  $L @  "query.weight" | !
     ($L @ "attn.qkv_proj.weight" | @ ("HIDDEN_SIZE" @ dup *)       "HIDDEN_SIZE" @ dup 2 op.view)  $L @  "key.weight" | !
@@ -153,7 +153,7 @@
     $L @ "mlp.c_proj.weight"                  | @ "mlp.c_proj.weight"                 !
 
     ;
-    ; dummy split to three tensors, 4096 * 4096 = 16777216
+    ; dummy split to three tensors
     ;
     ("attn.qkv_proj.weight" @ 0                             "HIDDEN_SIZE" @ dup 2 op.view)  "query.weight"  !
     ("attn.qkv_proj.weight" @ ("HIDDEN_SIZE" @ dup *)       "HIDDEN_SIZE" @ dup 2 op.view)  "key.weight"    !
@@ -182,7 +182,7 @@
     ;; causal mask, norm2 in GPU, extend to aligen address
     {
         dup
-        "_var_" @ swap $batch @ 1 $tokens @  $full_tokens @ 4 "float" op.view_as  "causal_mask"  !
+        "_var_" @ swap $batch @ 1 $tokens @  $full_tokens @ 4 op.view  "causal_mask"  !
         $batch @ $tokens @ $full_tokens @ 2 * * * +
 
         dup
@@ -224,10 +224,7 @@
         "xfb" @ 0 $batch @ "HEADS_NUM" @ $full_tokens @ "HEAD_HIDDEN" @ 4 op.view "zfb" !
 
         dup
-        "_var_" @ swap $batch @ "HEADS_NUM" @ $tokens @ $full_tokens @ 4 op.view "xll_half" !
-        $batch @ "HEADS_NUM" @ $tokens @ $full_tokens @ * * * +
-
-        "_var_" @ swap $batch @ "HEADS_NUM" @ $tokens @ $full_tokens @ 4 "float" op.view_as "xll" !
+        "_var_" @ swap $batch @ "HEADS_NUM" @ $tokens @ $full_tokens @ 4 op.view "xll" !
     }  
     dup
     {
@@ -287,7 +284,7 @@
     "cache_man" @  "_position" @ nn.ezkv_position  $pos !
 
     "xinput" @ "ln_1.weight" @ "norm2" @ "xa" @ "RMS_EPS" @ op.rmsnorm
-
+    
     ;; attention
     {
         ;; get key for new tokens, combing cached tokens, position embedding
@@ -302,7 +299,7 @@
         "yb" @ "zc" @ op.transpose_0213
 
         ;; query@key + apply causal_mask + softmax
-        "zc" @  "zfa" @  "xll" @ op.querykey
+        "zc" @  "zfa" @ "xll" @ op.querykey
         "xll" @ "causal_mask" @ "xll" @ op.add
         "xll" @ "xll" @ op.softmax
         
@@ -312,11 +309,10 @@
         "yfa" @ "zfb" @ op.transpose_0213
 
         ;; do attention and transpose back
-        "xll_half" @ "xll" @ op.convert
-        "xll_half" @ "zfb" @ "zb" @ op.attn          
+        "xll" @ "zfb" @ "zb" @ op.attn          
         "zb" @ "ya" @ op.transpose_0213          ;; attn->ya 
     }
-    
+  
     ;; do dense & residual
     "xa" @ "attn.c_proj.weight" @  op.null "xb" @ op.linear
     "xb" @ "xinput" @ "xa" @ op.add
@@ -343,13 +339,12 @@
     $L !!
 %end
 
-%def gpu_init
+%def gpu0_init
     "G_DEVICE" ! 
 
     "G_DEVICE" @       init_internal_variable
  
     "host"             create_input_weight
-    "G_DEVICE" @       create_output_weight
    
     "G_DEVICE" @    "L0."   create_layer_weight 
     "G_DEVICE" @    "L1."   create_layer_weight 
@@ -361,31 +356,8 @@
     "G_DEVICE" @    "L7."   create_layer_weight 
     "G_DEVICE" @    "L8."   create_layer_weight 
     "G_DEVICE" @    "L9."   create_layer_weight
-    "G_DEVICE" @    "L10."  create_layer_weight
-    "G_DEVICE" @    "L11."  create_layer_weight
-    "G_DEVICE" @    "L12."  create_layer_weight
-    "G_DEVICE" @    "L13."  create_layer_weight
-    "G_DEVICE" @    "L14."  create_layer_weight
-    "G_DEVICE" @    "L15."  create_layer_weight
-    "G_DEVICE" @    "L16."   create_layer_weight 
-    "G_DEVICE" @    "L17."   create_layer_weight 
-    "G_DEVICE" @    "L18."   create_layer_weight 
-    "G_DEVICE" @    "L19."   create_layer_weight 
-    "G_DEVICE" @    "L20."   create_layer_weight
-    "G_DEVICE" @    "L21."   create_layer_weight 
-    "G_DEVICE" @    "L22."   create_layer_weight 
-    "G_DEVICE" @    "L23."   create_layer_weight 
-    "G_DEVICE" @    "L24."   create_layer_weight 
-    "G_DEVICE" @    "L25."   create_layer_weight
-    "G_DEVICE" @    "L26."   create_layer_weight
-    "G_DEVICE" @    "L27."   create_layer_weight
-    "G_DEVICE" @    "L28."   create_layer_weight
-    "G_DEVICE" @    "L29."   create_layer_weight
-    "G_DEVICE" @    "L30."   create_layer_weight
-    "G_DEVICE" @    "L31."   create_layer_weight
-    
+
     "G_PATH" @ load_input_weight
-    "G_PATH" @ load_output_weight
 
     "G_PATH" @ "h_0."  | "L0." load_layer_weight
     "G_PATH" @ "h_1."  | "L1." load_layer_weight
@@ -397,31 +369,9 @@
     "G_PATH" @ "h_7."  | "L7." load_layer_weight
     "G_PATH" @ "h_8."  | "L8." load_layer_weight
     "G_PATH" @ "h_9."  | "L9." load_layer_weight
-    "G_PATH" @ "h_10."  | "L10." load_layer_weight
-    "G_PATH" @ "h_11."  | "L11." load_layer_weight
-    "G_PATH" @ "h_12."  | "L12." load_layer_weight
-    "G_PATH" @ "h_13."  | "L13." load_layer_weight
-    "G_PATH" @ "h_14."  | "L14." load_layer_weight
-    "G_PATH" @ "h_15."  | "L15." load_layer_weight
-    "G_PATH" @ "h_16."  | "L16." load_layer_weight
-    "G_PATH" @ "h_17."  | "L17." load_layer_weight
-    "G_PATH" @ "h_18."  | "L18." load_layer_weight
-    "G_PATH" @ "h_19."  | "L19." load_layer_weight
-    "G_PATH" @ "h_20."  | "L20." load_layer_weight
-    "G_PATH" @ "h_21."  | "L21." load_layer_weight
-    "G_PATH" @ "h_22."  | "L22." load_layer_weight
-    "G_PATH" @ "h_23."  | "L23." load_layer_weight
-    "G_PATH" @ "h_24."  | "L24." load_layer_weight
-    "G_PATH" @ "h_25."  | "L25." load_layer_weight
-    "G_PATH" @ "h_26."  | "L26." load_layer_weight
-    "G_PATH" @ "h_27."  | "L27." load_layer_weight
-    "G_PATH" @ "h_28."  | "L28." load_layer_weight
-    "G_PATH" @ "h_29."  | "L29." load_layer_weight
-    "G_PATH" @ "h_30."  | "L30." load_layer_weight
-    "G_PATH" @ "h_31."  | "L31." load_layer_weight
 %end
 
-%def gpu_main
+%def gpu0_main
     prepare_input
 
     ;; embed    
@@ -429,55 +379,19 @@
         "ids~" @ "wte.weight" @ "xinput~" @ op.embed
         "xinput" @ "xinput~" @ op.copy
     }
-
-    "L0."   sync_layer_clone 0  layer_forward 
-    "L1."   sync_layer_clone 1  layer_forward    
-    "L2."   sync_layer_clone 2  layer_forward    
-    "L3."   sync_layer_clone 3  layer_forward 
-    "L4."   sync_layer_clone 4  layer_forward 
-    "L5."   sync_layer_clone 5  layer_forward 
-    "L6."   sync_layer_clone 6  layer_forward 
-    "L7."   sync_layer_clone 7  layer_forward 
-    "L8."   sync_layer_clone 8  layer_forward 
-    "L9."   sync_layer_clone 9  layer_forward 
-    "L10."  sync_layer_clone 10 layer_forward 
-    "L11."  sync_layer_clone 11 layer_forward 
-    "L12."  sync_layer_clone 12 layer_forward 
-    "L13."  sync_layer_clone 13 layer_forward 
-    "L14."  sync_layer_clone 14 layer_forward 
-    "L15."  sync_layer_clone 15 layer_forward 
-    "L16."  sync_layer_clone 16 layer_forward
-    "L17."  sync_layer_clone 17 layer_forward
-    "L18."  sync_layer_clone 18 layer_forward
-    "L19."  sync_layer_clone 19 layer_forward
-    "L20."  sync_layer_clone 20 layer_forward
-    "L21."  sync_layer_clone 21 layer_forward
-    "L22."  sync_layer_clone 22 layer_forward
-    "L23."  sync_layer_clone 23 layer_forward
-    "L24."  sync_layer_clone 24 layer_forward
-    "L25."  sync_layer_clone 25  layer_forward
-    "L26."  sync_layer_clone 26 layer_forward
-    "L27."  sync_layer_clone 27 layer_forward
-    "L28."  sync_layer_clone 28 layer_forward
-    "L29."  sync_layer_clone 29 layer_forward
-    "L30."  sync_layer_clone 30 layer_forward
-    "L31."  sync_layer_clone 31 layer_forward
-
-    ;; ln & output    
-    {
-        "xinput" @ "ln_f.weight" @ "norm2" @ "xb" @ "RMS_EPS" @ op.rmsnorm
-        "xb" @ "mask~" @ "lm_head.weight" @ "all_logits" @  op.all_logits 
-    }
    
-    ;; reshape all_logits according to user's masks
-    "all_logits" @ 0 rot "VOCAB_SIZE" @ 2 op.view "all_logits" !
-
-    ;; sampling using tempture & top_p
+    "L0."   sync_layer_clone 0  layer_forward
+    "L1."   sync_layer_clone 0  layer_forward
+    "L2."   sync_layer_clone 0  layer_forward
+    "L3."   sync_layer_clone 0  layer_forward
+    "L4."   sync_layer_clone 0  layer_forward
+    "L5."   sync_layer_clone 0  layer_forward
+    "L6."   sync_layer_clone 0  layer_forward
+    "L7."   sync_layer_clone 0  layer_forward
+    "L8."   sync_layer_clone 0  layer_forward
+    "L9."   sync_layer_clone 0  layer_forward
     
-    ;; "all_logits" @ "TEMPERATURE" @ op.sampling_top3
-    "all_logits" @ op.sampling_top1
-    
-    0 io.pipe.write
-
+    "xinput" @ io.dump
 %end
+
 
