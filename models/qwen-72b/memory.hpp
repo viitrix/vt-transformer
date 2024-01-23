@@ -26,8 +26,8 @@ struct MemoryCounting : public vt::NativeWord {
             size_t xfa = batch * full_tokens * HIDDEN_SIZE;
             size_t xfb = batch * full_tokens * HIDDEN_SIZE;
             size_t xll_half = batch * HEADS_NUM * tokens * full_tokens;
-            size_t xll = batch * HEADS_NUM * tokens * full_tokens * 2;
-            attn = xc + xd + xfa + xfb + xll_half + xll;
+            //size_t xll = batch * HEADS_NUM * tokens * full_tokens * 2;
+            attn = xc + xd + xfa + xfb + xll_half;
         }
 
         size_t mlp = 0;

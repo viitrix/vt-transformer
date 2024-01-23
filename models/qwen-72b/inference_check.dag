@@ -292,7 +292,7 @@
         "yb" @ "rotary_cache" @ $pos @ "yc" @  op.rotary_embed
         "cache_man" @ "_kcache_" @ "xc" @ "xfb" @ $L @ nn.ezkv_update
         "yfb" @ "zfa" @ op.transpose_0213
-        
+
         ;; get query@key
         "xa" @ "query.weight" @ "query.bias" @ "xc" @ op.linear
         "yc" @ "rotary_cache" @ $pos @ "yb" @  op.rotary_embed
@@ -312,11 +312,11 @@
         "xll" @ "zfb" @ "zb" @ op.attn          
         "zb" @ "ya" @ op.transpose_0213          ;; attn->ya 
     }
-  
+ 
     ;; do dense & residual
     "xa" @ "attn.c_proj.weight" @  op.null "xb" @ op.linear
     "xb" @ "xinput" @ "xa" @ op.add
-
+    
     ;; post layer norm
     "xa" @ "ln_2.weight" @ "norm2" @ "xb" @ "RMS_EPS" @ op.rmsnorm
 
@@ -327,7 +327,7 @@
         
         "xb" @ "mlp.w1.weight" @ op.null "x4a" @ op.linear
         "xb" @ "mlp.w2.weight" @ op.null "x4b" @ op.linear
-        
+   
         "x4b" @ "x4a" @ "x4a" @ op.silu_product
         "x4a" @ "mlp.c_proj.weight" @ op.null "xb" @ op.linear
         
@@ -381,17 +381,23 @@
     }
    
     "L0."   sync_layer_clone 0  layer_forward
-    "L1."   sync_layer_clone 0  layer_forward
-    "L2."   sync_layer_clone 0  layer_forward
-    "L3."   sync_layer_clone 0  layer_forward
-    "L4."   sync_layer_clone 0  layer_forward
-    "L5."   sync_layer_clone 0  layer_forward
-    "L6."   sync_layer_clone 0  layer_forward
-    "L7."   sync_layer_clone 0  layer_forward
-    "L8."   sync_layer_clone 0  layer_forward
-    "L9."   sync_layer_clone 0  layer_forward
+    "L1."   sync_layer_clone 1  layer_forward
+    "L2."   sync_layer_clone 2  layer_forward
+    "L3."   sync_layer_clone 3  layer_forward
+    "L4."   sync_layer_clone 4  layer_forward
+    "L5."   sync_layer_clone 5  layer_forward
+    "L6."   sync_layer_clone 6  layer_forward
+    "L7."   sync_layer_clone 7  layer_forward
+    "L8."   sync_layer_clone 8  layer_forward
+    "L9."   sync_layer_clone 9  layer_forward
     
-    "xinput" @ io.dump
 %end
 
+%def gpu1_init
+
+%end
+
+%def gpu1_main
+    
+%end
 
