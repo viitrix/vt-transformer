@@ -1,4 +1,4 @@
-# vt-transformer
+# VT-Transformer
 面向边缘和端，基于C++开发的 Transformer 开发框架，支持推理和训练。
 
 A new Transformer framework for edge computing, based on pure c++, supports inference and training.
@@ -22,17 +22,19 @@ A new Transformer framework for edge computing, based on pure c++, supports infe
 - [ ] ... 
 
 
-### 以下是完成以及计划进行移植的开源大模型，模型权重下载参考模型目录下的 README
+### 以下是完成以及计划进行移植的开源大模型
 
-- [x] Qwen-7b  
-- [x] Qwen-14b
-- [x] Qwen-72b
+- [x] Qwen-7b  (模型文件下载：链接：https://pan.baidu.com/s/1R3kNzM4CaDcFrFw_UXYxhA 提取码：qmta )
+- [x] Qwen-14b 
+- [x] Qwen-70b
 - [ ] Qwen-VL
-- [ ] Whisper2
+- [x] Whisper2
 - [ ] ChatGLM
-- [ ] Baichuan
+- [x] Baichuan
 - [ ] LLAMA2
 - [ ] ...
+
+注意，需要下载更多转换好的模型文件，可以联系我们的技术支持，参考 https://www.viitrix.com/ 。
 
 ###  当前性能指标
 
@@ -88,4 +90,4 @@ models目录下的有对应的Makefile文件，非常简单，可以参考修改
 
 ## 5. 关于训推一体机产品 
 
-上海云锦微基于VT-Transformer（开源）、VT-NAL、VT-OS开发了完整的训推一体机，具体参考：https://www.viitrix.com/ 
+上海云锦微基于VT-Transformer（开源）开发了完整的训推一体机，具体参考：https://www.viitrix.com/ 。
