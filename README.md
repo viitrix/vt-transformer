@@ -24,9 +24,10 @@ A new Transformer framework for edge computing, based on pure c++, supports infe
 
 ### 以下是完成以及计划进行移植的开源大模型
 
+- [x] Qwen-1.8b 
 - [x] Qwen-7b  (模型文件下载：链接：https://pan.baidu.com/s/1R3kNzM4CaDcFrFw_UXYxhA 提取码：qmta )
 - [x] Qwen-14b 
-- [x] Qwen-70b
+- [x] Qwen-72b
 - [ ] Qwen-VL
 - [x] Whisper2
 - [ ] ChatGLM
