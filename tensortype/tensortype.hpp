@@ -177,6 +177,16 @@ using dcu_q4_t = DCUTensor<DataType::Q4>;
 using dcu_pq_t = DCUTensor<DataType::PQ>;
 #endif
 
+#ifdef _USING_DEVICE_COREX_
+template <DataType _DTYPE_> struct CXTensor;
+using cx_float_t = CXTensor<DataType::Float>;
+using cx_fp16_t = CXTensor<DataType::FP16>;
+using cx_int_t = CXTensor<DataType::Int>;
+using cx_q8_t = CXTensor<DataType::Q8>;
+using cx_q4_t = CXTensor<DataType::Q4>;
+using cx_pq_t = CXTensor<DataType::PQ>;
+#endif
+
 #ifdef _USING_DEVICE_DNNL_
 template <DataType _DTYPE_> struct DNNLTensor;
 using dnnl_float_t = DNNLTensor<DataType::Float>;
@@ -212,6 +222,15 @@ public:
     TensorType(dcu_q8_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Q8), impl_(tensor) {};
     TensorType(dcu_q4_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Q4), impl_(tensor) {};
     TensorType(dcu_pq_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::PQ), impl_(tensor) {};
+#endif
+
+#ifdef _USING_DEVICE_COREX_
+    TensorType(cx_float_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Float), impl_(tensor) {};
+    TensorType(cx_fp16_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::FP16), impl_(tensor) {};
+    TensorType(cx_int_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Int), impl_(tensor) {};
+    TensorType(cx_q8_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Q8), impl_(tensor) {};
+    TensorType(cx_q4_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Q4), impl_(tensor) {};
+    TensorType(cx_pq_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::PQ), impl_(tensor) {};
 #endif
 
 #ifdef _USING_DEVICE_DNNL_
@@ -351,6 +370,45 @@ public:
     }
 #endif
 
+#if _USING_DEVICE_COREX_
+    cx_float_t* cx_float() {
+        if ( impl_.index() != CX_FLOAT ) {
+            vt_panic("Cant get cx_float from a tensor");
+        }
+        return std::get<CX_FLOAT>(impl_);
+    }
+    cx_fp16_t* cx_fp16() {
+        if ( impl_.index() != CX_FP16 ) {
+            vt_panic("Cant get cx_fp16 from a tensor");
+        }
+        return std::get<CX_FP16>(impl_);
+    }
+    cx_int_t* cx_int() {
+        if ( impl_.index() != CX_INT ) {
+            vt_panic("Cant get cx_int from a tensor");
+        }
+        return std::get<CX_INT>(impl_);
+    }
+    cx_q8_t* cx_q8() {
+        if ( impl_.index() != CX_Q8 ) {
+            vt_panic("Cant get cx_q8 from a tensor");
+        }
+        return std::get<CX_Q8>(impl_);
+    }
+    cx_q4_t* cx_q4() {
+        if ( impl_.index() != CX_Q4 ) {
+            vt_panic("Cant get cx_q4 from a tensor");
+        }
+        return std::get<CX_Q4>(impl_);
+    }
+    cx_pq_t* cx_pq() {
+        if ( impl_.index() != CX_PQ ) {
+            vt_panic("Cant get cx_q4 from a tensor");
+        }
+        return std::get<CX_PQ>(impl_);
+    }
+#endif
+
 #if _USING_DEVICE_DNNL_
     dnnl_float_t* dnnl_float() {
         if ( impl_.index() != DNNL_FLOAT ) {
@@ -403,6 +461,12 @@ public:
         }
 #endif
 
+#ifdef _USING_DEVICE_COREX_
+        if ( (impl_index() <= ImplType::CX_PQ) && (impl_index() >= ImplType::CX_FLOAT) ) {
+            return "dcu";
+        }
+#endif
+
 #ifdef _USING_DEVICE_DNNL_
         if ( (impl_index() <= ImplType::DNNL_INT) && (impl_index() >= ImplType::DNNL_FLOAT) ) {
             return "nccl";
@@ -440,6 +504,16 @@ public:
     }
 #endif
 
+#ifdef _USING_DEVICE_COREX_
+    bool is_corex() const {
+        auto ii = impl_index();
+        if ( (ii >= ImplType::CX_FLOAT) && (ii <= ImplType::CX_PQ) ) {
+            return true;
+        }
+        return false;
+    }
+#endif
+
     bool is_float() const {
         if (impl_index() == ImplType::HOST_FLOAT) {
             return true;
@@ -452,6 +526,12 @@ public:
 
 #ifdef _USING_DEVICE_DCU_
         if (impl_index() == ImplType::DCU_FLOAT) {
+            return true;
+        }
+#endif
+
+#ifdef _USING_DEVICE_COREX_
+        if (impl_index() == ImplType::COREX_FLOAT) {
             return true;
         }
 #endif
@@ -480,6 +560,12 @@ public:
         }
 #endif
 
+#ifdef _USING_DEVICE_COREX_
+        if (impl_index() == ImplType::CX_FP16) {
+            return true;
+        }
+#endif
+
 #ifdef _USING_DEVICE_DNNL_
         if (impl_index() == ImplType::DNNL_FP16) {
             return true;
@@ -500,6 +586,12 @@ public:
 
 #ifdef _USING_DEVICE_DCU_
         if (impl_index() == ImplType::DCU_INT) {
+            return true;
+        }
+#endif
+
+#ifdef _USING_DEVICE_COREX_
+        if (impl_index() == ImplType::CX_INT) {
             return true;
         }
 #endif
@@ -528,6 +620,11 @@ public:
             return true;
         }
 #endif
+#ifdef _USING_DEVICE_COREX_
+        if (impl_index() == ImplType::CX_Q8) {
+            return true;
+        }
+#endif
         return false;
     }
     bool is_q4() const {
@@ -544,6 +641,12 @@ public:
             return true;
         }
 #endif
+#ifdef _USING_DEVICE_COREX_
+        if (impl_index() == ImplType::CX_Q4) {
+            return true;
+        }
+#endif
+
         return false;
     }
     bool is_pq() const {
@@ -560,6 +663,12 @@ public:
             return true;
         }
 #endif
+#ifdef _USING_DEVICE_COREX_
+        if (impl_index() == ImplType::CX_PQ) {
+            return true;
+        }
+#endif
+
         return false;
     }
 
@@ -664,6 +773,15 @@ private:
         DCU_PQ,
 #endif
 
+#ifdef _USING_DEVICE_COREX_
+        CX_FLOAT,
+        CX_FP16,
+        CX_INT,
+        CX_Q8,
+        CX_Q4,
+        CX_PQ,
+#endif
+
 #ifdef _USING_DEVICE_DNNL_
         DNNL_FLOAT,
         DNNL_FP16,
@@ -693,6 +811,15 @@ private:
                                         dcu_q8_t*,
                                         dcu_q4_t*,
                                         dcu_pq_t*,
+#endif
+
+#ifdef _USING_DEVICE_COREX_
+                                        cx_float_t*,
+                                        cx_fp16_t*,
+                                        cx_int_t*,
+                                        cx_q8_t*,
+                                        cx_q4_t*,
+                                        cx_pq_t*,
 #endif
 
 #ifdef _USING_DEVICE_DNNL_
@@ -732,6 +859,15 @@ tensor_t create_dcu_int(std::vector<size_t>& shape);
 tensor_t create_dcu_q8(std::vector<size_t>& shape);
 tensor_t create_dcu_q4(std::vector<size_t>& shape);
 tensor_t create_dcu_pq(std::vector<size_t>& shape, int S);
+#endif
+
+#if _USING_DEVICE_COREX_
+tensor_t create_cx_float(std::vector<size_t>& shape);
+tensor_t create_cx_fp16(std::vector<size_t>& shape);
+tensor_t create_cx_int(std::vector<size_t>& shape);
+tensor_t create_cx_q8(std::vector<size_t>& shape);
+tensor_t create_cx_q4(std::vector<size_t>& shape);
+tensor_t create_cx_pq(std::vector<size_t>& shape, int S);
 #endif
 
 #if _USING_DEVICE_DNNL_

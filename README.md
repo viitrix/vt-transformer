@@ -17,6 +17,7 @@ A new Transformer framework for edge computing, based on pure c++, supports infe
 - [x] 中科曙光 DCU（海光） Z100/Z100L 
 - [x] Nvidia CUDA 芯片 T4/GTX 3080/3090
 - [x] Intel CPU / GPU (Xe) 
+- [x] 天数智芯
 - [ ] 寒武纪
 - [ ] 希姆计算
 - [ ] ... 
