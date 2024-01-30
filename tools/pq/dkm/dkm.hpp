@@ -150,12 +150,13 @@ std::vector<std::array<T, N>> calculate_means(const std::vector<std::array<T, N>
 		    w += data[i][j] * data[i][j];
         }
         w = sqrt(w);
-        if ( w < 0.0001 ) {
-            w = 0.0001;
+        if ( w < 0.001 ) {
+            w = 0.001;
         }
-        if ( w > 0.99) {
-            w = 0.99;
+        if ( w > 0.999) {
+            w = 0.999;
         }
+        w = 1.0 - w;
         w = -1.0 * pow(1-w, gamma) * log(w);
 #else
         T w = 1.0;
