@@ -78,5 +78,27 @@ int rms_norm<__half>(const __half* feature, const __half *w, __half *out, __half
     return 0;
 }
 
+template<>
+int rms_norm<float>(const float* feature, const float *w, float *out, float *norm2,
+                     const int batch, const int dim, const float eps, cudaStream_t stream) {
+    dim3 num_of_blocks(batch);
+    dim3 block_size(256);
+
+    if ( dim % 256 != 0) {
+        fprintf(stderr, "rms_norm kernel only support dim mod 256 == 0!\n");
+        exit(-1);
+    }
+
+    rms_norm_kernel<float> <<< num_of_blocks, block_size, 0, stream >>> (feature, w, out, norm2, batch, dim, eps);
+
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        fprintf(stderr, "Failed to launch rms_norm kernel (error code %s)!\n", cudaGetErrorString(err));
+        exit(-1);
+    }
+    return 0;
+}
+
+
 
 }}

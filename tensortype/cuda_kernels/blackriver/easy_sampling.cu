@@ -128,6 +128,23 @@ int easy_top3<__half>(const __half* logits, int *out,
     return 0;
 }
 
+template<>
+int easy_top3<float>(const float* logits, int *out,
+                      const int batch, const int vocab_size, const float temperature, const float randx, 
+                      cudaStream_t stream) {
+    dim3 block_size(256);
+	dim3 num_of_blocks(batch);
+ 
+    easy_top3_kernel<float> <<< num_of_blocks, block_size, 0, stream >>> (logits, out, batch, vocab_size, temperature, randx);
+    
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        fprintf(stderr, "Failed to launch easy_top3 kernel (error code %s)!\n", cudaGetErrorString(err));
+        exit(-1);
+    }
+    return 0;
+}
+
 // ================================================
 template <typename T>
 int easy_top1(const T *logits, 
@@ -227,6 +244,22 @@ int easy_top1<__half>(const __half* logits, int *out,
 	dim3 num_of_blocks(batch);
 
     kr_easy_top1<__half> <<< num_of_blocks, block_size, 0, stream >>> (logits, out, batch, vocab_size);
+
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        fprintf(stderr, "Failed to launch easy_top1 kernel (error code %s)!\n", cudaGetErrorString(err));
+        exit(-1);
+    }
+    return 0;
+}
+
+template<>
+int easy_top1<float>(const float* logits, int *out,
+                         const int batch, const int vocab_size, cudaStream_t stream) {
+    dim3 block_size(256);
+	dim3 num_of_blocks(batch);
+
+    kr_easy_top1<float> <<< num_of_blocks, block_size, 0, stream >>> (logits, out, batch, vocab_size);
 
     cudaError_t err = cudaGetLastError();
     if (err != cudaSuccess) {

@@ -1159,12 +1159,20 @@ ComputingReturn CUDATensor<DT>::op_rmsnorm(tensor_t self, tensor_t scale, tensor
     size_t tokens = self->shape()[1];
     size_t hidden = self->shape()[2];
 
-    if ( DT != DataType::Float && DT != DataType::FP16) {
-        return OP_TODO_ERROR;
+    if ( DT == DataType::Float) {
+        float* norm2_ = (float *)norm2->cuda_float()->data();
+        float* feature = (float *)self->cuda_float()->data();
+        float* w = (float *)scale->cuda_float()->data();
+        float* out = (float *)y->cuda_float()->data();
+
+        auto stream = ComputingContext::cuda_stream;
+        cuda::rms_norm<float>(feature, w, out, norm2_, batch * tokens, hidden, eps, stream);
+
+        return OP_OK;
     }
 
 
-   if ( DT == DataType::FP16 ) {
+    if ( DT == DataType::FP16 ) {
         device_fp16_t* norm2_ = (device_fp16_t *)norm2->cuda_fp16()->data();
         device_fp16_t* feature = (device_fp16_t *)self->cuda_fp16()->data();
         device_fp16_t* w = (device_fp16_t *)scale->cuda_fp16()->data();
@@ -1586,9 +1594,14 @@ std::variant<ComputingReturn, tensor_t>  CUDATensor<DT>::op_sampling_top1(tensor
 
     auto stream = ComputingContext::cuda_stream;
     int* out = (int *)ComputingContext::cuda_workspace;
-    device_fp16_t* logits = (device_fp16_t *) self->device_data();
 
-    cuda::easy_top1<device_fp16_t>(logits, out, batch, vocab_size, stream);
+    if ( DT == DataType::FP16 ) {
+        device_fp16_t* logits = (device_fp16_t *) self->device_data();
+        cuda::easy_top1<device_fp16_t>(logits, out, batch, vocab_size, stream);
+    } else {
+        float* logits = (float *) self->device_data();
+        cuda::easy_top1<float>(logits, out, batch, vocab_size, stream);
+    }
 
     CUDA_CHECK(cudaMemcpyAsync( ret->device_data(), out, batch * sizeof(int), cudaMemcpyDeviceToHost, stream));
     return ret;
@@ -1608,13 +1621,16 @@ std::variant<ComputingReturn, tensor_t>  CUDATensor<DT>::op_sampling_top3(tensor
 
     auto stream = ComputingContext::cuda_stream;
     int* out = (int *)ComputingContext::cuda_workspace;
-    device_fp16_t* logits = (device_fp16_t *) self->device_data();
-
     std::uniform_real_distribution<> dist(0.0, 1.0);
     float randx = dist( *ComputingContext::rng );
 
-    cuda::easy_top3<device_fp16_t>(logits, out, batch, vocab_size, temp, randx, stream);
-
+    if ( DT == DataType::FP16 ) {
+        device_fp16_t* logits = (device_fp16_t *) self->device_data();
+        cuda::easy_top3<device_fp16_t>(logits, out, batch, vocab_size, temp, randx, stream);
+    } else {
+        float* logits = (float *) self->device_data();
+        cuda::easy_top3<float>(logits, out, batch, vocab_size, temp, randx, stream);
+    }
     CUDA_CHECK(cudaMemcpyAsync( ret->device_data(), out, batch * sizeof(int), cudaMemcpyDeviceToHost, stream));
 
     return ret;
