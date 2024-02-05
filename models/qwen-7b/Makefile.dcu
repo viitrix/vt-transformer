@@ -5,8 +5,7 @@ INC = -I../../install/include -I${DTK_DIR}/include
 LINK = -L../../install/lib \
        -L${DTK_DIR}/lib \
        -L${DTK_DIR}/lib64 \
-       -L${SENTENCEPIECE_DIR}/lib64 \
-       -ldl -ltensortype  -ldcu_kernels -ltokenizer_combo -ltokenizers_c -lsentencepiece -lgalaxyhip -lhipblas 
+       -ldl -ltensortype  -ldcu_kernels -ltokenizer_combo -ltokenizers_c -lgalaxyhip -lhipblas 
 
 all: chat bench
 
@@ -17,10 +16,10 @@ bench: bench.cpp memory.hpp
 	g++ $(FLAGS) -o $@ $< $(INC) $(LINK)
 
 run: chat
-	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${DTK_DIR}/lib:${VT_SOURCE}/install/lib:${SENTENCEPIECE_DIR}/lib64 ./chat $(target)
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${DTK_DIR}/lib:${VT_SOURCE}/install/lib ./chat $(target)
 
 test: bench 
-	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${CUDA_DIR}/lib64:${NCCL_DIR}/lib:${CUDNN_DIR}/lib:${VT_SOURCE}/install/lib:${SENTENCEPIECE_DIR}/lib64 ./bench $(target)
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${CUDA_DIR}/lib64:${NCCL_DIR}/lib:${CUDNN_DIR}/lib:${VT_SOURCE}/install/lib ./bench $(target)
 
 
 clean:

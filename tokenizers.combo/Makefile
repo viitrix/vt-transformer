@@ -4,16 +4,10 @@ FLAGS = -Wall -O3 -Wno-maybe-uninitialized
 
 INC = -I. -I../install/include -I${SENTENCEPIECE_DIR}/include
 
-all: libtokenizer_combo.a
+all: install
 
-libtokenizer_combo.a: bloomz.o baichuan.o qwen.o
+libtokenizer_combo.a: qwen.o 
 	 ar rcs $@ $?	
-
-bloomz.o: bloomz.cpp
-	g++ $(FLAGS) -c -o $@ $(INC) $<
-
-baichuan.o: baichuan.cpp
-	g++ $(FLAGS) -c -o $@ $(INC) $<
 
 qwen.o: qwen.cpp
 	g++ $(FLAGS) -c -o $@ $(INC) $<

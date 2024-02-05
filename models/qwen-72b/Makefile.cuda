@@ -9,10 +9,9 @@ INC = -I../../install/include \
 LINK = -L../../install/lib \
 	   -L${CUDA_DIR}/lib64 \
        -L${NCCL_DIR}/lib \
-	   -L${SENTENCEPIECE_DIR}/lib \
 	   -L${CUDA_DIR}/lib \
 	   -L/usr/lib/x86_64-linux-gnu \
-	   -ltokenizer_combo -ltokenizers_c -lsentencepiece \
+	   -ltokenizer_combo -ltokenizers_c \
 	   -ltensortype -lcuda_kernels -lnccl -lcudnn -lcudart -lcublas -lcublasLt 
 
 all: chat 
@@ -21,7 +20,7 @@ chat: chat.cpp memory.hpp
 	g++ $(FLAGS) -o $@ $< $(INC) $(LINK)
 
 run: chat 
-	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${CUDA_DIR}/lib64:${NCCL_DIR}/lib:${CUDNN_DIR}/lib:${VT_SOURCE}/install/lib:${SENTENCEPIECE_DIR}/lib64 ./chat $(target)
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${CUDA_DIR}/lib64:${NCCL_DIR}/lib:${CUDNN_DIR}/lib:${VT_SOURCE}/install/lib ./chat $(target)
 
 clean:
 	rm -f chat 

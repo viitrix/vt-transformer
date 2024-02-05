@@ -16,8 +16,6 @@ struct Tokenizer {
     virtual int token_bos() = 0;
 };
 
-Tokenizer* build_tokenizer_bloomz(const char* file_name);
-Tokenizer* build_tokenizer_baichuan(const char* file_name);
 Tokenizer* build_tokenizer_qwen(const char* file_name);
 
 }
