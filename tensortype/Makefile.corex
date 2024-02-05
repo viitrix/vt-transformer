@@ -14,7 +14,7 @@ libtensortype.a: context.o tensortype.o host_tensor.o dnnl_tensor.o corex_tensor
 context.o: context.hpp context.cpp
 	g++ $(FLAGS) -c -o $@ $(INC) context.cpp
 
-tensortype.o: computing.hpp tensortype.hpp tensortype.cpp
+tensortype.o: computing.hpp tensortype.hpp tensortype.cpp corex_tensor.hpp 
 	g++ $(FLAGS) -c -o $@ $(INC) tensortype.cpp
 
 host_tensor.o: computing.hpp tensortype.hpp host_tensor.hpp host_tensor.cpp
@@ -29,7 +29,7 @@ corex_tensor.o: computing.hpp tensortype.hpp corex_tensor.hpp corex_tensor.cpp
 dag.o: tensortype.hpp dag.hpp dag.cpp
 	g++ $(FLAGS) -c -o $@ $(INC) dag.cpp
 
-nn_operators.o: computing.hpp tensortype.hpp dag.hpp nn_operators.cpp
+nn_operators.o: computing.hpp tensortype.hpp dag.hpp nn_operators.cpp 
 	g++ $(FLAGS) -c -o $@ $(INC) nn_operators.cpp
 
 nn_kvcache.o: computing.hpp tensortype.hpp dag.hpp nn_kvcache.cpp

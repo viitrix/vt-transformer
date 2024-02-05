@@ -463,13 +463,13 @@ public:
 
 #ifdef _USING_DEVICE_COREX_
         if ( (impl_index() <= ImplType::CX_PQ) && (impl_index() >= ImplType::CX_FLOAT) ) {
-            return "dcu";
+            return "corex";
         }
 #endif
 
 #ifdef _USING_DEVICE_DNNL_
         if ( (impl_index() <= ImplType::DNNL_INT) && (impl_index() >= ImplType::DNNL_FLOAT) ) {
-            return "nccl";
+            return "dnnl";
         }
 #endif
         vt_panic("Can't be here!");

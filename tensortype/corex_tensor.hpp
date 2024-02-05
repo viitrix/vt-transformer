@@ -41,12 +41,11 @@ struct CXTensor : public TransformerComputing {
     }
 
 public:
-#if 0
     // Interfaces from TransformerComputing
     ComputingReturn io_dump(tensor_t self) override;
     ComputingReturn io_load(tensor_t self, const char* fileName) override;
-
     std::variant<ComputingReturn, size_t> op_sizeof(tensor_t self) override;
+#if 0
     ComputingReturn op_zero(tensor_t self) override;
     ComputingReturn op_fill(tensor_t self, float value) override;
     ComputingReturn op_alibi(tensor_t self) override;

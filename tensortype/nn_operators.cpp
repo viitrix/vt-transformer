@@ -24,6 +24,11 @@ namespace op {
             auto stream = vt::ComputingContext::dcu_stream;
             HIP_CHECK(hipStreamSynchronize(stream));
 #endif
+#ifdef _USING_DEVICE_COREX_
+            auto stream = vt::ComputingContext::corex_stream;
+            COREX_CHECK(cudaStreamSynchronize(stream));
+#endif
+
         }
         NWORD_CREATOR_DEFINE_LR(Sync)
     };
@@ -129,6 +134,24 @@ namespace op {
                     t = vt::create_dcu_q4(shape);
                 } else if ( dtype == vt::PQ ) {
                     t = vt::create_dcu_pq(shape, pq_s);
+                } else {
+                    vt_panic("Can' be here!");
+                }
+#else
+                vt_panic("Can' be here!");
+#endif
+            } else if ( device == "corex" ) {
+#ifdef _USING_DEVICE_COREX_
+                if ( dtype == vt::Float ) {
+                    t = vt::create_cx_float(shape);
+                } else if ( dtype == vt::FP16 ) {
+                    t = vt::create_cx_fp16(shape);
+                } else if ( dtype == vt::Int ) {
+                    t = vt::create_cx_int(shape);
+                } else if ( dtype == vt::Q4 ) {
+                    t = vt::create_cx_q4(shape);
+                } else if ( dtype == vt::PQ ) {
+                    t = vt::create_cx_pq(shape, pq_s);
                 } else {
                     vt_panic("Can' be here!");
                 }

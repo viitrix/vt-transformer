@@ -22,7 +22,8 @@
 #define __ILUVATAR__
 #include <cuda_runtime.h>
 #include <cuda_fp16.h>
-#include <cublas.h>
+#include <cublas_v2.h>
+#include <cublasLt.h>
 #endif
 
 #ifdef _USING_HPC_OPENMPI_
@@ -92,8 +93,8 @@
 
 #define CXBLAS_CHECK(f) \
     do { \
-        cudablasStatus_t  s_ = f; \
-        if (s_ != CUDABLAS_STATUS_SUCCESS) COMPLAIN_ERROR_AND_EXIT(#f, s_); \
+        cublasStatus_t  s_ = f; \
+        if (s_ != CUBLAS_STATUS_SUCCESS) COMPLAIN_ERROR_AND_EXIT(#f, s_); \
     } while (0)
 
 namespace vt {
@@ -120,6 +121,13 @@ struct ComputingContext {
     static hipStream_t dcu_stream;
     static hipblasHandle_t hipblas_handle;
     static void* dcu_workspace;
+#endif
+
+#ifdef _USING_DEVICE_COREX_
+    static int corex_device;
+    static cudaStream_t corex_stream;
+    static cublasHandle_t cxblas_handle;
+    static void* corex_workspace;
 #endif
 
     static void* host_workspace;

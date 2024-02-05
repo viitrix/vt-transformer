@@ -24,6 +24,14 @@ hipblasHandle_t ComputingContext::hipblas_handle = nullptr;
 void* ComputingContext::dcu_workspace = nullptr;
 #endif
 
+#ifdef _USING_DEVICE_COREX_
+int ComputingContext::corex_device = -1;
+cudaStream_t ComputingContext::corex_stream = nullptr;
+cublasHandle_t ComputingContext::cxblas_handle = nullptr;
+void* ComputingContext::corex_workspace = nullptr;
+#endif
+
+
 void* ComputingContext::host_workspace = nullptr;
 size_t ComputingContext::workspace_size = 0;
 std::mt19937* ComputingContext::rng = nullptr;
@@ -64,6 +72,16 @@ void ComputingContext::boot(int cud) {
     HIP_CHECK( hipMalloc(&dcu_workspace, workspace_size) );
 #endif
 
+#ifdef _USING_DEVICE_COREX_
+    corex_device = cud;
+
+    COREX_CHECK( cudaSetDevice(corex_device) );
+    COREX_CHECK( cudaStreamCreate(&corex_stream) );
+    CXBLAS_CHECK( cublasCreate_v2(&cxblas_handle) );
+    CXBLAS_CHECK( cublasSetStream(cxblas_handle, corex_stream) );
+    COREX_CHECK( cudaMalloc(&corex_workspace, workspace_size) );
+#endif
+
     host_workspace = malloc( workspace_size );
     rng = new std::mt19937(1979);
 }
@@ -89,6 +107,12 @@ void ComputingContext::shutdown() {
     HIP_CHECK( hipFree(dcu_workspace) );
     HIPBLAS_CHECK( hipblasDestroy(hipblas_handle) );
     HIP_CHECK( hipStreamDestroy(dcu_stream) );
+#endif
+
+#ifdef _USING_DEVICE_COREX_
+    COREX_CHECK( cudaFree(corex_workspace) );
+    CXBLAS_CHECK( cublasDestroy(cxblas_handle) );
+    COREX_CHECK( cudaStreamDestroy(corex_stream) );
 #endif
 }
 
