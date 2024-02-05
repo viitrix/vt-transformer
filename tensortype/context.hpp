@@ -18,6 +18,13 @@
 #include <hipblas/hipblas.h>
 #endif
 
+#ifdef _USING_DEVICE_COREX_
+#define __ILUVATAR__
+#include <cuda_runtime.h>
+#include <cuda_fp16.h>
+#include <cublas.h>
+#endif
+
 #ifdef _USING_HPC_OPENMPI_
 #include <mpi.h>
 #endif
@@ -75,6 +82,18 @@
     do { \
         hipblasStatus_t  s_ = f; \
         if (s_ != HIPBLAS_STATUS_SUCCESS) COMPLAIN_ERROR_AND_EXIT(#f, s_); \
+    } while (0)
+
+#define COREX_CHECK(f) \
+    do { \
+        cudaError_t  s_ = f; \
+        if (s_ != cudaSuccess) COMPLAIN_ERROR_AND_EXIT(#f, s_); \
+    } while (0)
+
+#define CXBLAS_CHECK(f) \
+    do { \
+        cudablasStatus_t  s_ = f; \
+        if (s_ != CUDABLAS_STATUS_SUCCESS) COMPLAIN_ERROR_AND_EXIT(#f, s_); \
     } while (0)
 
 namespace vt {

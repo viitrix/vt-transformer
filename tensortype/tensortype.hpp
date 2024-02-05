@@ -531,7 +531,7 @@ public:
 #endif
 
 #ifdef _USING_DEVICE_COREX_
-        if (impl_index() == ImplType::COREX_FLOAT) {
+        if (impl_index() == ImplType::CX_FLOAT) {
             return true;
         }
 #endif

@@ -503,27 +503,27 @@ TensorType::~TensorType() {
 
 #ifdef _USING_DEVICE_COREX_
     if ( impl_index() == ImplType::CX_FLOAT ) {
-        dcu_float_t* tensor = std::get<CX_FLOAT>(impl_);
+        cx_float_t* tensor = std::get<CX_FLOAT>(impl_);
         delete tensor;
     }
     if ( impl_index() == ImplType::CX_FP16 ) {
-        dcu_fp16_t* tensor = std::get<CX_FP16>(impl_);
+        cx_fp16_t* tensor = std::get<CX_FP16>(impl_);
         delete tensor;
     }
     if ( impl_index() == ImplType::CX_INT ) {
-        dcu_int_t* tensor = std::get<CX_INT>(impl_);
+        cx_int_t* tensor = std::get<CX_INT>(impl_);
         delete tensor;
     }
     if ( impl_index() == ImplType::CX_Q8 ) {
-        dcu_q8_t* tensor = std::get<CX_Q8>(impl_);
+        cx_q8_t* tensor = std::get<CX_Q8>(impl_);
         delete tensor;
     }
     if ( impl_index() == ImplType::CX_Q4 ) {
-        dcu_q4_t* tensor = std::get<CX_Q4>(impl_);
+        cx_q4_t* tensor = std::get<CX_Q4>(impl_);
         delete tensor;
     }
     if ( impl_index() == ImplType::CX_PQ ) {
-        dcu_pq_t* tensor = std::get<CX_PQ>(impl_);
+        cx_pq_t* tensor = std::get<CX_PQ>(impl_);
         delete tensor;
     }
 #endif
@@ -627,27 +627,27 @@ TransformerComputing* TensorType::impl() {
 
 #ifdef _USING_DEVICE_COREX_
     if ( impl_index() == ImplType::CX_FLOAT ) {
-        dcu_float_t* tensor = std::get<CX_FLOAT>(impl_);
+        cx_float_t* tensor = std::get<CX_FLOAT>(impl_);
         return tensor;
     }
     if ( impl_index() == ImplType::CX_INT ) {
-        dcu_int_t* tensor = std::get<CX_INT>(impl_);
+        cx_int_t* tensor = std::get<CX_INT>(impl_);
         return tensor;
     }
     if ( impl_index() == ImplType::CX_FP16 ) {
-        dcu_fp16_t* tensor = std::get<CX_FP16>(impl_);
+        cx_fp16_t* tensor = std::get<CX_FP16>(impl_);
         return tensor;
     }
     if ( impl_index() == ImplType::CX_Q8 ) {
-        dcu_q8_t* tensor = std::get<CX_Q8>(impl_);
+        cx_q8_t* tensor = std::get<CX_Q8>(impl_);
         return tensor;
     }
     if ( impl_index() == ImplType::CX_Q4 ) {
-        dcu_q4_t* tensor = std::get<CX_Q4>(impl_);
+        cx_q4_t* tensor = std::get<CX_Q4>(impl_);
         return tensor;
     }
     if ( impl_index() == ImplType::CX_PQ ) {
-        dcu_pq_t* tensor = std::get<CX_PQ>(impl_);
+        cx_pq_t* tensor = std::get<CX_PQ>(impl_);
         return tensor;
     }
 #endif
@@ -758,27 +758,27 @@ void* TensorType::device_data(size_t index) {
 
 #ifdef _USING_DEVICE_COREX_
     if ( index == ImplType::CX_FLOAT ) {
-        dcu_float_t* tensor = std::get<CX_FLOAT>(impl_);
+        cx_float_t* tensor = std::get<CX_FLOAT>(impl_);
         return tensor->data();
     }
     if ( index == ImplType::CX_INT ) {
-        dcu_int_t* tensor = std::get<CX_INT>(impl_);
+        cx_int_t* tensor = std::get<CX_INT>(impl_);
         return tensor->data();
     }
     if ( index == ImplType::CX_FP16 ) {
-        dcu_fp16_t* tensor = std::get<CX_FP16>(impl_);
+        cx_fp16_t* tensor = std::get<CX_FP16>(impl_);
         return tensor->data();
     }
     if ( index == ImplType::CX_Q8 ) {
-        dcu_q8_t* tensor = std::get<CX_Q8>(impl_);
+        cx_q8_t* tensor = std::get<CX_Q8>(impl_);
         return tensor->data();
     }
     if ( index == ImplType::CX_Q4 ) {
-        dcu_q4_t* tensor = std::get<CX_Q4>(impl_);
+        cx_q4_t* tensor = std::get<CX_Q4>(impl_);
         return tensor->data();
     }
     if ( index == ImplType::CX_PQ ) {
-        dcu_pq_t* tensor = std::get<CX_PQ>(impl_);
+        cx_pq_t* tensor = std::get<CX_PQ>(impl_);
         return tensor->data();
     }
 #endif

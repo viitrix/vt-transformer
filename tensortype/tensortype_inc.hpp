@@ -19,6 +19,10 @@
 #include "dcu_tensor.hpp"
 #endif
 
+#ifdef _USING_DEVICE_COREX_
+#include "corex_tensor.hpp"
+#endif
+
 #include "dag.hpp"
 
 #endif
