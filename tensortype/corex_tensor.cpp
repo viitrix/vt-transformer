@@ -248,6 +248,94 @@ std::variant<ComputingReturn, size_t> CXTensor<_DTYPE_>::op_sizeof(tensor_t self
     return OP_TODO_ERROR;
 }
 
+template<DataType DT>
+ComputingReturn CXTensor<DT>::op_zero(tensor_t self) {
+    void *dst = data();
+    auto s = std::get<1>(self->op_sizeof(self));
+    COREX_CHECK( cudaMemset(dst, 0, s) );
+    return OP_OK;
+}
+
+template<DataType DT>
+ComputingReturn CXTensor<DT>::op_fill(tensor_t self, float value) {
+    auto stream = ComputingContext::corex_stream;
+    if ( DT == DataType::Float ) {
+        float* target = (float *)data();
+        corex::kr_fill<float>(target, value, self->items(), stream);
+        return OP_OK;
+    }
+    if ( DT == DataType::Int ) {
+        int* target = (int *)data();
+        corex::kr_fill<int>(target, value, self->items(), stream);
+        return OP_OK;
+    }
+    if ( DT == DataType::FP16 ) {
+        device_fp16_t* target = (device_fp16_t *)data();
+        corex::kr_fill(target, value, self->items(), stream);
+        return OP_OK;
+    }
+
+    return OP_TODO_ERROR;
+}
+
+template<DataType DT>
+ComputingReturn CXTensor<DT>::op_alibi(tensor_t self) {
+    int heads = self->shape()[1];
+    int tokens = self->shape()[3];
+
+    auto stream = ComputingContext::corex_stream;
+    auto s = std::get<1>(self->op_sizeof(self));
+    if ( DT == DataType::Float ) {
+        std::vector<float> buffer;
+        vt::fill_alibi<float>(buffer, heads, tokens);
+
+        COREX_CHECK(cudaMemcpyAsync(data(), buffer.data(), s,  cudaMemcpyHostToDevice, stream));
+        return OP_OK;
+    }
+    if ( DT == DataType::FP16 ) {
+        std::vector<local_fp16_t> buffer;
+        vt::fill_alibi<local_fp16_t>(buffer, heads, tokens);
+        COREX_CHECK(cudaMemcpyAsync(data(), buffer.data(), s,  cudaMemcpyHostToDevice, stream));
+        return OP_OK;
+    }
+    return OP_TODO_ERROR;
+}
+
+
+template<DataType DT>
+ComputingReturn CXTensor<DT>::op_rotary_cache(tensor_t self, float base) {
+    if ( DT == DataType::Float ) {
+        // building inv_freq
+        int len = self->shape()[0];
+        int dims = self->shape()[1];
+
+        std::vector<float> cos_sin;
+        vt::fill_rotary_cache(cos_sin, len, dims, base);
+
+        auto stream = ComputingContext::corex_stream;
+        COREX_CHECK(cudaMemcpyAsync( data(), cos_sin.data(), self->items() * sizeof(float), cudaMemcpyHostToDevice, stream));
+        return OP_OK;
+    }
+    return OP_OUTPUT_ERROR;
+}
+
+template<DataType DT>
+ComputingReturn CXTensor<DT>::op_causal_mask(tensor_t self, tensor_t out) {
+    int batch = self->shape()[0];
+    int full_tokens = self->shape()[1];
+    int new_tokens = out->shape()[2];
+
+    int* mask  = (int *)data();
+    auto stream = ComputingContext::corex_stream;
+    if ( out->dtype() == DataType::Float ) {
+        float* dst = (float *)out->cx_float()->data();
+        corex::kr_causal_mask<float>(mask, dst, batch, new_tokens, full_tokens, stream);
+        return OP_OK;
+    }
+
+    return OP_OUTPUT_ERROR;
+}
+
 // ============================================
 tensor_t create_cx_float(std::vector<size_t>& shape_) {
     ShapeType shape(shape_);

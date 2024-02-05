@@ -1,6 +1,8 @@
 #ifndef _COREX_KERNELS_HPP_
 #define _COREX_KERNELS_HPP_
 
+#include <stdint.h>
+
 namespace vt { namespace corex {
 
 template<typename T>

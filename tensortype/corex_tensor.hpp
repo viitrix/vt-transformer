@@ -45,13 +45,14 @@ public:
     ComputingReturn io_dump(tensor_t self) override;
     ComputingReturn io_load(tensor_t self, const char* fileName) override;
     std::variant<ComputingReturn, size_t> op_sizeof(tensor_t self) override;
-#if 0
+
     ComputingReturn op_zero(tensor_t self) override;
     ComputingReturn op_fill(tensor_t self, float value) override;
     ComputingReturn op_alibi(tensor_t self) override;
     ComputingReturn op_causal_mask(tensor_t self, tensor_t out) override;
     ComputingReturn op_rotary_cache(tensor_t self, float base) override;
 
+#if 0
     std::variant<ComputingReturn, tensor_t> op_view(tensor_t self, size_t offset, const std::vector<size_t>& newShape) override;
     std::variant<ComputingReturn, tensor_t> op_view_as(tensor_t self, size_t offset, const std::vector<size_t>& newShape, const char* dtype) override;
     ComputingReturn op_reshape(tensor_t self, size_t offset, const std::vector<size_t>& newShape) override;

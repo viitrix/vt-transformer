@@ -11,3 +11,4 @@ export CUDNN_DIR=$HOME/opt/cudnn
 
 ### COREX
 export COREX_DIR=/usr/local/corex
+export COREX_ARCH=ivcore11

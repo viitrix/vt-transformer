@@ -4,7 +4,7 @@ FLAGS = -std=c++17 -Wall -O3 -D_USING_DEVICE_COREX_ -DUSING_DEVICE_DNNL_
 INC = -I../../install/include -I${COREX_DIR}/include 
 LINK = -L../../install/lib \
        -L${COREX_DIR}/lib \
-	   -ltensortype -lcudart -lcuda -lcublas
+	   -ltensortype -lcorex_kernels -lcudart -lcuda -lcublas
 
 all: repl 
 
