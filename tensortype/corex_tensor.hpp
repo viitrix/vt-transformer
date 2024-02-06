@@ -52,10 +52,10 @@ public:
     ComputingReturn op_causal_mask(tensor_t self, tensor_t out) override;
     ComputingReturn op_rotary_cache(tensor_t self, float base) override;
 
-#if 0
     std::variant<ComputingReturn, tensor_t> op_view(tensor_t self, size_t offset, const std::vector<size_t>& newShape) override;
     std::variant<ComputingReturn, tensor_t> op_view_as(tensor_t self, size_t offset, const std::vector<size_t>& newShape, const char* dtype) override;
     ComputingReturn op_reshape(tensor_t self, size_t offset, const std::vector<size_t>& newShape) override;
+#if 0
     ComputingReturn op_quantize(tensor_t self, tensor_t out) override;
     ComputingReturn op_dequantize(tensor_t self, tensor_t out) override;
     ComputingReturn op_embed(tensor_t self, tensor_t table, tensor_t out) override;
