@@ -110,7 +110,8 @@ template <>
 int kr_softmax<float>(const float *in, float *out, int length, int hidden_dim, cudaStream_t stream) {
     const int nThreads = 256;
     if ( hidden_dim / 256 >= BUFSIZE ) {
-        throw std::runtime_error("hidden_dim is too big!");
+        fprintf(stderr, "hidden_dim is too big");
+        exit(-1); 
     }
 
     dim3 grid_dim(length);
@@ -130,12 +131,14 @@ template <>
 int kr_softmax<__half>(const __half *in, __half *out, int length, int hidden_dim, cudaStream_t stream) {
     const int nThreads = 256;
     if (hidden_dim % 8 != 0) {
-        throw std::runtime_error("violate hidden_dim % 4 = 0");
+        fprintf(stderr, "violate hidden_dim aligen 8");
+        exit(-1); 
     }
     hidden_dim >>= 3;
 
     if ( hidden_dim / 256 >= BUFSIZE ) {
-        throw std::runtime_error("hidden_dim is too big!");
+        fprintf(stderr, "hidden_dim is too big");
+        exit(-1); 
     }
 
     dim3 grid_dim(length);

@@ -32,7 +32,7 @@ __global__ void easy_top3(const T *logits, int *out, const int batch, const int 
 
     const int K = 3;
     const int DIM = 256;
-    assert(blockDim.x == DIM);
+    //assert(blockDim.x == DIM);
 
     const int left_logit_idx = blockIdx.x * vocab_size + threadIdx.x;
     const int right_logit_idx = (blockIdx.x + 1) * vocab_size;
@@ -123,8 +123,8 @@ int kr_easy_top3<__half>(const __half* logits, int *out,
 template<typename T>
 __global__ void easy_top1(const T *logits, int *out, const int batch, const int vocab_size) {
 #if 1
-    const int DIM = 256;
-    assert(blockDim.x == DIM);
+    //const int DIM = 256;
+    //assert(blockDim.x == DIM);
 
     const int left_logit_idx = blockIdx.x * vocab_size + threadIdx.x;
     const int right_logit_idx = (blockIdx.x + 1) * vocab_size;
