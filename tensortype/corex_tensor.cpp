@@ -997,9 +997,255 @@ ComputingReturn  CXTensor<DT>::op_qk(tensor_t self, tensor_t k_, tensor_t qk_) {
                         batch*heads, CUDA_R_32F, CUBLAS_GEMM_DEFAULT) );
         return OP_OK;
     }
+    return OP_TODO_ERROR;
+}
+
+template<DataType DT>
+ComputingReturn  CXTensor<DT>::op_softmax(tensor_t self, tensor_t y) {
+    auto stream = ComputingContext::corex_stream;
+    size_t hidden = self->shape().vec().back();
+    size_t length = self->items() / hidden;
+
+    if ( DT == DataType::Float ) {
+        corex::kr_softmax<float>((float *)data(), (float *)y->cx_float()->data(), length, hidden, stream);
+        return OP_OK;
+    }
+    if ( DT == DataType::FP16 ) {
+        corex::kr_softmax<device_fp16_t>((device_fp16_t *)data(), (device_fp16_t *)y->cx_fp16()->data(), length, hidden, stream);
+        return OP_OK;
+    }
+    return OP_TODO_ERROR;
+}
+
+template<DataType DT>
+ComputingReturn  CXTensor<DT>::op_attn(tensor_t self, tensor_t value_, tensor_t out_) {
+    float alpha = 1.0;
+    float beta = 0.0;
+
+    auto shape_ = self->shape().vec();
+    int batch = shape_[0];
+    int heads = shape_[1];
+    int ntokens = shape_[2];
+    int ftokens = shape_[3];
+    int hhidden = value_->shape()[3];
+
+    int m = hhidden;
+    int n = ntokens;
+    int k = ftokens;
+
+    int HfT = hhidden * ftokens;
+    int HnT = hhidden * ntokens;
+    int TT = ftokens * ntokens;
+
+    if ( value_->is_float() && self->is_float() ) {
+        void *A_ = value_->cx_float()->data();
+        void *B_ = data();
+        void *C_ = out_->cx_float()->data();
+        CXBLAS_CHECK( cublasGemmStridedBatchedEx(
+                        ComputingContext::cxblas_handle,
+                        CUBLAS_OP_N, CUBLAS_OP_N,
+                        m, n, k,
+                        &alpha, A_, CUDA_R_32F, m, HfT,
+                        B_, CUDA_R_32F, k, TT,
+                        &beta, C_, CUDA_R_32F, m, HnT,
+                        batch*heads, CUDA_R_32F, CUBLAS_GEMM_DEFAULT) );
+
+        return OP_OK;
+    }
+    if ( value_->is_fp16() && self->is_float() ) {
+        void *A_ = value_->cx_fp16()->data();
+        void *B_ = data();
+        void *C_ = out_->cx_fp16()->data();
+        CXBLAS_CHECK( cublasGemmStridedBatchedEx(
+                        ComputingContext::cxblas_handle,
+                        CUBLAS_OP_N, CUBLAS_OP_N,
+                        m, n, k,
+                        &alpha, A_, CUDA_R_16F, m, HfT,
+                        B_, CUDA_R_32F, k, TT,
+                        &beta, C_, CUDA_R_16F, m, HnT,
+                        batch*heads, CUDA_R_32F, CUBLAS_GEMM_DEFAULT) );
+
+        return OP_OK;
+    }
+    if ( value_->is_fp16() && self->is_fp16()  ) {
+        void *A_ = value_->cx_fp16()->data();
+        void *B_ = data();
+        void *C_ = out_->cx_fp16()->data();
+        CXBLAS_CHECK( cublasGemmStridedBatchedEx(
+                        ComputingContext::cxblas_handle,
+                        CUBLAS_OP_N, CUBLAS_OP_N,
+                        m, n, k,
+                        &alpha, A_, CUDA_R_16F, m, HfT,
+                        B_, CUDA_R_16F, k, TT,
+                        &beta, C_, CUDA_R_16F, m, HnT,
+                        batch*heads, CUDA_R_32F, CUBLAS_GEMM_DEFAULT) );
+        return OP_OK;
+    }
+    return OP_TODO_ERROR;
+}
+
+template<DataType DT>
+ComputingReturn  CXTensor<DT>::op_gelu(tensor_t self, tensor_t out) {
+    auto stream = ComputingContext::corex_stream;
+
+    if ( DT == DataType::Float ) {
+        float* src = (float *)data();
+        float* dst = (float *)out->cx_float()->data();
+
+        corex::kr_gelu<float>(src, dst, self->items(), stream);
+        return OP_OK;
+    }
+    if ( DT == DataType::Float ) {
+        device_fp16_t* src = (device_fp16_t *)data();
+        device_fp16_t* dst = (device_fp16_t *)out->cx_fp16()->data();
+
+        corex::kr_gelu<device_fp16_t>(src, dst, self->items(), stream);
+        return OP_OK;
+    }
+    return OP_TODO_ERROR;
+}
+
+template<DataType DT>
+ComputingReturn  CXTensor<DT>::op_silu_product(tensor_t self, tensor_t in, tensor_t out) {
+    auto stream = ComputingContext::corex_stream;
+
+    if ( DT == DataType::Float ) {
+        float* src = (float *)data();
+        float* in_ = (float *)in->cx_float()->data();
+        float* dst = (float *)out->cx_float()->data();
+
+        corex::kr_silu_product<float>(src, in_, dst, self->items(), stream);
+        return OP_OK;
+    }
+    if ( DT == DataType::FP16 ) {
+        auto* src = (device_fp16_t *)data();
+        auto* in_ = (device_fp16_t *)in->cx_fp16()->data();
+        auto* dst = (device_fp16_t *)out->cx_fp16()->data();
+
+        corex::kr_silu_product<device_fp16_t>(src, in_, dst, self->items(), stream);
+        return OP_OK;
+    }
 
     return OP_TODO_ERROR;
 }
+
+template<DataType DT>
+std::variant<ComputingReturn,int> CXTensor<DT>::op_all_logits(tensor_t self, tensor_t mask_,  tensor_t lm_head, tensor_t output) {
+    int batch = self->shape()[0];
+    int new_tokens = self->shape()[1];
+    int hidden_size = self->shape()[2];
+    int full_tokens = mask_->shape()[1];
+
+    int vocab_size = lm_head->shape()[0];
+
+    int m = vocab_size;
+    int n = 1;
+    int k = hidden_size;
+
+    float alpha = 1.0;
+    float beta = 0.0;
+
+    int* mask = (int *)mask_->host_int()->data();
+    int pred = 0;
+    for (int b = 0;  b < batch; b++) {
+        int* mk = &mask[b * full_tokens];
+        for ( int i = 0; i < new_tokens ; i++) {
+            int ii = full_tokens - new_tokens + i;
+            if ( mk[ii] != 2 ) {
+                continue;
+            }
+            int target = i;
+
+            if ( DT == DataType::Float ) {
+                float* dst = (float *)output->cx_float()->data() + pred * vocab_size;
+                float* x = (float *)data() + b * new_tokens * hidden_size + target * hidden_size;
+
+                float* A = (float *)lm_head->cx_float()->data();
+                float* B = x;
+                float* C = dst;
+
+                CXBLAS_CHECK( cublasGemmEx(ComputingContext::cxblas_handle,
+                    CUBLAS_OP_T, CUBLAS_OP_N,
+                    m, n, k,
+                    &alpha, A, CUDA_R_32F, k,
+                    B, CUDA_R_32F, k, &beta,
+                    C, CUDA_R_32F, m,
+                    CUDA_R_32F, CUBLAS_GEMM_DEFAULT));
+
+            } else if ( DT == DataType::FP16 ) {
+                auto* dst = (device_fp16_t *)output->cx_fp16()->data() + pred * vocab_size;
+                auto* x = (device_fp16_t *)data() + b * new_tokens * hidden_size + target * hidden_size;
+
+                auto* A = (device_fp16_t *)lm_head->cx_fp16()->data();
+                auto* B = x;
+                auto* C = dst;
+
+                CXBLAS_CHECK( cublasGemmEx(ComputingContext::cxblas_handle,
+                    CUBLAS_OP_T, CUBLAS_OP_N,
+                    m, n, k,
+                    &alpha, A, CUDA_R_16F, k,
+                    B, CUDA_R_16F, k, &beta,
+                    C, CUDA_R_16F, m,
+                    CUDA_R_32F, CUBLAS_GEMM_DEFAULT));
+
+            } else {
+                return OP_TODO_ERROR;
+            }
+
+            pred ++;
+        }
+     }
+
+    return pred;
+}
+
+template<DataType DT>
+std::variant<ComputingReturn, tensor_t>  CXTensor<DT>::op_sampling_top1(tensor_t self) {
+    if ( DT == DataType::FP16 ) {
+        int batch = self->shape()[0];
+        int vocab_size = self->shape()[1];
+
+        std::vector<size_t> ret_shape{ (size_t)batch};
+        tensor_t ret = vt::create_host_int( ret_shape );
+
+        auto stream = ComputingContext::corex_stream;
+        int* out = (int *)ComputingContext::corex_workspace;
+        device_fp16_t* logits = (device_fp16_t *) self->device_data();
+
+        corex::kr_easy_top1<device_fp16_t>(logits, out, batch, vocab_size, stream);
+
+        COREX_CHECK(cudaMemcpyAsync( ret->device_data(), out, batch * sizeof(int), cudaMemcpyDeviceToHost, stream));
+        return ret;
+    }
+    return OP_TODO_ERROR;
+}
+
+template<DataType DT>
+std::variant<ComputingReturn, tensor_t>  CXTensor<DT>::op_sampling_top3(tensor_t self, float temp) {
+    if ( DT == DataType::FP16 ) {
+        int batch = self->shape()[0];
+        int vocab_size = self->shape()[1];
+
+        std::vector<size_t> ret_shape{ (size_t)batch};
+        tensor_t ret = vt::create_host_int( ret_shape );
+
+        auto stream = ComputingContext::corex_stream;
+        int* out = (int *)ComputingContext::corex_workspace;
+        device_fp16_t* logits = (device_fp16_t *) self->device_data();
+
+        std::uniform_real_distribution<> dist(0.0, 1.0);
+        float randx = dist( *ComputingContext::rng );
+
+        corex::kr_easy_top3<device_fp16_t>(logits, out, batch, vocab_size, temp, randx, stream);
+
+        COREX_CHECK(cudaMemcpyAsync( ret->device_data(), out, batch * sizeof(int), cudaMemcpyDeviceToHost, stream));
+
+        return ret;
+    }
+    return OP_TODO_ERROR;
+}
+
+
 
 // ============================================
 tensor_t create_cx_float(std::vector<size_t>& shape_) {

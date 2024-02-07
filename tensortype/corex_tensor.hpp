@@ -71,7 +71,6 @@ public:
 
     ComputingReturn op_transpose_0213(tensor_t self, tensor_t y) override;
     ComputingReturn op_qk(tensor_t self, tensor_t k, tensor_t qk) override;
-#if 0
     ComputingReturn op_softmax(tensor_t self, tensor_t out) override;
     ComputingReturn op_attn(tensor_t self, tensor_t value, tensor_t out) override;
     ComputingReturn op_gelu(tensor_t self, tensor_t dst) override;
@@ -79,7 +78,6 @@ public:
     std::variant<ComputingReturn, int> op_all_logits(tensor_t self, tensor_t mask,  tensor_t lm_head, tensor_t output) override;
     std::variant<ComputingReturn, tensor_t> op_sampling_top1(tensor_t self) override;
     std::variant<ComputingReturn, tensor_t> op_sampling_top3(tensor_t self, float temp) override;
-#endif
 
 protected:
     const bool owner_;
