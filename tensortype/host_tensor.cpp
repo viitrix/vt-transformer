@@ -69,6 +69,15 @@ ComputingReturn HostTensor<_DTYPE_>::op_copy(tensor_t self, tensor_t src) {
     }
 #endif
 
+#if _USING_DEVICE_COREX_
+    if ( src->is_corex() ) {
+        auto stream = ComputingContext::corex_stream;
+        size_t size = std::get<1>( self->op_sizeof(self) );
+        COREX_CHECK(cudaMemcpyAsync(data(), src->device_data(), size , cudaMemcpyDeviceToHost, stream));
+        return OP_OK;
+    }
+#endif
+
     vt_panic("Can't be here!");
     return OP_TODO_ERROR;
 }

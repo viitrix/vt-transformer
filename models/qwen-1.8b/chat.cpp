@@ -144,6 +144,9 @@ void do_inference(vt::Enviroment* env, const char* dag_file) {
 #ifdef _USING_DEVICE_DCU_
         env->stack().push_string("dcu");
 #endif
+#ifdef _USING_DEVICE_COREX_
+        env->stack().push_string("corex");
+#endif
         env->run(init_bin);
         delete init_bin;
     }
