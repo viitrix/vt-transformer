@@ -55,7 +55,6 @@ public:
     std::variant<ComputingReturn, tensor_t> op_view(tensor_t self, size_t offset, const std::vector<size_t>& newShape) override;
     std::variant<ComputingReturn, tensor_t> op_view_as(tensor_t self, size_t offset, const std::vector<size_t>& newShape, const char* dtype) override;
     ComputingReturn op_reshape(tensor_t self, size_t offset, const std::vector<size_t>& newShape) override;
-#if 0
     ComputingReturn op_quantize(tensor_t self, tensor_t out) override;
     ComputingReturn op_dequantize(tensor_t self, tensor_t out) override;
     ComputingReturn op_embed(tensor_t self, tensor_t table, tensor_t out) override;
@@ -72,6 +71,7 @@ public:
 
     ComputingReturn op_transpose_0213(tensor_t self, tensor_t y) override;
     ComputingReturn op_qk(tensor_t self, tensor_t k, tensor_t qk) override;
+#if 0
     ComputingReturn op_softmax(tensor_t self, tensor_t out) override;
     ComputingReturn op_attn(tensor_t self, tensor_t value, tensor_t out) override;
     ComputingReturn op_gelu(tensor_t self, tensor_t dst) override;
