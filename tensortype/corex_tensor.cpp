@@ -801,7 +801,6 @@ ComputingReturn CXTensor<DT>::op_linear(tensor_t self, tensor_t w_, tensor_t b_,
         if ( b_ != nullptr) {
             corex::kr_add_bias<device_fp16_t>((device_fp16_t *)C, (device_fp16_t *)b_->cx_fp16()->data(), (device_fp16_t *)C, n, m, stream);
         }
-
         return OP_OK;
     }
 
@@ -967,6 +966,7 @@ ComputingReturn  CXTensor<DT>::op_qk(tensor_t self, tensor_t k_, tensor_t qk_) {
     int TT = ftokens * ntokens;
 
     if ( DT == DataType::Float ) {
+#if 0
         void *A_ = k_->cx_float()->data();
         void *B_ = data();
         void *C_ = qk_->cx_float()->data();
@@ -980,6 +980,38 @@ ComputingReturn  CXTensor<DT>::op_qk(tensor_t self, tensor_t k_, tensor_t qk_) {
                         &beta, C_, CUDA_R_32F, m, TT,
                         batch*heads, CUDA_R_32F, CUBLAS_GEMM_DEFAULT) );
 
+#else
+        std::vector<void*> As;
+        std::vector<void*> Bs;
+        std::vector<void*> Cs;
+        for (int i = 0; i < batch * heads; i++) {
+            float* B = (float *)data() + i * HnT;
+            float* A = (float *)(k_->cx_float()->data()) + i * HfT;
+            float* C = (float *)(qk_->cx_float()->data()) + i * TT;
+            As.push_back(A);
+            Bs.push_back(B);
+            Cs.push_back(C);
+        }
+
+        size_t pointers_size = As.size() * sizeof(void *);
+        void *A_ = ComputingContext::corex_workspace;
+        void *B_ = (char *)A_ + pointers_size;
+        void *C_ = (char *)B_ + pointers_size;
+
+        COREX_CHECK( cudaMemcpyAsync(A_, As.data(), pointers_size, cudaMemcpyHostToDevice));
+        COREX_CHECK( cudaMemcpyAsync(B_, Bs.data(), pointers_size, cudaMemcpyHostToDevice));
+        COREX_CHECK( cudaMemcpyAsync(C_, Cs.data(), pointers_size, cudaMemcpyHostToDevice));
+
+        CXBLAS_CHECK( cublasGemmBatchedEx(
+                        ComputingContext::cxblas_handle,
+                        CUBLAS_OP_T, CUBLAS_OP_N,
+                        m, n, k,
+                        &alpha, (const void **)A_, CUDA_R_32F, k,
+                        (const void **)B_, CUDA_R_32F, k,
+                        &beta,  (void **)C_, CUDA_R_32F, m,
+                        batch*heads, CUDA_R_32F, CUBLAS_GEMM_DEFAULT) );
+
+#endif
         return OP_OK;
     }
     if ( DT == DataType::FP16 ) {
@@ -1038,6 +1070,7 @@ ComputingReturn  CXTensor<DT>::op_attn(tensor_t self, tensor_t value_, tensor_t 
     int TT = ftokens * ntokens;
 
     if ( value_->is_float() && self->is_float() ) {
+#if 0
         void *A_ = value_->cx_float()->data();
         void *B_ = data();
         void *C_ = out_->cx_float()->data();
@@ -1049,7 +1082,37 @@ ComputingReturn  CXTensor<DT>::op_attn(tensor_t self, tensor_t value_, tensor_t 
                         B_, CUDA_R_32F, k, TT,
                         &beta, C_, CUDA_R_32F, m, HnT,
                         batch*heads, CUDA_R_32F, CUBLAS_GEMM_DEFAULT) );
+#else
+        std::vector<void*> As;
+        std::vector<void*> Bs;
+        std::vector<void*> Cs;
+        for (int i = 0; i < batch*heads; i++) {
+            void *A = (float*)value_->cx_float()->data() + i * HfT;
+            void *B = (float*)data() + i * TT;
+            void *C = (float*)out_->cx_float()->data() + i * HnT;
+            As.push_back(A);
+            Bs.push_back(B);
+            Cs.push_back(C);
+        }
+        size_t pointers_size = As.size() * sizeof(void *);
+        void *A_ = ComputingContext::corex_workspace;
+        void *B_ = (char *)A_ + pointers_size;
+        void *C_ = (char *)B_ + pointers_size;
 
+        COREX_CHECK( cudaMemcpyAsync(A_, As.data(), pointers_size, cudaMemcpyHostToDevice));
+        COREX_CHECK( cudaMemcpyAsync(B_, Bs.data(), pointers_size, cudaMemcpyHostToDevice));
+        COREX_CHECK( cudaMemcpyAsync(C_, Cs.data(), pointers_size, cudaMemcpyHostToDevice));
+
+        CXBLAS_CHECK( cublasGemmBatchedEx(
+                        ComputingContext::cxblas_handle,
+                        CUBLAS_OP_N, CUBLAS_OP_N,
+                        m, n, k,
+                        &alpha, (const void **)A_, CUDA_R_32F, m,
+                        (const void**)B_, CUDA_R_32F, k,
+                        &beta, (void **)C_, CUDA_R_32F, m,
+                        batch*heads, CUDA_R_32F, CUBLAS_GEMM_DEFAULT) );
+
+#endif
         return OP_OK;
     }
     if ( value_->is_fp16() && self->is_float() ) {
@@ -1201,23 +1264,26 @@ std::variant<ComputingReturn,int> CXTensor<DT>::op_all_logits(tensor_t self, ten
 
 template<DataType DT>
 std::variant<ComputingReturn, tensor_t>  CXTensor<DT>::op_sampling_top1(tensor_t self) {
-    if ( DT == DataType::FP16 ) {
-        int batch = self->shape()[0];
-        int vocab_size = self->shape()[1];
-
-        std::vector<size_t> ret_shape{ (size_t)batch};
-        tensor_t ret = vt::create_host_int( ret_shape );
-
-        auto stream = ComputingContext::corex_stream;
-        int* out = (int *)ComputingContext::corex_workspace;
-        device_fp16_t* logits = (device_fp16_t *) self->device_data();
-
-        corex::kr_easy_top1<device_fp16_t>(logits, out, batch, vocab_size, stream);
-
-        COREX_CHECK(cudaMemcpyAsync( ret->device_data(), out, batch * sizeof(int), cudaMemcpyDeviceToHost, stream));
-        return ret;
+    if ( DT != DataType::FP16 && DT != DataType::Float ) {
+        return OP_INPUT_ERROR;
     }
-    return OP_TODO_ERROR;
+    int batch = self->shape()[0];
+    int vocab_size = self->shape()[1];
+
+    std::vector<size_t> ret_shape{ (size_t)batch};
+    tensor_t ret = vt::create_host_int( ret_shape );
+
+    auto stream = ComputingContext::corex_stream;
+    int* out = (int *)ComputingContext::corex_workspace;
+    if ( DT == DataType::FP16 ) {
+        device_fp16_t* logits = (device_fp16_t *) self->device_data();
+        corex::kr_easy_top1<device_fp16_t>(logits, out, batch, vocab_size, stream);
+    } else {
+        float* logits = (float *) self->device_data();
+        corex::kr_easy_top1<float>(logits, out, batch, vocab_size, stream);
+    }
+    COREX_CHECK(cudaMemcpyAsync( ret->device_data(), out, batch * sizeof(int), cudaMemcpyDeviceToHost, stream));
+    return ret;
 }
 
 template<DataType DT>
