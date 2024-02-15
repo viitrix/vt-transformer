@@ -39,7 +39,6 @@ def save_weight(w, wfile):
     w32 = w.cpu().float().detach().numpy().flatten();
     w32.tofile(ofile_name);
 
-
 pretrain = "./";  ## "Qwen/Qwen1.5-0.5B-Chat"
 model = AutoModelForCausalLM.from_pretrained(pretrain, device_map="cpu").eval()
 
@@ -75,10 +74,10 @@ for i in range(0, 24):
     name = pname + "attn.key.bias";
     save_weight(w, name);
     w = model.model.layers[i].self_attn.v_proj.weight;
-    name = pname + "attn.view.weight";
+    name = pname + "attn.value.weight";
     save_weight(w, name);
     w = model.model.layers[i].self_attn.v_proj.bias;
-    name = pname + "attn.view.bias";
+    name = pname + "attn.value.bias";
     save_weight(w, name);
 
     w = model.model.layers[i].self_attn.o_proj.weight;

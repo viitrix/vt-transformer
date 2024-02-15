@@ -23,4 +23,4 @@ run: chat
 	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${CUDA_DIR}/lib64:${NCCL_DIR}/lib:${CUDNN_DIR}/lib:${VT_SOURCE}/install/lib ./chat $(target)
 
 clean:
-	rm -f chat bech 
+	rm -f chat 

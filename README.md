@@ -30,6 +30,7 @@ A new Transformer framework for edge computing, based on pure c++, supports infe
 - [x] Qwen-14b 
 - [x] Qwen-72b
 - [ ] Qwen-VL
+- [x] Qwen1.5-0.5b
 - [x] Whisper2
 - [ ] ChatGLM
 - [x] Baichuan
