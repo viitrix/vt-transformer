@@ -301,6 +301,12 @@ std::variant<ComputingReturn, tensor_t> TensorType::op_sampling_top3(tensor_t se
     return ret;
 }
 
+ComputingReturn TensorType::op_conv2d(tensor_t self, tensor_t weight, tensor_t bias, tensor_t dst, int stride, int padding) {
+    vt_assert(self.get() == this, "can't be here!");
+    auto ret = impl()->op_conv2d(self, weight, bias, dst, stride, padding);
+    op_check(ret, "op_conv2d");
+}
+
 std::variant<ComputingReturn, float> TensorType::op_loss_backward(tensor_t self, tensor_t ids, tensor_t mask, tensor_t lm_head, tensor_t all_logits, tensor_t x_g, tensor_t lm_head_g) {
     vt_assert(self.get() == this, "can't be here!");
 

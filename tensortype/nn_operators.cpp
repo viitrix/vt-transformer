@@ -499,6 +499,19 @@ namespace op {
         NWORD_CREATOR_DEFINE_LR(SamplingTop3);
     };
 
+    struct Conv2D : public NativeWord {
+        void run(Stack& stack) override {
+            int padding = stack.pop_number();
+            int stride = stack.pop_number();
+            tensor_t dst = stack.pop_tensor();
+            tensor_t bias = stack.pop_tensor();
+            tensor_t weight = stack.pop_tensor();
+            tensor_t x = stack.pop_tensor();
+            x->op_conv2d(x, weight, bias, dst, stride, padding);
+        }
+        NWORD_CREATOR_DEFINE_LR(Conv2D);
+    };
+
     struct LossBackward : public NativeWord {
         void run(Stack& stack) override {
             tensor_t lm_head_g = stack.pop_tensor();
@@ -772,6 +785,7 @@ void load_nn_operators(Enviroment& env) {
     env.insert_native_word("op.all_logits", op::AllLogits::creator);
     env.insert_native_word("op.sampling_top1", op::SamplingTop1::creator);
     env.insert_native_word("op.sampling_top3", op::SamplingTop3::creator);
+    env.insert_native_word("op.conv2d", op::Conv2D::creator);
     env.insert_native_word("op.loss_backward", op::LossBackward::creator);
     env.insert_native_word("op.layernorm_backward", op::LayernormBackward::creator);
     env.insert_native_word("op.linear_backward", op::LinearBackward::creator);
