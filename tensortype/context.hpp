@@ -223,7 +223,8 @@ void fill_alibi(std::vector<T>&data, int heads, int tokens);
 template<typename T>
 void fill_rotary_cache(std::vector<T>&data, int len, int dims, float base);
 
-} // end of namespace br
+
+} // end of namespace vt
 
 
 #endif

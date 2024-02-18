@@ -202,6 +202,7 @@ int main(int argc, char* argv[] ) {
         vt::ComputingContext::boot( 0 );
         vt::Enviroment* env = new vt::Enviroment();
         env->insert_native_word("app.mem", MemoryCounting::creator);
+        env->insert_native_word("app.align", MemoryAlign::creator);
 
         do_inference(env, dag_file);
 

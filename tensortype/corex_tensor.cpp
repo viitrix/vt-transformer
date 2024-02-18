@@ -64,6 +64,7 @@ ComputingReturn CXTensor<DT>::io_dump(tensor_t self) {
         void* dst = mem.data();
         char* src = (char *)data();
         COREX_CHECK(cudaMemcpyAsync(mem.data(), src, datasize, cudaMemcpyDeviceToHost, stream));
+        COREX_CHECK(cudaStreamSynchronize(stream));
 
         std::cout << "First " << first8 << " : ";
         if ( DT == DataType::Float ) {
@@ -92,6 +93,7 @@ ComputingReturn CXTensor<DT>::io_dump(tensor_t self) {
         }
         src = src + dataoffset;
         COREX_CHECK(cudaMemcpyAsync(mem.data(), src, datasize, cudaMemcpyDeviceToHost, stream));
+        COREX_CHECK(cudaStreamSynchronize(stream));
 
         std::cout << "Last " << first8 << " : ";
         if ( DT == DataType::Float ) {
@@ -619,6 +621,12 @@ ComputingReturn CXTensor<DT>::op_convert(tensor_t self, tensor_t src) {
         corex::kr_convert<float, device_fp16_t>((float *)src->cx_float()->data(), (device_fp16_t *)data(), self->items(), stream);
         return OP_OK;
     }
+    if ( DT == DataType::Float && src->is_fp16() ) {
+        auto stream = ComputingContext::corex_stream;
+        corex::kr_convert<device_fp16_t, float>((device_fp16_t *)src->cx_fp16()->data(), (float *)data(), self->items(), stream);
+        return OP_OK;
+    }
+
     return OP_TODO_ERROR;
 }
 
@@ -758,6 +766,10 @@ ComputingReturn CXTensor<DT>::op_linear(tensor_t self, tensor_t w_, tensor_t b_,
         int n = batch * tokens;
         int k = inSize;
 
+        vt_assert( check_aligned(A, 32), " corex gemm must 32 alignment!");
+        vt_assert( check_aligned(B, 32), " corex gemm must 32 alignment!");
+        vt_assert( check_aligned(C, 32), " corex gemm must 32 alignment!");
+
         CXBLAS_CHECK( cublasGemmEx(ComputingContext::cxblas_handle,
                        CUBLAS_OP_T, CUBLAS_OP_N,
                        m, n, k,
@@ -789,6 +801,10 @@ ComputingReturn CXTensor<DT>::op_linear(tensor_t self, tensor_t w_, tensor_t b_,
         int m = outSize;
         int n = batch * tokens;
         int k = inSize;
+
+        vt_assert( check_aligned(A, 64), " corex fp16 gemm must 64 alignment!");
+        vt_assert( check_aligned(B, 64), " corex fp16 gemm must 64 alignment!");
+        vt_assert( check_aligned(C, 64), " corex fp16 gemm must 64 alignment!");
 
         CXBLAS_CHECK( cublasGemmEx(ComputingContext::cxblas_handle,
                        CUBLAS_OP_T, CUBLAS_OP_N,
@@ -1014,18 +1030,68 @@ ComputingReturn  CXTensor<DT>::op_qk(tensor_t self, tensor_t k_, tensor_t qk_) {
 #endif
         return OP_OK;
     }
-    if ( DT == DataType::FP16 ) {
-        void *A_ = k_->cx_fp16()->data();
-        void *B_ = data();
-        void *C_ = qk_->cx_float()->data();
+    if ( DT == DataType::FP16 && qk_->is_fp16()) {
+        std::vector<void*> As;
+        std::vector<void*> Bs;
+        std::vector<void*> Cs;
+        for (int i = 0; i < batch * heads; i++) {
+            device_fp16_t* B = (device_fp16_t *)data() + i * HnT;
+            device_fp16_t* A = (device_fp16_t *)(k_->cx_fp16()->data()) + i * HfT;
+            device_fp16_t* C = (device_fp16_t *)(qk_->cx_fp16()->data()) + i * TT;
+            As.push_back(A);
+            Bs.push_back(B);
+            Cs.push_back(C);
+        }
 
-        CXBLAS_CHECK( cublasGemmStridedBatchedEx(
+        size_t pointers_size = As.size() * sizeof(void *);
+        void *A_ = ComputingContext::corex_workspace;
+        void *B_ = (char *)A_ + pointers_size;
+        void *C_ = (char *)B_ + pointers_size;
+
+        COREX_CHECK( cudaMemcpyAsync(A_, As.data(), pointers_size, cudaMemcpyHostToDevice));
+        COREX_CHECK( cudaMemcpyAsync(B_, Bs.data(), pointers_size, cudaMemcpyHostToDevice));
+        COREX_CHECK( cudaMemcpyAsync(C_, Cs.data(), pointers_size, cudaMemcpyHostToDevice));
+
+        CXBLAS_CHECK( cublasGemmBatchedEx(
                         ComputingContext::cxblas_handle,
                         CUBLAS_OP_T, CUBLAS_OP_N,
                         m, n, k,
-                        &alpha, A_, CUDA_R_16F, k, HnT,
-                        B_, CUDA_R_16F, k, HfT,
-                        &beta, C_, CUDA_R_32F, m, TT,
+                        &alpha, (const void **)A_, CUDA_R_16F, k,
+                        (const void **)B_, CUDA_R_16F, k,
+                        &beta,  (void **)C_, CUDA_R_16F, m,
+                        batch*heads, CUDA_R_32F, CUBLAS_GEMM_DEFAULT) );
+        return OP_OK;
+    }
+
+    if ( DT == DataType::FP16 && qk_->is_float()) {
+        std::vector<void*> As;
+        std::vector<void*> Bs;
+        std::vector<void*> Cs;
+        for (int i = 0; i < batch * heads; i++) {
+            device_fp16_t* B = (device_fp16_t *)data() + i * HnT;
+            device_fp16_t* A = (device_fp16_t *)(k_->cx_fp16()->data()) + i * HfT;
+            float* C = (float *)(qk_->cx_float()->data()) + i * TT;
+            As.push_back(A);
+            Bs.push_back(B);
+            Cs.push_back(C);
+        }
+
+        size_t pointers_size = As.size() * sizeof(void *);
+        void *A_ = ComputingContext::corex_workspace;
+        void *B_ = (char *)A_ + pointers_size;
+        void *C_ = (char *)B_ + pointers_size;
+
+        COREX_CHECK( cudaMemcpyAsync(A_, As.data(), pointers_size, cudaMemcpyHostToDevice));
+        COREX_CHECK( cudaMemcpyAsync(B_, Bs.data(), pointers_size, cudaMemcpyHostToDevice));
+        COREX_CHECK( cudaMemcpyAsync(C_, Cs.data(), pointers_size, cudaMemcpyHostToDevice));
+
+        CXBLAS_CHECK( cublasGemmBatchedEx(
+                        ComputingContext::cxblas_handle,
+                        CUBLAS_OP_T, CUBLAS_OP_N,
+                        m, n, k,
+                        &alpha, (const void **)A_, CUDA_R_16F, k,
+                        (const void **)B_, CUDA_R_16F, k,
+                        &beta,  (void **)C_, CUDA_R_32F, m,
                         batch*heads, CUDA_R_32F, CUBLAS_GEMM_DEFAULT) );
         return OP_OK;
     }
@@ -1115,33 +1181,36 @@ ComputingReturn  CXTensor<DT>::op_attn(tensor_t self, tensor_t value_, tensor_t 
 #endif
         return OP_OK;
     }
-    if ( value_->is_fp16() && self->is_float() ) {
-        void *A_ = value_->cx_fp16()->data();
-        void *B_ = data();
-        void *C_ = out_->cx_fp16()->data();
-        CXBLAS_CHECK( cublasGemmStridedBatchedEx(
+    if ( value_->is_fp16() && self->is_fp16()  ) {
+        std::vector<void*> As;
+        std::vector<void*> Bs;
+        std::vector<void*> Cs;
+        for (int i = 0; i < batch*heads; i++) {
+            void *A = (device_fp16_t*)value_->cx_fp16()->data() + i * HfT;
+            void *B = (device_fp16_t*)data() + i * TT;
+            void *C = (device_fp16_t*)out_->cx_fp16()->data() + i * HnT;
+            As.push_back(A);
+            Bs.push_back(B);
+            Cs.push_back(C);
+        }
+        size_t pointers_size = As.size() * sizeof(void *);
+        void *A_ = ComputingContext::corex_workspace;
+        void *B_ = (char *)A_ + pointers_size;
+        void *C_ = (char *)B_ + pointers_size;
+
+        COREX_CHECK( cudaMemcpyAsync(A_, As.data(), pointers_size, cudaMemcpyHostToDevice));
+        COREX_CHECK( cudaMemcpyAsync(B_, Bs.data(), pointers_size, cudaMemcpyHostToDevice));
+        COREX_CHECK( cudaMemcpyAsync(C_, Cs.data(), pointers_size, cudaMemcpyHostToDevice));
+
+        CXBLAS_CHECK( cublasGemmBatchedEx(
                         ComputingContext::cxblas_handle,
                         CUBLAS_OP_N, CUBLAS_OP_N,
                         m, n, k,
-                        &alpha, A_, CUDA_R_16F, m, HfT,
-                        B_, CUDA_R_32F, k, TT,
-                        &beta, C_, CUDA_R_16F, m, HnT,
+                        &alpha, (const void **)A_, CUDA_R_16F, m,
+                        (const void**)B_, CUDA_R_16F, k,
+                        &beta, (void **)C_, CUDA_R_16F, m,
                         batch*heads, CUDA_R_32F, CUBLAS_GEMM_DEFAULT) );
 
-        return OP_OK;
-    }
-    if ( value_->is_fp16() && self->is_fp16()  ) {
-        void *A_ = value_->cx_fp16()->data();
-        void *B_ = data();
-        void *C_ = out_->cx_fp16()->data();
-        CXBLAS_CHECK( cublasGemmStridedBatchedEx(
-                        ComputingContext::cxblas_handle,
-                        CUBLAS_OP_N, CUBLAS_OP_N,
-                        m, n, k,
-                        &alpha, A_, CUDA_R_16F, m, HfT,
-                        B_, CUDA_R_16F, k, TT,
-                        &beta, C_, CUDA_R_16F, m, HnT,
-                        batch*heads, CUDA_R_32F, CUBLAS_GEMM_DEFAULT) );
         return OP_OK;
     }
     return OP_TODO_ERROR;

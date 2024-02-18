@@ -35,6 +35,12 @@ inline void _M_Panic(const char* file, int line, const char* msg) {
     abort();
 }
 
+inline bool
+check_aligned(const void * ptr, int alignment) noexcept {
+    auto iptr = reinterpret_cast<std::uintptr_t>(ptr);
+    return !(iptr % alignment);
+}
+
 inline std::string fileToString(const char* filename) {
     std::ifstream t(filename);
     if ( ! t.is_open() ) {
