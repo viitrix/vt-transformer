@@ -158,6 +158,18 @@ namespace op {
 #else
                 vt_panic("Can' be here!");
 #endif
+            } else if ( device == "dnnl" ) {
+#ifdef _USING_DEVICE_DNNL_
+                if ( dtype == vt::Float ) {
+                    t = vt::create_dnnl_float(shape);
+                } else if ( dtype == vt::FP16 ) {
+                    t = vt::create_dnnl_fp16(shape);
+                } else if ( dtype == vt::Int ) {
+                    t = vt::create_dnnl_int(shape);
+                }
+#else
+                vt_panic("Can't be here!");
+#endif
             } else if ( device == "host" ) {
                 if ( dtype == vt::Float ) {
                     t = vt::create_host_float(shape);
