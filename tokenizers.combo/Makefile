@@ -6,10 +6,13 @@ INC = -I. -I../install/include -I${SENTENCEPIECE_DIR}/include
 
 all: install
 
-libtokenizer_combo.a: qwen.o 
+libtokenizer_combo.a: qwen.o image.o 
 	 ar rcs $@ $?	
 
 qwen.o: qwen.cpp
+	g++ $(FLAGS) -c -o $@ $(INC) $<
+
+image.o: image.cpp
 	g++ $(FLAGS) -c -o $@ $(INC) $<
 
 rust/target/release/libtokenizers_c.so:

@@ -18,5 +18,8 @@ struct Tokenizer {
 
 Tokenizer* build_tokenizer_qwen(const char* file_name);
 
+void load_image_rgb_plane(const std::string& filename, std::vector<uint8_t>& rgb);
+
+
 }
 #endif
