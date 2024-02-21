@@ -1,6 +1,10 @@
 #ifndef _CONTEXT_HPP_
 #define _CONTEXT_HPP_
 
+#ifdef _USING_DEVICE_DNNL_
+#include <dnnl.hpp>
+#endif
+
 #ifdef _USING_DEVICE_CUDA_
 #include <cuda.h>
 #include <cuda_runtime.h>
@@ -105,6 +109,11 @@ namespace vt {
 #endif
 
 struct ComputingContext {
+#ifdef _USING_DEVICE_DNNL_
+    static dnnl::engine*    dnnl_engine;
+    static dnnl::stream*    dnnl_stream;
+#endif
+
 #ifdef _USING_DEVICE_CUDA_
     static int cuda_device;
     static cudaStream_t cuda_stream;
@@ -134,12 +143,18 @@ struct ComputingContext {
     static size_t workspace_size;
     static std::mt19937* rng;
 
-    static void boot(int cud);
+    static void boot_dnnl(int device);
+    static void boot_cuda(int device);
+    static void boot_corex(int device);
+    static void boot_dcu(int device);
     static void shutdown();
 
 #ifdef _USING_DEVICE_CUDA_
     static float cuda_event(int flag);
 #endif
+
+private:
+    static void boot_host();
 };
 
 struct CollectiveContext {

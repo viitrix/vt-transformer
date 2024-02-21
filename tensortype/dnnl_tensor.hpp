@@ -46,6 +46,7 @@ public:
     ComputingReturn io_save(tensor_t self, const char* fileName) override;
 
     std::variant<ComputingReturn, size_t> op_sizeof(tensor_t self) override;
+    ComputingReturn op_conv2d(tensor_t self, tensor_t weight, tensor_t bias, tensor_t dst, int stride, int padding) override;
 
 protected:
     const bool owner_;

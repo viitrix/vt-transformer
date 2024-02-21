@@ -303,6 +303,10 @@ std::variant<ComputingReturn, tensor_t> TensorType::op_sampling_top3(tensor_t se
 
 ComputingReturn TensorType::op_conv2d(tensor_t self, tensor_t weight, tensor_t bias, tensor_t dst, int stride, int padding) {
     vt_assert(self.get() == this, "can't be here!");
+    // checking shape
+    vt_assert(self->shape().dim() == 4, "conv2d accept NCHW only!");
+    vt_assert(weight->shape().dim() == 4, "conv2d weight OIHW only!");
+    vt_assert(self->shape().dims()[1] == weight->shape().dims()[1], "conv2d input channel must be matched with weight");
     auto ret = impl()->op_conv2d(self, weight, bias, dst, stride, padding);
     op_check(ret, "op_conv2d");
 }

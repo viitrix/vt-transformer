@@ -118,6 +118,11 @@ ComputingReturn DNNLTensor<_DTYPE_>::io_load(tensor_t self, const char* fileName
     return OP_OK;
 }
 
+template <DataType _DTYPE_>
+ComputingReturn op_conv2d(tensor_t self, tensor_t weight, tensor_t bias, tensor_t dst, int stride, int padding) {
+    return OP_TODO_ERROR;
+}
+
 tensor_t create_dnnl_float(std::vector<size_t>& shape_) {
     ShapeType shape(shape_);
     DNNLTensor<DataType::Float>* tensor = new DNNLTensor<DataType::Float>(shape);

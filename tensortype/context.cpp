@@ -6,6 +6,11 @@
 
 namespace vt {
 
+#ifdef _USING_DEVICE_DNNL_
+dnnl::engine* ComputingContext::dnnl_engine = nullptr;
+dnnl::stream* ComputingContext::dnnl_stream = nullptr;
+#endif
+
 #ifdef _USING_DEVICE_CUDA_
 int ComputingContext::cuda_device = -1;
 cudaStream_t ComputingContext::cuda_stream = nullptr;
@@ -31,13 +36,27 @@ cublasHandle_t ComputingContext::cxblas_handle = nullptr;
 void* ComputingContext::corex_workspace = nullptr;
 #endif
 
-
 void* ComputingContext::host_workspace = nullptr;
 size_t ComputingContext::workspace_size = 0;
 std::mt19937* ComputingContext::rng = nullptr;
 
-void ComputingContext::boot(int cud) {
+void ComputingContext::boot_host() {
     workspace_size = 1024 * 1024 * 32 * 4;
+    host_workspace = malloc( workspace_size );
+    rng = new std::mt19937(1979);
+}
+
+void ComputingContext::boot_dnnl(int cud) {
+    boot_host();
+
+#ifdef _USING_DEVICE_DNNL_
+    dnnl_engine = new dnnl::engine(dnnl::engine::kind::cpu, 0);
+    dnnl_stream = new dnnl::stream(*dnnl_engine);
+#endif
+}
+
+void ComputingContext::boot_cuda(int cud) {
+    boot_host();
 
 #ifdef _USING_DEVICE_CUDA_
     cuda_device = cud;
@@ -61,6 +80,10 @@ void ComputingContext::boot(int cud) {
     CUDNN_CHECK(cudnnSetStream(cudnn_handle, cuda_stream));
     CUDA_CHECK( cudaMalloc(&cuda_workspace, workspace_size) );
 #endif
+}
+
+void ComputingContext::boot_dcu(int cud) {
+    boot_host();
 
 #ifdef _USING_DEVICE_DCU_
     dcu_device = cud;
@@ -71,6 +94,10 @@ void ComputingContext::boot(int cud) {
     HIPBLAS_CHECK( hipblasSetStream(hipblas_handle, dcu_stream) );
     HIP_CHECK( hipMalloc(&dcu_workspace, workspace_size) );
 #endif
+}
+
+void ComputingContext::boot_corex(int cud) {
+    boot_host();
 
 #ifdef _USING_DEVICE_COREX_
     corex_device = cud;
@@ -81,38 +108,48 @@ void ComputingContext::boot(int cud) {
     CXBLAS_CHECK( cublasSetStream(cxblas_handle, corex_stream) );
     COREX_CHECK( cudaMalloc(&corex_workspace, workspace_size) );
 #endif
-
-    host_workspace = malloc( workspace_size );
-    rng = new std::mt19937(1979);
 }
 
 void ComputingContext::shutdown() {
     free(host_workspace);
 
-#ifdef _USING_DEVICE_CUDA_
-    CUDA_CHECK( cudaFree(cuda_workspace) );
-    CUDNN_CHECK( cudnnDestroy(cudnn_handle) );
-    CUBLAS_CHECK( cublasLtDestroy(cublasLt_handle) );
-    CUBLAS_CHECK( cublasDestroy(cublas_handle) );
-    for (int i = 0; i < ALL_CUDA_EVENTS; i++) {
-        CUDA_CHECK( cudaEventDestroy(events[i]) );
+#ifdef _USING_DEVICE_DNNL_
+    if ( dnnl_stream != nullptr ) {
+        delete dnnl_stream;
+        delete dnnl_engine;
     }
-    CUDA_CHECK( cudaStreamDestroy(cuda_stream) );
-    for (int i = 1; i < ALL_CUDA_STREAMS; i++) {
-        CUDA_CHECK( cudaStreamDestroy(assist_streams[i]) );
+#endif
+
+#ifdef _USING_DEVICE_CUDA_
+    if ( cuda_stream != nullptr) {
+        CUDA_CHECK( cudaFree(cuda_workspace) );
+        CUDNN_CHECK( cudnnDestroy(cudnn_handle) );
+        CUBLAS_CHECK( cublasLtDestroy(cublasLt_handle) );
+        CUBLAS_CHECK( cublasDestroy(cublas_handle) );
+        for (int i = 0; i < ALL_CUDA_EVENTS; i++) {
+            CUDA_CHECK( cudaEventDestroy(events[i]) );
+        }
+        CUDA_CHECK( cudaStreamDestroy(cuda_stream) );
+        for (int i = 1; i < ALL_CUDA_STREAMS; i++) {
+            CUDA_CHECK( cudaStreamDestroy(assist_streams[i]) );
+        }
     }
 #endif
 
 #ifdef _USING_DEVICE_DCU_
-    HIP_CHECK( hipFree(dcu_workspace) );
-    HIPBLAS_CHECK( hipblasDestroy(hipblas_handle) );
-    HIP_CHECK( hipStreamDestroy(dcu_stream) );
+    if ( dcu_stream != nullptr) {
+        HIP_CHECK( hipFree(dcu_workspace) );
+        HIPBLAS_CHECK( hipblasDestroy(hipblas_handle) );
+        HIP_CHECK( hipStreamDestroy(dcu_stream) );
+    }
 #endif
 
 #ifdef _USING_DEVICE_COREX_
-    COREX_CHECK( cudaFree(corex_workspace) );
-    CXBLAS_CHECK( cublasDestroy(cxblas_handle) );
-    COREX_CHECK( cudaStreamDestroy(corex_stream) );
+    if ( corex_stream != nullptr ) {
+        COREX_CHECK( cudaFree(corex_workspace) );
+        CXBLAS_CHECK( cublasDestroy(cxblas_handle) );
+        COREX_CHECK( cudaStreamDestroy(corex_stream) );
+    }
 #endif
 }
 
