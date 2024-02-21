@@ -1,3 +1,4 @@
+
 #include <string>
 #include <sstream>
 #include <fstream>
@@ -5,6 +6,7 @@
 
 #include <vt.hpp>
 #include "tiktoken_c.h"
+#include "image_c.h"
 #include "tokenizer_combo.hpp"
 
 namespace vt {
@@ -31,7 +33,7 @@ struct QwenTokenizer : public Tokenizer {
                                         reg.c_str(), reg.size());
     }
 
-    ~QwenTokenizer() {
+    virtual ~QwenTokenizer() {
         if ( rustObj != nullptr) {
             tiktoken_free(rustObj);
         }
@@ -86,5 +88,50 @@ struct QwenTokenizer : public Tokenizer {
 Tokenizer* build_tokenizer_qwen(const char* file_name) {
     return new QwenTokenizer(file_name);
 }
+
+// ================================================================
+struct QwenImageLoader : public ImageLoader {
+    static const float mean[];
+    static const float std[];
+
+    ImageHandle rustObj;
+    QwenImageLoader(const std::string& filename) {
+        rustObj = imgobj_load(filename.c_str(), filename.size());
+        imgobj_resize(rustObj, 448, 448);
+    }
+    virtual ~QwenImageLoader() override{
+        imgobj_free(rustObj);
+    }
+    virtual size_t width() override {
+        return imgobj_width(rustObj);
+    }
+    virtual size_t height() override {
+        return imgobj_height(rustObj);
+    }
+    virtual void preprocess(std::vector<float>& out) {
+        const size_t s = width() * height();
+        std::vector<unsigned char> rgb;
+        rgb.resize(s * 3);
+        out.resize(s * 3);
+
+        imgobj_rgb_plane(rustObj, rgb.data());
+        for (size_t h = 0; h < height(); h++) {
+            for (size_t w = 0; w < width(); w++) {
+                int i = w + h * width();
+
+                out[i] = ((int)rgb[i] / 255.0 - mean[0]) / std[0];
+                out[i + s ] = ((int)rgb[i + s] / 255.0 - mean[1]) / std[1];
+                out[i + s * 2 ] = ((int)rgb[i + s * 2] / 255.0 - mean[2]) / std[2];
+            }
+        }
+    }
+};
+const float QwenImageLoader::mean[3] = {0.48145466, 0.4578275, 0.40821073};
+const float QwenImageLoader::std[3] = {0.26862954, 0.26130258, 0.27577711};
+
+ImageLoader* build_imageloader_qwen(const char* file_name) {
+    return new QwenImageLoader(file_name);
+}
+
 
 }

@@ -1,68 +1,23 @@
 pub mod tiktoken;
 pub mod tiktoken_wrapper;
 
-use load_image::*;
+use image::imageops::FilterType;
 
 pub struct ImageObject {
-    width:  usize,
-    height: usize,
-    rgb: Vec<u8>
+    img : image::DynamicImage
 }
+
 
 #[no_mangle]
 extern "C" fn imgobj_load(_file: *const u8, _len: usize) -> *mut ImageObject {
     unsafe {
         let path = std::str::from_utf8(std::slice::from_raw_parts(_file, _len)).unwrap();
-        let _img = load_image::load_path(path).unwrap();
-       	let rgb = match _img.bitmap {
-            ImageData::RGB8(ref bitmap) => {
-                let mut d : Vec<u8> = vec![];
-                for bgr in bitmap.iter() {
-                    d.push(bgr.b);
-                    d.push(bgr.g);
-                    d.push(bgr.r);
-                };
-                d
-            },
-            _ => panic!(),
-        };
+        let origin = image::open(path).unwrap();
         let image = Box::new(ImageObject {
-            width: _img.width,
-            height: _img.height,
-            rgb: rgb
+            img : origin
         });
+
         return Box::into_raw(image);
-    }
-}
-
-#[no_mangle]
-extern "C" fn imgobj_width(handle: *mut ImageObject ) -> usize {
-    unsafe {
-        (*handle).width
-    }
-}
-
-#[no_mangle]
-extern "C" fn imgobj_height(handle: *mut ImageObject ) -> usize {
-    unsafe {
-        (*handle).height
-    }
-}
-
-#[no_mangle]
-extern "C" fn imgobj_rgb_plane(handle: *mut ImageObject, rgb: *mut u8) {
-    unsafe {
-        let w = (*handle).width;
-        let h = (*handle).height;
-        let plane = w * h;
-        for i in 0..h {
-            for j in 0..w {
-                let ii : usize = j + i * w;
-                *rgb.add(ii) = (*handle).rgb[ii*3 + 0];
-                *rgb.add(plane + ii) = (*handle).rgb[ii*3 + 1];
-                *rgb.add(plane * 2 + ii) = (*handle).rgb[ii*3 + 2];
-            }
-        }
     }
 }
 
@@ -72,4 +27,55 @@ extern "C" fn imgobj_free(handle: *mut ImageObject) {
         drop(Box::from_raw(handle));
     }
 }
+
+#[no_mangle]
+extern "C" fn imgobj_width(handle: *mut ImageObject ) -> u32 {
+    let img : &ImageObject = unsafe {
+        &*handle
+    };
+    return img.img.width();
+}
+
+#[no_mangle]
+extern "C" fn imgobj_height(handle: *mut ImageObject ) -> u32 {
+    let img : &ImageObject = unsafe {
+        &*handle
+    };
+    return img.img.height();
+}
+
+#[no_mangle]
+extern "C" fn imgobj_resize(handle: *mut ImageObject, width: u32, height: u32) {
+    let img : &mut ImageObject = unsafe {
+        &mut *handle
+    };
+
+    let scaled = img.img.resize_exact(width, height, FilterType::CatmullRom);
+    img.img = scaled;
+}
+
+
+#[no_mangle]
+extern "C" fn imgobj_rgb_plane(handle: *mut ImageObject, plane: *mut u8) {
+    let img : &ImageObject = unsafe {
+        & *handle
+    };
+
+    let width = img.img.width();
+    let height = img.img.height();
+    let psize:usize = (width * height) as usize;
+    let rgb = img.img.to_rgb8();
+
+    for h in 0..height {
+        for w in 0..width {
+            let i:usize = (h * width + w) as usize;
+            unsafe {
+                *plane.add( i ) = rgb.get_pixel(w, h)[0];
+                *plane.add( i + psize) = rgb.get_pixel(w, h)[1];
+                *plane.add( i + psize*2) = rgb.get_pixel(w, h)[2];
+            }
+        }
+    }
+}
+
 

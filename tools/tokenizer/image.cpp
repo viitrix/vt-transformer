@@ -7,12 +7,14 @@
 #include <tokenizer_combo.hpp>
 
 int main(int argc, const char* argv[]) {
-    std::vector<uint8_t> rgbdata;
-    std::string file = argv[1];
-    std::vector<uint8_t> data;
+    std::vector<float> out;
+    auto loader = vt::build_imageloader_qwen(argv[1]);
 
-    vt::load_image_rgb_plane(file, data);
-
-    std::cout << data.size() << std::endl;
+    loader->preprocess(out);
+    for(int i = 0; i < 8; i++) {
+        std::cout << out[448 * 448 * 2 + i] << " ";
+        //std::cout << out[ i] << " ";
+    }
+    std::cout << std::endl;
 }
 

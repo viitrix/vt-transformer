@@ -16,10 +16,16 @@ struct Tokenizer {
     virtual int token_bos() = 0;
 };
 
+struct ImageLoader {
+    virtual ~ImageLoader() {}
+    virtual size_t width() = 0;
+    virtual size_t height() = 0;
+    virtual void preprocess(std::vector<float>& out) = 0;
+};
+
+// Qwen serial models
 Tokenizer* build_tokenizer_qwen(const char* file_name);
-
-void load_image_rgb_plane(const std::string& filename, std::vector<uint8_t>& rgb);
-
+ImageLoader* build_imageloader_qwen(const char* file_name);
 
 }
 #endif
