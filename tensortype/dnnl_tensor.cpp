@@ -121,6 +121,53 @@ ComputingReturn DNNLTensor<_DTYPE_>::io_load(tensor_t self, const char* fileName
     return OP_OK;
 }
 
+template<DataType DT>
+ComputingReturn DNNLTensor<DT>::op_fill(tensor_t self, float value) {
+    size_t items = self->items();
+    if ( DT == DataType::Float ) {
+        float *dst = (float *)mem_;
+        for (size_t i = 0; i < items; i++) {
+            dst[i] = value;
+        }
+        return OP_OK;
+    }
+    if ( DT == DataType::FP16 ) {
+        local_fp16_t *dst = (local_fp16_t *)mem_;
+        local_fp16_t v = fp32_to_fp16(value);
+        for (size_t i = 0; i < items; i++) {
+            dst[i] = v;
+        }
+        return OP_OK;
+    }
+    return OP_TODO_ERROR;
+}
+
+template<DataType DT>
+ComputingReturn DNNLTensor<DT>::op_convert(tensor_t self, tensor_t from) {
+    if ( DT == DataType::FP16 && from->is_float() ) {
+        auto dst_desc = build_memory_desc(self->shape().vec(), tag::ab);
+        auto src_desc = build_memory_desc(from->shape().vec(), DataType::Float, tag::ab);
+        auto dst_mem = build_memory(dst_desc);
+        auto src_mem = from->dnnl_float()->build_memory(src_desc);
+        auto prim = dnnl::reorder(src_mem, dst_mem);
+
+        prim.execute( *ComputingContext::dnnl_stream , src_mem, dst_mem);
+        return OP_OK;
+    }
+    if ( DT == DataType::Float && from->is_fp16() ) {
+        auto dst_desc = build_memory_desc(self->shape().vec(), tag::ab);
+        auto src_desc = build_memory_desc(from->shape().vec(), DataType::FP16, tag::ab);
+        auto dst_mem = build_memory(dst_desc);
+        auto src_mem = from->dnnl_fp16()->build_memory(src_desc);
+        auto prim = dnnl::reorder(src_mem, dst_mem);
+
+        prim.execute( *ComputingContext::dnnl_stream , src_mem, dst_mem);
+        return OP_OK;
+    }
+
+    return OP_TODO_ERROR;
+}
+
 template <DataType _DTYPE_>
 ComputingReturn DNNLTensor<_DTYPE_>::op_conv2d(tensor_t self, tensor_t weight, tensor_t bias, tensor_t dst, int _stride, int _padding) {
     dnnl::memory::dims strides{_stride, _stride};

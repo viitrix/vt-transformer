@@ -41,6 +41,21 @@ struct DNNLTensor : public TransformerComputing {
     }
 
 private:
+    dnnl::memory::desc build_memory_desc(const std::vector<size_t>& shape, DataType dt, dnnl::memory::format_tag tag) {
+        dnnl::memory::dims dims;
+        for(int i = 0; i < (int)shape.size(); i++) {
+            dims.push_back(shape[i]);
+        }
+        if ( dt == DataType::Float ) {
+            return dnnl::memory::desc(dims,  dnnl::memory::data_type::f32, tag);
+        }
+        if ( dt == DataType::FP16 ) {
+            return dnnl::memory::desc(dims,  dnnl::memory::data_type::f16, tag);
+        }
+
+        vt_panic("Can't be here!");
+        return dnnl::memory::desc();
+    }
     dnnl::memory::desc build_memory_desc(const std::vector<size_t>& shape, dnnl::memory::format_tag tag) {
         dnnl::memory::dims dims;
         for(int i = 0; i < (int)shape.size(); i++) {
@@ -49,6 +64,10 @@ private:
         if ( _DTYPE_ == DataType::Float ) {
             return dnnl::memory::desc(dims,  dnnl::memory::data_type::f32, tag);
         }
+        if ( _DTYPE_ == DataType::FP16 ) {
+            return dnnl::memory::desc(dims,  dnnl::memory::data_type::f16, tag);
+        }
+
         vt_panic("Can't be here!");
         return dnnl::memory::desc();
     }
@@ -65,6 +84,8 @@ public:
     ComputingReturn io_save(tensor_t self, const char* fileName) override;
 
     std::variant<ComputingReturn, size_t> op_sizeof(tensor_t self) override;
+    ComputingReturn op_fill(tensor_t self, float value) override;
+    ComputingReturn op_convert(tensor_t self, tensor_t from) override;
     ComputingReturn op_conv2d(tensor_t self, tensor_t weight, tensor_t bias, tensor_t dst, int stride, int padding) override;
 
 protected:
