@@ -1,6 +1,9 @@
 ### TOP DIR
 export VT_SOURCE=$HOME/workspace/vt-transformer
 
+### DNNL
+export DNNL_DIR=$HOME/opt/dnnl
+
 ### DCU 
 export DTK_DIR=$HOME/opt/dtk
 

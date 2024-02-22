@@ -39,6 +39,25 @@ struct DNNLTensor : public TransformerComputing {
     void* data() {
         return mem_;
     }
+
+private:
+    dnnl::memory::desc build_memory_desc(const std::vector<size_t>& shape, dnnl::memory::format_tag tag) {
+        dnnl::memory::dims dims;
+        for(int i = 0; i < (int)shape.size(); i++) {
+            dims.push_back(shape[i]);
+        }
+        if ( _DTYPE_ == DataType::Float ) {
+            return dnnl::memory::desc(dims,  dnnl::memory::data_type::f32, tag);
+        }
+        vt_panic("Can't be here!");
+        return dnnl::memory::desc();
+    }
+
+    dnnl::memory build_memory(const dnnl::memory::desc& desc) {
+        vt_assert( desc.get_size() == size_ , "dnnl memory's data must have same size with desc");
+        return dnnl::memory(desc, *ComputingContext::dnnl_engine, mem_);
+    }
+
 public:
     // Interfaces from TransformerComputing
     ComputingReturn io_dump(tensor_t self) override;
@@ -46,6 +65,7 @@ public:
     ComputingReturn io_save(tensor_t self, const char* fileName) override;
 
     std::variant<ComputingReturn, size_t> op_sizeof(tensor_t self) override;
+    ComputingReturn op_conv2d(tensor_t self, tensor_t weight, tensor_t bias, tensor_t dst, int stride, int padding) override;
 
 protected:
     const bool owner_;
