@@ -2,6 +2,9 @@
 
 namespace vt {
 
+using tag = dnnl::memory::format_tag;
+using dt = dnnl::memory::data_type;
+
 template <DataType _DTYPE_>
 ComputingReturn DNNLTensor<_DTYPE_>::io_dump(tensor_t self) {
     size_t first8 = std::min(self->shape().vec().back(), (size_t)8);
@@ -119,7 +122,51 @@ ComputingReturn DNNLTensor<_DTYPE_>::io_load(tensor_t self, const char* fileName
 }
 
 template <DataType _DTYPE_>
-ComputingReturn op_conv2d(tensor_t self, tensor_t weight, tensor_t bias, tensor_t dst, int stride, int padding) {
+ComputingReturn DNNLTensor<_DTYPE_>::op_conv2d(tensor_t self, tensor_t weight, tensor_t bias, tensor_t dst, int _stride, int _padding) {
+    dnnl::memory::dims strides{_stride, _stride};
+    dnnl::memory::dims padding{_padding, _padding};
+
+    if ( _DTYPE_ == DataType::Float && weight->is_float() ) {
+        auto xmem_desc = build_memory_desc(self->shape().vec(), tag::nchw);
+        auto wmem_desc = build_memory_desc(weight->shape().vec(), tag::oihw);
+        dnnl::memory::desc bmem_desc;
+        if ( bias != nullptr) {
+            bmem_desc = build_memory_desc(bias->shape().vec(), tag::x);
+        }
+        auto ymem_desc = build_memory_desc(dst->shape().vec(), tag::nchw);
+        dnnl::convolution_forward::primitive_desc conv_prim_desc;
+        if ( bias != nullptr) {
+            conv_prim_desc = dnnl::convolution_forward::primitive_desc(
+                    *ComputingContext::dnnl_engine,
+                    dnnl::prop_kind::forward_inference, dnnl::algorithm::convolution_direct,
+                    xmem_desc, wmem_desc, bmem_desc, ymem_desc,
+                    strides, padding, padding);
+        } else {
+            conv_prim_desc = dnnl::convolution_forward::primitive_desc(
+                    *ComputingContext::dnnl_engine,
+                    dnnl::prop_kind::forward_inference, dnnl::algorithm::convolution_direct,
+                    xmem_desc, wmem_desc, ymem_desc,
+                    strides, padding, padding);
+        }
+        auto conv_prim = dnnl::convolution_forward(conv_prim_desc);
+
+        auto xmem = build_memory(xmem_desc);
+        auto wmem = weight->dnnl_float()->build_memory(wmem_desc);
+        auto ymem = dst->dnnl_float()->build_memory(ymem_desc);
+        auto bmem = dnnl::memory();
+        if ( bias != nullptr) {
+            bmem = bias->dnnl_float()->build_memory(bmem_desc);
+        }
+        std::unordered_map<int, dnnl::memory> args{
+            {DNNL_ARG_SRC, xmem},
+            {DNNL_ARG_WEIGHTS, wmem},
+            {DNNL_ARG_DST, ymem}};
+        if ( bias != nullptr) {
+            args[DNNL_ARG_BIAS] = bmem;
+        }
+        conv_prim.execute(*ComputingContext::dnnl_stream, args);
+        return OP_OK;
+    }
     return OP_TODO_ERROR;
 }
 
