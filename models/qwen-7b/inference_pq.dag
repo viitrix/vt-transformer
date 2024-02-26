@@ -8,8 +8,8 @@
 32                      "HEADS_NUM"             !
 128                     "HEAD_HIDDEN"           !
 
-10                      "MAX_BATCH"             !
-2048                    "MAX_CONTEXT"           !
+4                      "MAX_BATCH"             !
+1024                    "MAX_CONTEXT"           !
 "./weights/"            "G_PATH"                !
 
 %def init_internal_variable
