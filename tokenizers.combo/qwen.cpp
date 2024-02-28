@@ -5,6 +5,8 @@
 #include <map>
 
 #include <vt.hpp>
+#include <context.hpp>
+
 #include "tiktoken_c.h"
 #include "image_c.h"
 #include "tokenizer_combo.hpp"
@@ -108,6 +110,30 @@ struct QwenImageLoader : public ImageLoader {
     virtual size_t height() override {
         return imgobj_height(rustObj);
     }
+
+    virtual void preprocess(std::vector<local_fp16_t>& out) {
+        const size_t s = width() * height();
+        std::vector<unsigned char> rgb;
+        rgb.resize(s * 3);
+        out.resize(s * 3);
+
+        imgobj_rgb_plane(rustObj, rgb.data());
+        for (size_t h = 0; h < height(); h++) {
+            for (size_t w = 0; w < width(); w++) {
+                int i = w + h * width();
+
+                float r,g,b;
+                r = ((int)rgb[i] / 255.0 - mean[0]) / std[0];
+                g = ((int)rgb[i + s] / 255.0 - mean[1]) / std[1];
+                b = ((int)rgb[i + s * 2] / 255.0 - mean[2]) / std[2];
+
+                out[i] = fp32_to_fp16(r);
+                out[i + s] = fp32_to_fp16(g);
+                out[i + s * 2] = fp32_to_fp16(b);
+            }
+        }
+    }
+
     virtual void preprocess(std::vector<float>& out) {
         const size_t s = width() * height();
         std::vector<unsigned char> rgb;
@@ -120,8 +146,8 @@ struct QwenImageLoader : public ImageLoader {
                 int i = w + h * width();
 
                 out[i] = ((int)rgb[i] / 255.0 - mean[0]) / std[0];
-                out[i + s ] = ((int)rgb[i + s] / 255.0 - mean[1]) / std[1];
-                out[i + s * 2 ] = ((int)rgb[i + s * 2] / 255.0 - mean[2]) / std[2];
+                out[i + s] = ((int)rgb[i + s] / 255.0 - mean[1]) / std[1];
+                out[i + s * 2] = ((int)rgb[i + s * 2] / 255.0 - mean[2]) / std[2];
             }
         }
     }

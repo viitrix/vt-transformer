@@ -25,14 +25,14 @@ result = image_preprocess(image);
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen-VL-Chat", trust_remote_code=True)
 model = AutoModelForCausalLM.from_pretrained("./", device_map="cuda", trust_remote_code=True).eval()
 
-'''
+"""
 query = tokenizer.from_list_format([
         {'image': './demo.jpg'},
-        {'text': '这是什么'},
+        {'text': '图片上有什么？'},
         ])
 response, history = model.chat(tokenizer, query=query, history=None)
 print(response)
-'''
+"""
 
 ### debug visual poart
 vfeature = model.transformer.visual.encode(["./demo.jpg"]);

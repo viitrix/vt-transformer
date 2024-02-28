@@ -13,7 +13,7 @@
 const size_t MEM_CTX_SIZE = 4 * 1024 * 1024 * 1024l;
 
 struct ChatApplication {
-    ChatApplication() {
+    ChatApplication(const char* image_file;) {
         tokenizer_ = vt::build_tokenizer_qwen("./qwen.tiktoken");
     }
     ~ChatApplication() {
@@ -129,6 +129,7 @@ struct ChatApplication {
 
 private:
     vt::Tokenizer* tokenizer_;
+    vt::ImageLoader* img_loader_;
 };
 
 void do_inference(vt::Enviroment* env, const char* dag_file) {
@@ -143,9 +144,6 @@ void do_inference(vt::Enviroment* env, const char* dag_file) {
 #endif
 #ifdef _USING_DEVICE_DCU_
         env->stack().push_string("dcu");
-#endif
-#ifdef _USING_DEVICE_COREX_
-        env->stack().push_string("corex");
 #endif
         env->run(init_bin);
         delete init_bin;
@@ -179,15 +177,16 @@ void do_inference(vt::Enviroment* env, const char* dag_file) {
 
 
 int main(int argc, char* argv[] ) {
-    if ( argc < 2 ) {
-        std::cout << "usage: ./chat [dag_file] " << std::endl;
+    if ( argc < 3 ) {
+        std::cout << "usage: ./chat [dag_file] [img_file]" << std::endl;
         return -1;
     }
     const char* dag_file = argv[1];
     vt::CollectiveContext::boot_pipe(1);
 
     if ( vt::CollectiveContext::pipe_rank == 0) {
-        ChatApplication* app = new ChatApplication();
+        const char* img_file = argv[2];
+        ChatApplication* app = new ChatApplication(img_file);
         app->run();
         delete app;
 
@@ -199,7 +198,12 @@ int main(int argc, char* argv[] ) {
         }
     } else if ( vt::CollectiveContext::pipe_rank == 1) {
         vt::MemoryContext::boot( MEM_CTX_SIZE );
+#ifdef _USING_DEVICE_CUDA_
         vt::ComputingContext::boot_cuda( 0 );
+#endif
+#ifdef _USING_DEVICE_DCU_
+        vt::ComputingContext::boot_dcu( 0 );
+#endif
         vt::Enviroment* env = new vt::Enviroment();
         env->insert_native_word("app.mem", MemoryCounting::creator);
 

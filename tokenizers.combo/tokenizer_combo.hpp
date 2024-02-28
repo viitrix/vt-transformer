@@ -21,6 +21,7 @@ struct ImageLoader {
     virtual size_t width() = 0;
     virtual size_t height() = 0;
     virtual void preprocess(std::vector<float>& out) = 0;
+    virtual void preprocess(std::vector<uint16_t>& out) = 0;
 };
 
 // Qwen serial models
