@@ -6,6 +6,18 @@ const int INTERMEDIATE_SIZE = 11008;
 const int HEADS_NUM = 32;
 const int HEAD_HIDDEN = 128;
 
+struct MemoryAlign : public vt::NativeWord {
+    void run(vt::Stack& stack) override {
+        size_t align = stack.pop_number();
+        size_t offset = stack.pop_number();
+        offset += align;
+        offset = offset - ( offset % align );
+        stack.push_number(offset);
+    }
+    NWORD_CREATOR_DEFINE_LR(MemoryAlign)
+};
+
+
 struct MemoryCounting : public vt::NativeWord {
     void run(vt::Stack& stack) override {
         size_t tokens = stack.pop_number();

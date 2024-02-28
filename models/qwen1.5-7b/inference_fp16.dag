@@ -186,6 +186,8 @@
         $batch @ $tokens @ 2 * * +                                  
     }
 
+    64 app.align
+    
     ;; xa, xb, xquery/key/value, xll, x4a, x4b, all_logits
     dup
     "_var_" @ swap $batch @ $tokens @ "HIDDEN_SIZE" @ 3 op.view "xa" !

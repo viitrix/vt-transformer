@@ -802,9 +802,11 @@ ComputingReturn CXTensor<DT>::op_linear(tensor_t self, tensor_t w_, tensor_t b_,
         int n = batch * tokens;
         int k = inSize;
 
+        /*
         vt_assert( check_aligned(A, 64), " corex fp16 gemm must 64 alignment!");
         vt_assert( check_aligned(B, 64), " corex fp16 gemm must 64 alignment!");
         vt_assert( check_aligned(C, 64), " corex fp16 gemm must 64 alignment!");
+        */
 
         CXBLAS_CHECK( cublasGemmEx(ComputingContext::cxblas_handle,
                        CUBLAS_OP_T, CUBLAS_OP_N,

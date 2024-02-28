@@ -199,9 +199,17 @@ int main(int argc, char* argv[] ) {
         }
     } else if ( vt::CollectiveContext::pipe_rank == 1) {
         vt::MemoryContext::boot( MEM_CTX_SIZE );
+#ifdef _USING_DEVICE_CUDA_
         vt::ComputingContext::boot_cuda( 0 );
+#endif
+#ifdef _USING_DEVICE_COREX_
+        vt::ComputingContext::boot_corex( 0 );
+#endif
+
+
         vt::Enviroment* env = new vt::Enviroment();
         env->insert_native_word("app.mem", MemoryCounting::creator);
+        env->insert_native_word("app.align", MemoryAlign::creator);
 
         do_inference(env, dag_file);
 
