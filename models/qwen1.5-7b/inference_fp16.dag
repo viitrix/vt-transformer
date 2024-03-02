@@ -348,75 +348,17 @@
 
     "host"             create_input_weight
     "G_DEVICE" @       create_output_weight
-   
-    "G_DEVICE" @    "L0."   create_layer_weight 
-    "G_DEVICE" @    "L1."   create_layer_weight 
-    "G_DEVICE" @    "L2."   create_layer_weight 
-    "G_DEVICE" @    "L3."   create_layer_weight 
-    "G_DEVICE" @    "L4."   create_layer_weight
-    "G_DEVICE" @    "L5."   create_layer_weight 
-    "G_DEVICE" @    "L6."   create_layer_weight 
-    "G_DEVICE" @    "L7."   create_layer_weight 
-    "G_DEVICE" @    "L8."   create_layer_weight 
-    "G_DEVICE" @    "L9."   create_layer_weight
-    "G_DEVICE" @    "L10."  create_layer_weight
-    "G_DEVICE" @    "L11."  create_layer_weight
-    "G_DEVICE" @    "L12."  create_layer_weight
-    "G_DEVICE" @    "L13."  create_layer_weight
-    "G_DEVICE" @    "L14."  create_layer_weight
-    "G_DEVICE" @    "L15."  create_layer_weight
-    "G_DEVICE" @    "L16."   create_layer_weight 
-    "G_DEVICE" @    "L17."   create_layer_weight 
-    "G_DEVICE" @    "L18."   create_layer_weight 
-    "G_DEVICE" @    "L19."   create_layer_weight 
-    "G_DEVICE" @    "L20."   create_layer_weight
-    "G_DEVICE" @    "L21."   create_layer_weight 
-    "G_DEVICE" @    "L22."   create_layer_weight 
-    "G_DEVICE" @    "L23."   create_layer_weight 
-    "G_DEVICE" @    "L24."  create_layer_weight
-    "G_DEVICE" @    "L25."  create_layer_weight
-    "G_DEVICE" @    "L26."   create_layer_weight 
-    "G_DEVICE" @    "L27."   create_layer_weight 
-    "G_DEVICE" @    "L28."   create_layer_weight 
-    "G_DEVICE" @    "L29."   create_layer_weight 
-    "G_DEVICE" @    "L30."   create_layer_weight
-    "G_DEVICE" @    "L31."   create_layer_weight 
-   
+
+    %for 0 31
+        "G_DEVICE" @    "L%%."   create_layer_weight 
+    %endf
+
     "G_PATH" @ load_input_weight
     "G_PATH" @ load_output_weight
 
-    "G_PATH" @ "h_0."  | "L0." load_layer_weight
-    "G_PATH" @ "h_1."  | "L1." load_layer_weight
-    "G_PATH" @ "h_2."  | "L2." load_layer_weight
-    "G_PATH" @ "h_3."  | "L3." load_layer_weight
-    "G_PATH" @ "h_4."  | "L4." load_layer_weight
-    "G_PATH" @ "h_5."  | "L5." load_layer_weight
-    "G_PATH" @ "h_6."  | "L6." load_layer_weight
-    "G_PATH" @ "h_7."  | "L7." load_layer_weight
-    "G_PATH" @ "h_8."  | "L8." load_layer_weight
-    "G_PATH" @ "h_9."  | "L9." load_layer_weight
-    "G_PATH" @ "h_10."  | "L10." load_layer_weight
-    "G_PATH" @ "h_11."  | "L11." load_layer_weight
-    "G_PATH" @ "h_12."  | "L12." load_layer_weight
-    "G_PATH" @ "h_13."  | "L13." load_layer_weight
-    "G_PATH" @ "h_14."  | "L14." load_layer_weight
-    "G_PATH" @ "h_15."  | "L15." load_layer_weight
-    "G_PATH" @ "h_16."  | "L16." load_layer_weight
-    "G_PATH" @ "h_17."  | "L17." load_layer_weight
-    "G_PATH" @ "h_18."  | "L18." load_layer_weight
-    "G_PATH" @ "h_19."  | "L19." load_layer_weight
-    "G_PATH" @ "h_20."  | "L20." load_layer_weight
-    "G_PATH" @ "h_21."  | "L21." load_layer_weight
-    "G_PATH" @ "h_22."  | "L22." load_layer_weight
-    "G_PATH" @ "h_23."  | "L23." load_layer_weight
-    "G_PATH" @ "h_24."  | "L24." load_layer_weight
-    "G_PATH" @ "h_25."  | "L25." load_layer_weight
-    "G_PATH" @ "h_26."  | "L26." load_layer_weight
-    "G_PATH" @ "h_27."  | "L27." load_layer_weight
-    "G_PATH" @ "h_28."  | "L28." load_layer_weight
-    "G_PATH" @ "h_29."  | "L29." load_layer_weight
-    "G_PATH" @ "h_30."  | "L30." load_layer_weight
-    "G_PATH" @ "h_31."  | "L31." load_layer_weight
+    %for 0 31
+        "G_PATH" @ "h_%%."  | "L%%." load_layer_weight
+    %endf
 
 %end
 
@@ -428,40 +370,11 @@
         "ids~" @ "wte.weight" @ "xinput~" @ op.embed
         "xinput" @ "xinput~" @ op.copy
     }
-   
-    "L0."   sync_layer_clone 0  layer_forward 
-    "L1."   sync_layer_clone 1  layer_forward    
-    "L2."   sync_layer_clone 2  layer_forward    
-    "L3."   sync_layer_clone 3  layer_forward 
-    "L4."   sync_layer_clone 4  layer_forward 
-    "L5."   sync_layer_clone 5  layer_forward 
-    "L6."   sync_layer_clone 6  layer_forward 
-    "L7."   sync_layer_clone 7  layer_forward 
-    "L8."   sync_layer_clone 8  layer_forward 
-    "L9."   sync_layer_clone 9  layer_forward 
-    "L10."  sync_layer_clone 10 layer_forward 
-    "L11."  sync_layer_clone 11 layer_forward 
-    "L12."  sync_layer_clone 12 layer_forward 
-    "L13."  sync_layer_clone 13 layer_forward 
-    "L14."  sync_layer_clone 14 layer_forward 
-    "L15."  sync_layer_clone 15 layer_forward 
-    "L16."  sync_layer_clone 16 layer_forward
-    "L17."  sync_layer_clone 17 layer_forward
-    "L18."  sync_layer_clone 18 layer_forward
-    "L19."  sync_layer_clone 19 layer_forward
-    "L20."  sync_layer_clone 20 layer_forward
-    "L21."  sync_layer_clone 21 layer_forward
-    "L22."  sync_layer_clone 22 layer_forward
-    "L23."  sync_layer_clone 23 layer_forward
-    "L24."  sync_layer_clone 24 layer_forward 
-    "L25."  sync_layer_clone 25 layer_forward 
-    "L26."  sync_layer_clone 26 layer_forward
-    "L27."  sync_layer_clone 27 layer_forward
-    "L28."  sync_layer_clone 28 layer_forward
-    "L29."  sync_layer_clone 29 layer_forward
-    "L30."  sync_layer_clone 30 layer_forward
-    "L31."  sync_layer_clone 31 layer_forward
- 
+
+    %for 0 31
+        "L%%."   sync_layer_clone %% layer_forward 
+    %endf
+
     ;; ln & output    
     {
         "xinput" @ "ln_f.weight" @ "norm2" @ "xb" @ "RMS_EPS" @ op.rmsnorm

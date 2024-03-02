@@ -1,3 +1,4 @@
+#include <regex>
 #include "tensortype.hpp"
 #include "dag.hpp"
 
@@ -159,33 +160,119 @@ UserWord Enviroment::compile(const std::string& txt) {
         _::tokenize_line(line,  tokens);
     }
 
-    // 1. tokens post processing
-    bool block_comment = false;
+    // 1. pre-processing code loop
+    {
+        bool block_comment = false;
+        std::vector<std::string> new_tokens;
+
+        // removed comments
+        for (size_t i = 0; i < tokens.size(); i++) {
+            auto token = tokens[i];
+            if ( token == "/*" ) {
+                if ( block_comment == true ) {
+                    vt_panic("Find /* block comment nesting !");
+                }
+                block_comment = true;
+                continue;
+            }
+            if ( token == "*/" ) {
+                if ( block_comment == false ) {
+                    vt_panic("Find */ block comment without /* begin !");
+                }
+                block_comment = false;
+                continue;
+            }
+            if ( block_comment == true) {
+                continue;
+            }
+
+            new_tokens.push_back(token);
+        }
+        tokens = new_tokens;
+        new_tokens.clear();
+
+        // extending loop
+        bool in_loop = false;
+        std::vector<std::string> loop_block;
+        std::optional<int> loop_begin;
+        std::optional<int> loop_end;
+        for (size_t i = 0; i < tokens.size(); i++) {
+            auto token = tokens[i];
+            if ( token == "%for" ) {
+                if ( in_loop == true ) {
+                    vt_panic("Find loop block nesting !");
+                }
+                in_loop = true;
+                continue;
+            }
+            if ( token == "%endf" ) {
+                if ( in_loop == false ) {
+                    vt_panic("Find %endf  without %for !");
+                }
+                if ( !loop_begin.has_value() || !loop_end.has_value() ) {
+                    vt_panic("Can't find begin and end !");
+                }
+                if ( loop_begin == loop_end ) {
+                    vt_panic("Invalid loop_begin and loop_end!");
+                }
+                in_loop = false;
+                if ( loop_end > loop_begin ) {
+                    for (int l = loop_begin.value(); l <= loop_end.value(); l++) {
+                        std::stringstream ss;
+                        ss << l;
+                        std::string dst = ss.str();
+                        for (size_t j = 0; j < loop_block.size(); j++) {
+                            std::string new_str = std::regex_replace( loop_block[j], std::regex("%%"), dst);
+                            new_tokens.push_back(new_str);
+                        }
+                    }
+                } else {
+                   for (int l = loop_begin.value(); l >= loop_end.value(); l--) {
+                        std::stringstream ss;
+                        ss << l;
+                        std::string dst = ss.str();
+                        for (size_t j = 0; j < loop_block.size(); j++) {
+                            std::string new_str = std::regex_replace( loop_block[j], std::regex("%%"), dst);
+                            new_tokens.push_back(new_str);
+                        }
+                   }
+                }
+                loop_block.clear();
+                continue;
+            }
+            if ( in_loop == true ) {
+                double num;
+                if ( !loop_begin.has_value() ) {
+                    if ( !_::parse_number(token, num) ) {
+                        vt_panic("can't find loop begin number");
+                    }
+                    loop_begin = (int)num;
+                    continue;
+                }
+                if ( !loop_end.has_value() ) {
+                    if ( !_::parse_number(token, num) ) {
+                        vt_panic("can't find loop begin number");
+                    }
+
+                    loop_end = (int)num;
+                    continue;
+                }
+                loop_block.push_back(token);
+                continue;
+            }
+            new_tokens.push_back(token);
+        }
+        tokens = new_tokens;
+    }
+
     UserWord main_code;
     std::optional<UserWord> user_code;
     std::optional<size_t> list_count;
     list_count.reset();
 
+    // 2. processing main code
     for (size_t i = 0; i < tokens.size(); i++) {
         auto token = tokens[i];
-        if ( token == "/*" ) {
-            if ( block_comment == true ) {
-                vt_panic("Find /* block comment nesting !");
-            }
-            block_comment = true;
-            continue;
-        }
-        if ( token == "*/" ) {
-            if ( block_comment == false ) {
-                vt_panic("Find */ block comment without /* begin !");
-            }
-            block_comment = false;
-            continue;
-        }
-        if ( block_comment == true) {
-            continue;
-        }
-
         // first pass, processing command primitive
         if ( token == "%def" ) {
             if ( user_code.has_value() ) {
@@ -293,9 +380,6 @@ UserWord Enviroment::compile(const std::string& txt) {
         target->push_back(newCode);
     }
 
-    if (block_comment == true ) {
-        vt_panic("block comment ending without */ !");
-    }
     if (list_count.has_value()) {
         vt_panic("List macro without ']' ending!");
     }
