@@ -13,10 +13,12 @@
 const size_t MEM_CTX_SIZE = 4 * 1024 * 1024 * 1024l;
 
 struct ChatApplication {
-    ChatApplication(const char* image_file;) {
+    ChatApplication(const char* image_file) {
         tokenizer_ = vt::build_tokenizer_qwen("./qwen.tiktoken");
+        img_loader_ = vt::build_imageloader_qwen(image_file);
     }
     ~ChatApplication() {
+        delete img_loader_;
         delete tokenizer_;
     }
 
@@ -35,6 +37,7 @@ struct ChatApplication {
 
     void run() {
         wait_all_ready();
+
 
         std::list<std::string>  history;
         history.push_back("<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n");
@@ -132,11 +135,15 @@ private:
     vt::ImageLoader* img_loader_;
 };
 
-void do_inference(vt::Enviroment* env, const char* dag_file) {
+void do_inference(vt::Enviroment* env, const int argc, const char* argv[]) {
     const char* init_cmd = "gpu_init";
     const char* main_cmd = "gpu_main";
     {
-        std::string all_code = vt::fileToString(dag_file);
+        std::string all_code;
+        for(int i = 0; i < argc; i++) {
+            const char* dag_file = argv[i];
+            all_code += vt::fileToString(dag_file);
+        }
 
         vt::DaG* init_bin = env->build(all_code);
 #ifdef _USING_DEVICE_CUDA_
@@ -174,18 +181,15 @@ void do_inference(vt::Enviroment* env, const char* dag_file) {
     delete target_cmd;
 }
 
-
-
-int main(int argc, char* argv[] ) {
+int main(int argc, const char* argv[] ) {
     if ( argc < 3 ) {
-        std::cout << "usage: ./chat [dag_file] [img_file]" << std::endl;
+        std::cout << "usage: ./chat [dag_files]  [img_file]" << std::endl;
         return -1;
     }
-    const char* dag_file = argv[1];
     vt::CollectiveContext::boot_pipe(1);
 
     if ( vt::CollectiveContext::pipe_rank == 0) {
-        const char* img_file = argv[2];
+        const char* img_file = argv[argc - 1];
         ChatApplication* app = new ChatApplication(img_file);
         app->run();
         delete app;
@@ -206,8 +210,9 @@ int main(int argc, char* argv[] ) {
 #endif
         vt::Enviroment* env = new vt::Enviroment();
         env->insert_native_word("app.mem", MemoryCounting::creator);
+        env->insert_native_word("app.align", MemoryAlign::creator);
 
-        do_inference(env, dag_file);
+        do_inference(env, argc - 2, &argv[1]);
 
         delete env;
         vt::ComputingContext::shutdown();

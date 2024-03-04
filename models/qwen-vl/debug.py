@@ -8,7 +8,7 @@ from transformers.generation import GenerationConfig
 import torch
 torch.manual_seed(1234)
 
-"""
+'''
 image = Image.open('./demo.jpg');
 image = image.convert("RGB");
 mean = (0.48145466, 0.4578275, 0.40821073)
@@ -19,11 +19,16 @@ image_preprocess = torchvision.transforms.Compose([
     torchvision.transforms.Normalize(mean=mean, std=std)
 ]);
 result = image_preprocess(image);
-"""
+'''
+
 
 # Note: The default behavior now has injection attack prevention off.
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen-VL-Chat", trust_remote_code=True)
 model = AutoModelForCausalLM.from_pretrained("./", device_map="cuda", trust_remote_code=True).eval()
+
+
+### debug visual poart
+#vfeature = model.transformer.visual.encode(["./demo.jpg"]);
 
 """
 query = tokenizer.from_list_format([
@@ -34,7 +39,6 @@ response, history = model.chat(tokenizer, query=query, history=None)
 print(response)
 """
 
-### debug visual poart
-vfeature = model.transformer.visual.encode(["./demo.jpg"]);
+response, history = model.chat(tokenizer, "hello world in the sky", history=None)
 
 

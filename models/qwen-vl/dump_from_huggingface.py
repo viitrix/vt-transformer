@@ -2,8 +2,6 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.generation import GenerationConfig
 import torch
 
-tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen-VL-Chat", trust_remote_code=True)
-model = AutoModelForCausalLM.from_pretrained("./", device_map="cuda", trust_remote_code=True).eval()
 
 '''
 QWenLMHeadModel(
@@ -63,5 +61,101 @@ QWenLMHeadModel(
 )
 '''
 
+def save_weight(w, wfile):
+    print("dumping " + wfile + " ...");
+    ofile_name = "./weights/" + wfile + ".fp16";
+    w16 = w.cpu().float().detach().numpy().flatten().astype('float16');
+    w16.tofile(ofile_name);
 
+    '''
+    ofile_name = "./weights/" + wfile + ".fp32";
+    w32 = w.cpu().float().detach().numpy().flatten();
+    w32.tofile(ofile_name);
+    '''
+
+feature_size = 4096;
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen-VL-Chat", trust_remote_code=True)
+model = AutoModelForCausalLM.from_pretrained("./", device_map="cuda", trust_remote_code=True).eval()
+
+for i in range(0, 32):
+    pname = "h_" + str(i) + ".";
+
+    w = model.transformer.h[i].attn.c_attn.weight;
+    w = w.reshape(-1);
+    [q,k,v] = torch.split(w, feature_size * feature_size);
+    name = pname + "attn.query.weight";
+    save_weight(q, name);
+    name = pname + "attn.key.weight";
+    save_weight(k, name);
+    name = pname + "attn.value.weight";
+    save_weight(v, name);
+
+    w = model.transformer.h[i].attn.c_attn.bias;
+    [q,k,v] = torch.split(w, feature_size);
+    name = pname + "attn.query.bias";
+    save_weight(q, name);
+    name = pname + "attn.key.bias";
+    save_weight(k, name);
+    name = pname + "attn.value.bias";
+    save_weight(v, name);
+
+
+
+
+"""
+
+## wte & lm_head & ln_f
+w = model.transformer.wte.weight
+save_weight(w, "wte");
+w = model.transformer.ln_f.weight
+save_weight(w, "ln_f");
+w = model.lm_head.weight
+save_weight(w, "lm_head");
+
+for i in range(0, 32):
+    pname = "h_" + str(i) + ".";
+
+    w = model.transformer.h[i].ln_1.weight;
+    name = pname + "ln_1.weight";
+    save_weight(w, name);
+
+    w = model.transformer.h[i].ln_2.weight;
+    name = pname + "ln_2.weight";
+    save_weight(w, name);
+
+    w = model.transformer.h[i].attn.c_attn.weight;
+    [q,k,v] = torch.split(w, feature_size);
+    name = pname + "attn.query.weight";
+    save_weight(q, name);
+    name = pname + "attn.key.weight";
+    save_weight(k, name);
+    name = pname + "attn.value.weight";
+    save_weight(v, name);
+
+    w = model.transformer.h[i].attn.c_attn.bias;
+    [q,k,v] = torch.split(w, feature_size);
+    name = pname + "attn.query.bias";
+    save_weight(q, name);
+    name = pname + "attn.key.bias";
+    save_weight(k, name);
+    name = pname + "attn.value.bias";
+    save_weight(v, name);
+
+    w = model.transformer.h[i].attn.c_proj.weight;
+    name = pname + "attn.o_proj.weight";
+    save_weight(w, name);
+
+    w = model.transformer.h[i].mlp.w1.weight;
+    name = pname + "mlp.w1.weight";
+    save_weight(w, name);
+
+    w = model.transformer.h[i].mlp.w2.weight;
+    name = pname + "mlp.w2.weight";
+    save_weight(w, name);
+
+    w = model.transformer.h[i].mlp.c_proj.weight;
+    name = pname + "mlp.o_proj.weight";
+    save_weight(w, name);
+
+"""
 
