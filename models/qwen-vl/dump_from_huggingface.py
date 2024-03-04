@@ -77,33 +77,7 @@ feature_size = 4096;
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen-VL-Chat", trust_remote_code=True)
 model = AutoModelForCausalLM.from_pretrained("./", device_map="cuda", trust_remote_code=True).eval()
 
-for i in range(0, 32):
-    pname = "h_" + str(i) + ".";
-
-    w = model.transformer.h[i].attn.c_attn.weight;
-    w = w.reshape(-1);
-    [q,k,v] = torch.split(w, feature_size * feature_size);
-    name = pname + "attn.query.weight";
-    save_weight(q, name);
-    name = pname + "attn.key.weight";
-    save_weight(k, name);
-    name = pname + "attn.value.weight";
-    save_weight(v, name);
-
-    w = model.transformer.h[i].attn.c_attn.bias;
-    [q,k,v] = torch.split(w, feature_size);
-    name = pname + "attn.query.bias";
-    save_weight(q, name);
-    name = pname + "attn.key.bias";
-    save_weight(k, name);
-    name = pname + "attn.value.bias";
-    save_weight(v, name);
-
-
-
-
 """
-
 ## wte & lm_head & ln_f
 w = model.transformer.wte.weight
 save_weight(w, "wte");
@@ -156,6 +130,62 @@ for i in range(0, 32):
     w = model.transformer.h[i].mlp.c_proj.weight;
     name = pname + "mlp.o_proj.weight";
     save_weight(w, name);
-
 """
+
+### visual part of Qwen-vl
+w = model.transformer.visual.conv1.weight
+save_weight(w, "v.conv1.weight");
+w = model.transformer.visual.ln_pre.weight
+save_weight(w, "v.ln_pre");
+w = model.transformer.visual.ln_post.weight
+save_weight(w, "v.ln_post");
+
+w = model.transformer.visual.attn_pool.kv_proj.weight
+save_weight(w, "v.pool.kv_proj.weight");
+w = model.transformer.visual.attn_pool.attn.out_proj.weight
+save_weight(w, "v.pool.out_proj.weight");
+w = model.transformer.visual.attn_pool.attn.out_proj.bias
+save_weight(w, "v.pool.out_proj.bias");
+w = model.transformer.visual.attn_pool.ln_q.weight
+save_weight(w, "v.pool.ln_q");
+w = model.transformer.visual.attn_pool.ln_kv.weight
+save_weight(w, "v.pool.ln_kv");
+
+blocks = model.transformer.visual.transformer.resblocks;
+for i in range(0, 48):
+    pname = "v.b_" + str(i) + ".";
+
+    w = blocks[i].ln_1.weight;
+    name = pname + "ln_1"
+    save_weight(w, name);
+    w = blocks[i].ln_2.weight;
+    name = pname + "ln_2"
+    save_weight(w, name);
+
+    w = blocks[i].attn.in_proj.weight;
+    name = pname + "attn.in_proj.weight";
+    save_weight(w, name);
+    w = blocks[i].attn.in_proj.bias;
+    name = pname + "attn.in_proj.bias";
+    save_weight(w, name);
+
+    w = blocks[i].attn.out_proj.weight;
+    name = pname + "attn.out_proj.weight";
+    save_weight(w, name);
+    w = blocks[i].attn.out_proj.bias;
+    name = pname + "attn.out_proj.bias";
+    save_weight(w, name);
+
+    w = blocks[i].mlp.c_fc.weight;
+    name = pname + "mlp.c_fc.weight";
+    save_weight(w, name);
+    w = blocks[i].mlp.c_fc.bias;
+    name = pname + "mlp.c_fc.bias";
+    save_weight(w, name);
+    w = blocks[i].mlp.c_proj.weight;
+    name = pname + "mlp.c_proj.weight";
+    save_weight(w, name);
+    w = blocks[i].mlp.c_proj.bias;
+    name = pname + "mlp.c_proj.bias";
+    save_weight(w, name);
 

@@ -1,0 +1,75 @@
+1664    "CONV_CHANNELS"             !
+4992    "VISUAL_ATTN_INTERNAL"      !
+8192    "VISUAL_MLP_INTERNAL"       !
+14      "CONV_KERNEL_SIZE"          !
+
+%def visual_create_weights
+    "CONV_CHANNELS" @ 3 14 14 4 "G_DEVICE" @ "fp16" op.create "v.conv1.weight" !
+    "CONV_CHANNELS" @ 1         "G_DEVICE" @ "fp16" op.create "v.ln_pre" !
+    "HIDDEN_SIZE" @ 1           "G_DEVICE" @ "fp16" op.create "v.ln_post" !
+   
+    "HIDDEN_SIZE" @ "CONV_CHANNELS" @ 2 "G_DEVICE" @ "fp16" op.create "v.pool.kv_proj.weight" ! 
+    "HIDDEN_SIZE" @ "HIDDEN_SIZE" @ 2     "G_DEVICE" @ "fp16" op.create "v.pool.out_proj.weight" !
+    "HIDDEN_SIZE" @ 1                     "G_DEVICE" @ "fp16" op.create "v.pool.out_proj.bias" !
+    "HIDDEN_SIZE" @ 1                     "G_DEVICE" @ "fp16" op.create "v.pool.ln_q" !
+    "HIDDEN_SIZE" @ 1                     "G_DEVICE" @ "fp16" op.create "v.pool.ln_kv" !
+
+    %for 0 47
+        "CONV_CHANNELS" @ 1                   "G_DEVICE" @ "fp16" op.create "v.b_%%.ln_1" !
+        "CONV_CHANNELS" @ 1                   "G_DEVICE" @ "fp16" op.create "v.b_%%.ln_2" !
+
+        "VISUAL_ATTN_INTERNAL" @ "CONV_CHANNELS" @ 2 "G_DEVICE" @ "fp16" op.create "v.b_%%.attn.in_proj.weight" !
+        "VISUAL_ATTN_INTERNAL" @ 1                   "G_DEVICE" @ "fp16" op.create "v.b_%%.attn.in_proj.bias" !
+        "CONV_CHANNELS" @ "CONV_CHANNELS" @ 2        "G_DEVICE" @ "fp16" op.create "v.b_%%.attn.out_proj.weight" !
+        "CONV_CHANNELS" @ 1                          "G_DEVICE" @ "fp16" op.create "v.b_%%.attn.out_proj.bias" !
+        
+        "VISUAL_MLP_INTERNAL" @ "CONV_CHANNELS" @ 2  "G_DEVICE" @ "fp16" op.create "v.b_%%.mlp.c_fc.weight" !
+        "VISUAL_MLP_INTERNAL" @ 1                    "G_DEVICE" @ "fp16" op.create "v.b_%%.mlp.c_fc.bias" !
+        "CONV_CHANNELS" @ "VISUAL_MLP_INTERNAL" @ 2  "G_DEVICE" @ "fp16" op.create "v.b_%%.mlp.c_proj.weight" !
+        "CONV_CHANNELS" @ 1                          "G_DEVICE" @ "fp16" op.create "v.b_%%.mlp.c_proj.bias" !
+    %endf
+%end
+
+%def visual_load_one
+    dup "Loading... " swap | ?
+
+    dup @ swap "G_PATH" @ swap | ".fp16" | io.load
+%end
+
+%def visual_load_weights
+    "v.conv1.weight"                visual_load_one 
+    "v.ln_pre"                      visual_load_one 
+    "v.ln_post"                     visual_load_one
+
+    "v.pool.kv_proj.weight"         visual_load_one 
+    "v.pool.out_proj.weight"        visual_load_one 
+    "v.pool.out_proj.bias"          visual_load_one 
+    "v.pool.ln_q"                   visual_load_one 
+    "v.pool.ln_kv"                  visual_load_one 
+
+    %for 0 47
+       "v.b_%%." "ln_1"                 |   visual_load_one
+       "v.b_%%." "ln_2"                 |   visual_load_one
+
+       "v.b_%%." "attn.in_proj.weight"  |   visual_load_one
+       "v.b_%%." "attn.in_proj.bias"    |   visual_load_one
+       "v.b_%%." "attn.out_proj.weight" |   visual_load_one
+       "v.b_%%." "attn.out_proj.bias"   |   visual_load_one
+
+       "v.b_%%." "mlp.c_fc.weight"      |   visual_load_one
+       "v.b_%%." "mlp.c_fc.bias"        |   visual_load_one
+       "v.b_%%." "mlp.c_proj.weight"    |   visual_load_one
+       "v.b_%%." "mlp.c_proj.bias"      |   visual_load_one
+    %endf
+%end
+
+%def visual_init
+    visual_create_weights
+    visual_load_weights
+
+%end
+
+%def visual_main
+
+%end
+

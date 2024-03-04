@@ -38,7 +38,6 @@ struct ChatApplication {
     void run() {
         wait_all_ready();
 
-
         std::list<std::string>  history;
         history.push_back("<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n");
 
@@ -136,7 +135,7 @@ private:
 };
 
 void do_inference(vt::Enviroment* env, const int argc, const char* argv[]) {
-    const char* init_cmd = "gpu_init";
+    const char* init_cmd = "gpu_init visual_init";
     const char* main_cmd = "gpu_main";
     {
         std::string all_code;

@@ -357,9 +357,10 @@
     "G_PATH" @ load_output_weight
 
     %for 0 31
-        "G_PATH" @ "h_%%."  | "L%%." load_layer_weight
+        "G_PATH" @ "h_%%."  | "L%%." 
+        load_layer_weight
     %endf
-
+     
 %end
 
 %def gpu_main

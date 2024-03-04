@@ -215,7 +215,6 @@ UserWord Enviroment::compile(const std::string& txt) {
                 if ( loop_begin == loop_end ) {
                     vt_panic("Invalid loop_begin and loop_end!");
                 }
-                in_loop = false;
                 if ( loop_end > loop_begin ) {
                     for (int l = loop_begin.value(); l <= loop_end.value(); l++) {
                         std::stringstream ss;
@@ -238,6 +237,9 @@ UserWord Enviroment::compile(const std::string& txt) {
                    }
                 }
                 loop_block.clear();
+                loop_begin.reset();
+                loop_end.reset();
+                in_loop = false;
                 continue;
             }
             if ( in_loop == true ) {
