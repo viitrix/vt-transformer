@@ -8,6 +8,11 @@
 #include "cuda_tensor.hpp"
 #include "host_tensor.hpp"
 
+#ifdef _USING_DEVICE_DNNL_
+#include "dnnl_tensor.hpp"
+#endif
+
+
 namespace vt {
 
 using device_fp16_t = __half;
@@ -562,6 +567,15 @@ ComputingReturn CUDATensor<DT>::op_copy(tensor_t self, tensor_t src) {
             CUDA_CHECK(cudaMemcpyAsync(y, x, s, cudaMemcpyHostToDevice, stream));
             return OP_OK;
         }
+#ifdef _USING_DEVICE_DNNL_
+        if ( src->is_dnnl() ) {
+            void* x = src->dnnl_float()->data();
+            void* y = data();
+
+            auto stream = ComputingContext::cuda_stream;
+            CUDA_CHECK(cudaMemcpyAsync(y, x, s, cudaMemcpyHostToDevice, stream));
+        }
+#endif
         auto stream = ComputingContext::cuda_stream;
         CUDA_CHECK(cudaMemcpyAsync(data(), src->cuda_float()->data(), s, cudaMemcpyDeviceToDevice, stream));
         return OP_OK;
@@ -575,6 +589,16 @@ ComputingReturn CUDATensor<DT>::op_copy(tensor_t self, tensor_t src) {
             CUDA_CHECK(cudaMemcpyAsync(y, x, s, cudaMemcpyHostToDevice, stream));
             return OP_OK;
         }
+#ifdef _USING_DEVICE_DNNL_
+        if ( src->is_dnnl() ) {
+            void* x = src->dnnl_int()->data();
+            void* y = data();
+
+            auto stream = ComputingContext::cuda_stream;
+            CUDA_CHECK(cudaMemcpyAsync(y, x, s, cudaMemcpyHostToDevice, stream));
+            return OP_OK;
+        }
+#endif
         auto stream = ComputingContext::cuda_stream;
         CUDA_CHECK(cudaMemcpyAsync(data(), src->cuda_int()->data(), s, cudaMemcpyDeviceToDevice, stream));
         return OP_OK;
@@ -588,6 +612,16 @@ ComputingReturn CUDATensor<DT>::op_copy(tensor_t self, tensor_t src) {
             CUDA_CHECK(cudaMemcpyAsync(y, x, s, cudaMemcpyHostToDevice, stream));
             return OP_OK;
         }
+#ifdef _USING_DEVICE_DNNL_
+        if ( src->is_dnnl() ) {
+            void* x = src->dnnl_fp16()->data();
+            void* y = data();
+
+            auto stream = ComputingContext::cuda_stream;
+            CUDA_CHECK(cudaMemcpyAsync(y, x, s, cudaMemcpyHostToDevice, stream));
+            return OP_OK;
+        }
+#endif
         auto stream = ComputingContext::cuda_stream;
         CUDA_CHECK(cudaMemcpyAsync(data(), src->cuda_fp16()->data(), s, cudaMemcpyDeviceToDevice, stream));
         return OP_OK;

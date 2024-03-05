@@ -144,9 +144,10 @@ ComputingReturn DNNLTensor<DT>::op_fill(tensor_t self, float value) {
 
 template<DataType DT>
 ComputingReturn DNNLTensor<DT>::op_convert(tensor_t self, tensor_t from) {
+    vt_assert( self->shape().dim() == 4, "convert support 4D tensor only!");
     if ( DT == DataType::FP16 && from->is_float() ) {
-        auto dst_desc = build_memory_desc(self->shape().vec(), tag::ab);
-        auto src_desc = build_memory_desc(from->shape().vec(), DataType::Float, tag::ab);
+        auto dst_desc = build_memory_desc(self->shape().vec(), tag::abcd);
+        auto src_desc = from->dnnl_float()->build_memory_desc(from->shape().vec(), DataType::Float, tag::abcd);
         auto dst_mem = build_memory(dst_desc);
         auto src_mem = from->dnnl_float()->build_memory(src_desc);
         auto prim = dnnl::reorder(src_mem, dst_mem);
@@ -155,8 +156,8 @@ ComputingReturn DNNLTensor<DT>::op_convert(tensor_t self, tensor_t from) {
         return OP_OK;
     }
     if ( DT == DataType::Float && from->is_fp16() ) {
-        auto dst_desc = build_memory_desc(self->shape().vec(), tag::ab);
-        auto src_desc = build_memory_desc(from->shape().vec(), DataType::FP16, tag::ab);
+        auto dst_desc = build_memory_desc(self->shape().vec(), tag::abcd);
+        auto src_desc = from->dnnl_fp16()->build_memory_desc(from->shape().vec(), DataType::FP16, tag::abcd);
         auto dst_mem = build_memory(dst_desc);
         auto src_mem = from->dnnl_fp16()->build_memory(src_desc);
         auto prim = dnnl::reorder(src_mem, dst_mem);

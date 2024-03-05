@@ -483,6 +483,15 @@ public:
         }
         return false;
     }
+#ifdef _USING_DEVICE_DNNL_
+    bool is_dnnl() const {
+        auto ii = impl_index();
+        if ( (ii >= ImplType::DNNL_FLOAT) && (ii <= ImplType::DNNL_INT) ) {
+            return true;
+        }
+        return false;
+    }
+#endif
 
 #ifdef _USING_DEVICE_CUDA_
     bool is_cuda() const {
