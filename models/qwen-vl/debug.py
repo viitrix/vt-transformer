@@ -23,12 +23,14 @@ result = image_preprocess(image);
 
 
 # Note: The default behavior now has injection attack prevention off.
-tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen-VL-Chat", trust_remote_code=True)
-model = AutoModelForCausalLM.from_pretrained("./", device_map="cuda", trust_remote_code=True).eval()
+#tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen-VL-Chat", trust_remote_code=True)
+model = AutoModelForCausalLM.from_pretrained("./", device_map="cuda", trust_remote_code=True, fp16=True).eval()
 
+### debug language part
+#response, history = model.chat(tokenizer, "hello world in the sky", history=None)
 
-### debug visual poart
-#vfeature = model.transformer.visual.encode(["./demo.jpg"]);
+### debug visual part
+vfeature = model.transformer.visual.encode(["./demo.png"]);
 
 """
 query = tokenizer.from_list_format([
@@ -38,7 +40,5 @@ query = tokenizer.from_list_format([
 response, history = model.chat(tokenizer, query=query, history=None)
 print(response)
 """
-
-response, history = model.chat(tokenizer, "hello world in the sky", history=None)
 
 

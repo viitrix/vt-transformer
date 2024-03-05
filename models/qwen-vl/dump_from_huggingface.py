@@ -67,11 +67,9 @@ def save_weight(w, wfile):
     w16 = w.cpu().float().detach().numpy().flatten().astype('float16');
     w16.tofile(ofile_name);
 
-    '''
     ofile_name = "./weights/" + wfile + ".fp32";
     w32 = w.cpu().float().detach().numpy().flatten();
     w32.tofile(ofile_name);
-    '''
 
 feature_size = 4096;
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen-VL-Chat", trust_remote_code=True)
@@ -135,6 +133,8 @@ for i in range(0, 32):
 ### visual part of Qwen-vl
 w = model.transformer.visual.conv1.weight
 save_weight(w, "v.conv1.weight");
+
+"""
 w = model.transformer.visual.ln_pre.weight
 save_weight(w, "v.ln_pre");
 w = model.transformer.visual.ln_post.weight
@@ -188,4 +188,4 @@ for i in range(0, 48):
     w = blocks[i].mlp.c_proj.bias;
     name = pname + "mlp.c_proj.bias";
     save_weight(w, name);
-
+"""

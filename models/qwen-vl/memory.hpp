@@ -6,6 +6,17 @@ const int INTERMEDIATE_SIZE = 11008;
 const int HEADS_NUM = 32;
 const int HEAD_HIDDEN = 128;
 
+struct MemoryFill : public vt::NativeWord {
+    static std::vector<float> source;
+    void run(vt::Stack& stack) override {
+        auto tensor = stack.pop_tensor();
+        void* dst = tensor->dnnl_float()->data();
+        memcpy(dst, source.data(), source.size() * sizeof (float) );
+    }
+    NWORD_CREATOR_DEFINE_LR(MemoryFill)
+};
+std::vector<float> MemoryFill::source;
+
 struct MemoryAlign : public vt::NativeWord {
     void run(vt::Stack& stack) override {
         size_t align = stack.pop_number();
@@ -16,7 +27,6 @@ struct MemoryAlign : public vt::NativeWord {
     }
     NWORD_CREATOR_DEFINE_LR(MemoryAlign)
 };
-
 
 struct MemoryCounting : public vt::NativeWord {
     void run(vt::Stack& stack) override {

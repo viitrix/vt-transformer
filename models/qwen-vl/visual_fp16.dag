@@ -2,9 +2,11 @@
 4992    "VISUAL_ATTN_INTERNAL"      !
 8192    "VISUAL_MLP_INTERNAL"       !
 14      "CONV_KERNEL_SIZE"          !
+448     "IMAGE_WIDTH"               !
 
 %def visual_create_weights
-    "CONV_CHANNELS" @ 3 14 14 4 "G_DEVICE" @ "fp16" op.create "v.conv1.weight" !
+    "CONV_CHANNELS" @ 3 14 14 4 "dnnl" "float" op.create "v.conv1.weight" !
+
     "CONV_CHANNELS" @ 1         "G_DEVICE" @ "fp16" op.create "v.ln_pre" !
     "HIDDEN_SIZE" @ 1           "G_DEVICE" @ "fp16" op.create "v.ln_post" !
    
@@ -37,7 +39,8 @@
 %end
 
 %def visual_load_weights
-    "v.conv1.weight"                visual_load_one 
+    "v.conv1.weight" dup @ swap "G_PATH" @ swap | ".fp32" | io.load
+    
     "v.ln_pre"                      visual_load_one 
     "v.ln_post"                     visual_load_one
 
@@ -66,10 +69,15 @@
 %def visual_init
     visual_create_weights
     visual_load_weights
-
+    
+    1 3 "IMAGE_WIDTH" @ dup   4   "dnnl" "float" op.create "v_xinput" !
+    1 "CONV_CHANNELS" @ 32 32 4   "dnnl" "float" op.create "v_xa" !
 %end
 
 %def visual_main
-
+    "v_xinput" @ app.fill
+    "v_xinput" @ io.dump
+    "v_xinput" @ "v.conv1.weight" @ op.null "v_xa" @ 14 0 op.conv2d
+    "v_xa" @ io.dump
 %end
 

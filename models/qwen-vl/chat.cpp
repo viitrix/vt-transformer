@@ -13,12 +13,10 @@
 const size_t MEM_CTX_SIZE = 4 * 1024 * 1024 * 1024l;
 
 struct ChatApplication {
-    ChatApplication(const char* image_file) {
+    ChatApplication() {
         tokenizer_ = vt::build_tokenizer_qwen("./qwen.tiktoken");
-        img_loader_ = vt::build_imageloader_qwen(image_file);
     }
     ~ChatApplication() {
-        delete img_loader_;
         delete tokenizer_;
     }
 
@@ -131,15 +129,16 @@ struct ChatApplication {
 
 private:
     vt::Tokenizer* tokenizer_;
-    vt::ImageLoader* img_loader_;
 };
 
 void do_inference(vt::Enviroment* env, const int argc, const char* argv[]) {
     const char* init_cmd = "gpu_init visual_init";
     const char* main_cmd = "gpu_main";
+    const char* visual_cmd = "visual_main";
+
     {
         std::string all_code;
-        for(int i = 0; i < argc; i++) {
+        for(int i = 0; i < argc - 1; i++) {
             const char* dag_file = argv[i];
             all_code += vt::fileToString(dag_file);
         }
@@ -155,6 +154,15 @@ void do_inference(vt::Enviroment* env, const int argc, const char* argv[]) {
         delete init_bin;
     }
     env->execute(init_cmd);
+
+    // do image pre-processing
+    {
+        const char* image_file = argv[argc-1];
+        vt::ImageLoader* img_loader = vt::build_imageloader_qwen(image_file);
+        img_loader->preprocess(MemoryFill::source);
+        delete img_loader;
+    }
+    env->execute(visual_cmd);
 
     int ok = 1;
     vt_assert( vt::CollectiveContext::pipe_write(0, &ok, sizeof(int)) > 0, "pipe_write error");
@@ -188,8 +196,7 @@ int main(int argc, const char* argv[] ) {
     vt::CollectiveContext::boot_pipe(1);
 
     if ( vt::CollectiveContext::pipe_rank == 0) {
-        const char* img_file = argv[argc - 1];
-        ChatApplication* app = new ChatApplication(img_file);
+        ChatApplication* app = new ChatApplication();
         app->run();
         delete app;
 
@@ -202,6 +209,9 @@ int main(int argc, const char* argv[] ) {
     } else if ( vt::CollectiveContext::pipe_rank == 1) {
         vt::MemoryContext::boot( MEM_CTX_SIZE );
 #ifdef _USING_DEVICE_CUDA_
+        vt::ComputingContext::boot_dnnl( 0 );
+#endif
+#ifdef _USING_DEVICE_CUDA_
         vt::ComputingContext::boot_cuda( 0 );
 #endif
 #ifdef _USING_DEVICE_DCU_
@@ -210,8 +220,9 @@ int main(int argc, const char* argv[] ) {
         vt::Enviroment* env = new vt::Enviroment();
         env->insert_native_word("app.mem", MemoryCounting::creator);
         env->insert_native_word("app.align", MemoryAlign::creator);
+        env->insert_native_word("app.fill", MemoryFill::creator);
 
-        do_inference(env, argc - 2, &argv[1]);
+        do_inference(env, argc - 1, &argv[1]);
 
         delete env;
         vt::ComputingContext::shutdown();

@@ -389,6 +389,26 @@ namespace op {
         NWORD_CREATOR_DEFINE_LR(Transpose0213)
     };
 
+    struct Transpose021 : public NativeWord {
+        void run(Stack& stack) override {
+            tensor_t y = stack.pop_tensor();
+            tensor_t x = stack.pop_tensor();
+
+            x->op_transpose_021(x,y);
+        }
+        NWORD_CREATOR_DEFINE_LR(Transpose021)
+    };
+
+    struct Transpose102 : public NativeWord {
+        void run(Stack& stack) override {
+            tensor_t y = stack.pop_tensor();
+            tensor_t x = stack.pop_tensor();
+
+            x->op_transpose_102(x,y);
+        }
+        NWORD_CREATOR_DEFINE_LR(Transpose102)
+    };
+
     struct QueryKey : public NativeWord {
         void run(Stack& stack) override {
             tensor_t qk = stack.pop_tensor();
@@ -786,6 +806,8 @@ void load_nn_operators(Enviroment& env) {
     env.insert_native_word("op.rmsnorm", op::RMSnorm::creator );
     env.insert_native_word("op.rotary_embed", op::RotaryEmbed::creator );
     env.insert_native_word("op.transpose_0213", op::Transpose0213::creator );
+    env.insert_native_word("op.transpose_021", op::Transpose021::creator );
+    env.insert_native_word("op.transpose_102", op::Transpose102::creator );
     env.insert_native_word("op.add", op::Add::creator);
     env.insert_native_word("op.mul", op::Mul::creator);
     env.insert_native_word("op.querykey", op::QueryKey::creator);
