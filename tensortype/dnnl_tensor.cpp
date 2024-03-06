@@ -192,66 +192,6 @@ std::variant<ComputingReturn, tensor_t> DNNLTensor<_DTYPE_>::op_view(tensor_t se
     return OP_TODO_ERROR;
 }
 
-template<DataType DT>
-ComputingReturn  DNNLTensor<DT>::op_transpose_021(tensor_t self, tensor_t y) {
-    if ( (DT != DataType::Float) && (DT != DataType::Int) && (DT != DataType::FP16) ) {
-        return OP_TODO_ERROR;
-    }
-    auto shape_from = self->shape().vec();
-    auto shape_to = y->shape().vec();
-
-    size_t src = 0;
-    for (size_t i0 = 0; i0 < shape_from[0]; i0++ ) {
-        for (size_t i1 = 0; i1 < shape_from[1]; i1++) {
-            for (size_t i2 = 0; i2 < shape_from[2]; i2++) {
-                size_t dst = i0 * shape_to[1] * shape_to[2];
-                dst += i2 * shape_to[2];
-                dst += i1;
-                if ( DT == DataType::Float ) {
-                    ((float *)y->dnnl_float()->data())[dst] =  ((float *)data())[src];
-                }
-                if ( DT == DataType::Int ) {
-                    ((int *)y->dnnl_float()->data())[dst] =  ((int *)data())[src];
-                }
-                if ( DT == DataType::FP16 ) {
-                    ((local_fp16_t *)y->dnnl_float()->data())[dst] =  ((local_fp16_t *)data())[src];
-                }
-            }
-        }
-    }
-    return OP_OK;
-}
-
-template<DataType DT>
-ComputingReturn  DNNLTensor<DT>::op_transpose_102(tensor_t self, tensor_t y) {
-    if ( (DT != DataType::Float) && (DT != DataType::Int) && (DT != DataType::FP16) ) {
-        return OP_TODO_ERROR;
-    }
-    auto shape_from = self->shape().vec();
-    auto shape_to = y->shape().vec();
-
-    size_t src = 0;
-    for (size_t i0 = 0; i0 < shape_from[0]; i0++ ) {
-        for (size_t i1 = 0; i1 < shape_from[1]; i1++) {
-            for (size_t i2 = 0; i2 < shape_from[2]; i2++) {
-                size_t dst = i1 * shape_to[0] * shape_to[2];
-                dst += i0 * shape_to[2];
-                dst += i2;
-                if ( DT == DataType::Float ) {
-                    ((float *)y->dnnl_float()->data())[dst] =  ((float *)data())[src];
-                }
-                if ( DT == DataType::Int ) {
-                    ((int *)y->dnnl_float()->data())[dst] =  ((int *)data())[src];
-                }
-                if ( DT == DataType::FP16 ) {
-                    ((local_fp16_t *)y->dnnl_float()->data())[dst] =  ((local_fp16_t *)data())[src];
-                }
-            }
-        }
-    }
-    return OP_OK;
-}
-
 template <DataType _DTYPE_>
 ComputingReturn DNNLTensor<_DTYPE_>::op_conv2d(tensor_t self, tensor_t weight, tensor_t bias, tensor_t dst, int _stride, int _padding) {
     dnnl::memory::dims strides{_stride, _stride};

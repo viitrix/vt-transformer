@@ -88,8 +88,6 @@ public:
     ComputingReturn op_convert(tensor_t self, tensor_t from) override;
     std::variant<ComputingReturn, tensor_t> op_view(tensor_t self, size_t offset, const std::vector<size_t>& newShape_) override;
     ComputingReturn op_conv2d(tensor_t self, tensor_t weight, tensor_t bias, tensor_t dst, int stride, int padding) override;
-    ComputingReturn op_transpose_021(tensor_t self, tensor_t y) override;
-    ComputingReturn op_transpose_102(tensor_t self, tensor_t y) override;
 
 
 protected:

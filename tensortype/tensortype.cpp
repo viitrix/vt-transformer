@@ -235,30 +235,6 @@ ComputingReturn TensorType::op_transpose_0213(tensor_t self, tensor_t y) {
     op_check(ret, "transpose_0213");
 }
 
-ComputingReturn TensorType::op_transpose_021(tensor_t self, tensor_t y) {
-    vt_assert(self.get() == this, "can't be here!");
-    auto shape_from = self->shape().vec();
-    auto shape_to = y->shape().vec();
-    vt_assert(shape_from[0] == shape_to[0], "Can't do transpose_021");
-    vt_assert(shape_from[1] == shape_to[2], "Can't do transpose_021");
-    vt_assert(shape_from[2] == shape_to[1], "Can't do transpose_021");
-
-    auto ret = impl()->op_transpose_021(self, y);
-    op_check(ret, "transpose_021");
-}
-
-ComputingReturn TensorType::op_transpose_102(tensor_t self, tensor_t y) {
-    vt_assert(self.get() == this, "can't be here!");
-    auto shape_from = self->shape().vec();
-    auto shape_to = y->shape().vec();
-    vt_assert(shape_from[0] == shape_to[1], "Can't do transpose_102");
-    vt_assert(shape_from[1] == shape_to[0], "Can't do transpose_102");
-    vt_assert(shape_from[2] == shape_to[2], "Can't do transpose_102");
-
-    auto ret = impl()->op_transpose_102(self, y);
-    op_check(ret, "transpose_102");
-}
-
 ComputingReturn TensorType::op_qk(tensor_t self, tensor_t k, tensor_t qk) {
     vt_assert(self.get() == this, "can't be here!");
     auto ret = impl()->op_qk(self, k, qk);
