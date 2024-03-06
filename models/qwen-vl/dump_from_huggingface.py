@@ -1,6 +1,26 @@
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.generation import GenerationConfig
+from torch.nn import functional as F
+import math
 import torch
+
+def get_abs_pos(abs_pos, tgt_size):
+    # abs_pos: L, C
+    # tgt_size: M
+    # return: M, C
+    src_size = int(math.sqrt(abs_pos.size(0)))
+    tgt_size = int(math.sqrt(tgt_size))
+    dtype = abs_pos.dtype
+
+    if src_size != tgt_size:
+        return F.interpolate(
+            abs_pos.float().reshape(1, src_size, src_size, -1).permute(0, 3, 1, 2),
+            size=(tgt_size, tgt_size),
+            mode="bicubic",
+            align_corners=False,
+        ).permute(0, 2, 3, 1).flatten(0, 2).to(dtype=dtype)
+    else:
+        return abs_pos
 
 
 '''
@@ -135,10 +155,18 @@ w = model.transformer.visual.conv1.weight
 save_weight(w, "v.conv1.weight");
 
 """
+w = get_abs_pos( model.transformer.visual.positional_embedding, 1024);
+save_weight(w, "v.pos_emb");
+w = model.transformer.visual.conv1.weight
+save_weight(w, "v.conv1.weight");
 w = model.transformer.visual.ln_pre.weight
-save_weight(w, "v.ln_pre");
+save_weight(w, "v.ln_pre.weight");
+w = model.transformer.visual.ln_pre.bias
+save_weight(w, "v.ln_pre.bias");
 w = model.transformer.visual.ln_post.weight
-save_weight(w, "v.ln_post");
+save_weight(w, "v.ln_post.weight");
+w = model.transformer.visual.ln_post.bias
+save_weight(w, "v.ln_post.bias");
 
 w = model.transformer.visual.attn_pool.kv_proj.weight
 save_weight(w, "v.pool.kv_proj.weight");
@@ -147,19 +175,30 @@ save_weight(w, "v.pool.out_proj.weight");
 w = model.transformer.visual.attn_pool.attn.out_proj.bias
 save_weight(w, "v.pool.out_proj.bias");
 w = model.transformer.visual.attn_pool.ln_q.weight
-save_weight(w, "v.pool.ln_q");
+save_weight(w, "v.pool.ln_q.weight");
+w = model.transformer.visual.attn_pool.ln_q.bias
+save_weight(w, "v.pool.ln_q.bias");
 w = model.transformer.visual.attn_pool.ln_kv.weight
-save_weight(w, "v.pool.ln_kv");
+save_weight(w, "v.pool.ln_kv.weight");
+w = model.transformer.visual.attn_pool.ln_kv.bias
+save_weight(w, "v.pool.ln_kv.bias");
 
 blocks = model.transformer.visual.transformer.resblocks;
 for i in range(0, 48):
     pname = "v.b_" + str(i) + ".";
 
     w = blocks[i].ln_1.weight;
-    name = pname + "ln_1"
+    name = pname + "ln_1.weight"
     save_weight(w, name);
+    w = blocks[i].ln_1.bias;
+    name = pname + "ln_1.bias"
+    save_weight(w, name);
+
     w = blocks[i].ln_2.weight;
-    name = pname + "ln_2"
+    name = pname + "ln_2.weight"
+    save_weight(w, name);
+    w = blocks[i].ln_2.bias;
+    name = pname + "ln_2.bias"
     save_weight(w, name);
 
     w = blocks[i].attn.in_proj.weight;
@@ -188,4 +227,5 @@ for i in range(0, 48):
     w = blocks[i].mlp.c_proj.bias;
     name = pname + "mlp.c_proj.bias";
     save_weight(w, name);
+
 """

@@ -7,18 +7,31 @@
 %def visual_create_weights
     "CONV_CHANNELS" @ 3 14 14 4 "dnnl" "float" op.create "v.conv1.weight~" !
 
-    "CONV_CHANNELS" @ 1         "G_DEVICE" @ "fp16" op.create "v.ln_pre" !
-    "HIDDEN_SIZE" @ 1           "G_DEVICE" @ "fp16" op.create "v.ln_post" !
-   
+    1 1024 "CONV_CHANNELS" @ 3 "G_DEVICE" @ "fp16" op.create "v.pos_emb" !
+
+    "HIDDEN_SIZE"   @ 1 "G_DEVICE" @ "fp16" op.create "v.mean_h" !
+    "HIDDEN_SIZE"   @ 1 "G_DEVICE" @ "fp16" op.create "v.var_h" !
+    "CONV_CHANNELS" @ 1 "G_DEVICE" @ "fp16" op.create "v.mean_c" !
+    "CONV_CHANNELS" @ 1 "G_DEVICE" @ "fp16" op.create "v.var_c" !
+
+    "CONV_CHANNELS" @ 1         "G_DEVICE" @ "fp16" op.create "v.ln_pre.weight" !
+    "CONV_CHANNELS" @ 1         "G_DEVICE" @ "fp16" op.create "v.ln_pre.bias" !
+    "HIDDEN_SIZE" @ 1           "G_DEVICE" @ "fp16" op.create "v.ln_post.weight" !
+    "HIDDEN_SIZE" @ 1           "G_DEVICE" @ "fp16" op.create "v.ln_post.bias" !
+
     "HIDDEN_SIZE" @ "CONV_CHANNELS" @ 2 "G_DEVICE" @ "fp16" op.create "v.pool.kv_proj.weight" ! 
     "HIDDEN_SIZE" @ "HIDDEN_SIZE" @ 2     "G_DEVICE" @ "fp16" op.create "v.pool.out_proj.weight" !
     "HIDDEN_SIZE" @ 1                     "G_DEVICE" @ "fp16" op.create "v.pool.out_proj.bias" !
-    "HIDDEN_SIZE" @ 1                     "G_DEVICE" @ "fp16" op.create "v.pool.ln_q" !
-    "HIDDEN_SIZE" @ 1                     "G_DEVICE" @ "fp16" op.create "v.pool.ln_kv" !
+    "HIDDEN_SIZE" @ 1                     "G_DEVICE" @ "fp16" op.create "v.pool.ln_q.weight" !
+    "HIDDEN_SIZE" @ 1                     "G_DEVICE" @ "fp16" op.create "v.pool.ln_q.bias" !
+    "HIDDEN_SIZE" @ 1                     "G_DEVICE" @ "fp16" op.create "v.pool.ln_kv.weight" !
+    "HIDDEN_SIZE" @ 1                     "G_DEVICE" @ "fp16" op.create "v.pool.ln_kv.bias" !
 
     %for 0 47
-        "CONV_CHANNELS" @ 1                   "G_DEVICE" @ "fp16" op.create "v.b_%%.ln_1" !
-        "CONV_CHANNELS" @ 1                   "G_DEVICE" @ "fp16" op.create "v.b_%%.ln_2" !
+        "CONV_CHANNELS" @ 1                   "G_DEVICE" @ "fp16" op.create "v.b_%%.ln_1.weight" !
+        "CONV_CHANNELS" @ 1                   "G_DEVICE" @ "fp16" op.create "v.b_%%.ln_1.bias" !
+        "CONV_CHANNELS" @ 1                   "G_DEVICE" @ "fp16" op.create "v.b_%%.ln_2.weight" !
+        "CONV_CHANNELS" @ 1                   "G_DEVICE" @ "fp16" op.create "v.b_%%.ln_2.bias" !
 
         "VISUAL_ATTN_INTERNAL" @ "CONV_CHANNELS" @ 2 "G_DEVICE" @ "fp16" op.create "v.b_%%.attn.in_proj.weight" !
         "VISUAL_ATTN_INTERNAL" @ 1                   "G_DEVICE" @ "fp16" op.create "v.b_%%.attn.in_proj.bias" !
@@ -41,18 +54,25 @@
 %def visual_load_weights
     "v.conv1.weight~" @  "v.conv1.weight"  "G_PATH" @ swap | ".fp32" | io.load
     
-    "v.ln_pre"                      visual_load_one 
-    "v.ln_post"                     visual_load_one
-
+    "v.pos_emb"                     visual_load_one
+    "v.ln_pre.weight"               visual_load_one
+    "v.ln_pre.bias"                 visual_load_one 
+    "v.ln_post.weight"              visual_load_one
+    "v.ln_post.bias"                visual_load_one
+    
     "v.pool.kv_proj.weight"         visual_load_one 
     "v.pool.out_proj.weight"        visual_load_one 
     "v.pool.out_proj.bias"          visual_load_one 
-    "v.pool.ln_q"                   visual_load_one 
-    "v.pool.ln_kv"                  visual_load_one 
+    "v.pool.ln_q.weight"            visual_load_one 
+    "v.pool.ln_q.bias"              visual_load_one 
+    "v.pool.ln_kv.weight"           visual_load_one 
+    "v.pool.ln_kv.bias"             visual_load_one 
 
     %for 0 47
-       "v.b_%%." "ln_1"                 |   visual_load_one
-       "v.b_%%." "ln_2"                 |   visual_load_one
+       "v.b_%%." "ln_1.weight"          |   visual_load_one
+       "v.b_%%." "ln_1.bias"            |   visual_load_one
+       "v.b_%%." "ln_2.weight"          |   visual_load_one
+       "v.b_%%." "ln_2.bias"            |   visual_load_one
 
        "v.b_%%." "attn.in_proj.weight"  |   visual_load_one
        "v.b_%%." "attn.in_proj.bias"    |   visual_load_one
@@ -76,17 +96,27 @@
     1 "CONV_CHANNELS" @ 32 32 4   "dnnl" "fp16" op.create "v_xa_half~" !
 
     ; working memroy in device
-    1 "CONV_CHANNELS" @ 32 32 4   "G_DEVICE" @ "fp16" op.create "v_xa" !
+    1 "CONV_CHANNELS" @ 1024 3 "G_DEVICE" @ "fp16" op.create "v_xa" !
+    1 "CONV_CHANNELS" @ 1024 3 "G_DEVICE" @ "fp16" op.create "v_xb" !
+    
+    "v_xb" @ 0 1 1024 "CONV_CHANNELS" @ 3 op.view "v_yb" !
+    "v_xa" @ 0 1 1024 "CONV_CHANNELS" @ 3 op.view "v_ya" !
 %end
 
 %def visual_main
+    ;; image->conv1->device
     "v_xinput~" @ app.fill
     "v_xinput~" @ "v.conv1.weight~" @ op.null "v_xa~" @ 14 0 op.conv2d
     "v_xa_half~" @ "v_xa~" @ op.convert
-
     "v_xa" @ "v_xa_half~" @ op.copy
-
-    "v_xa" @ io.dump
     
+    ;; pre-processing before attention
+    "v_xa" @ 0 1 "CONV_CHANNELS" @ 1024 1 4 op.view "v_yb" @ op.transpose_0213
+    "v_yb" @  "v.pos_emb" @ "v_yb" @ op.add
+    
+    "v_yb" @ "v.mean_c" @ "v.var_c" @ "v.ln_pre.weight" @ "v.ln_pre.bias" @ "v_ya" @ "RMS_EPS" @ op.layernorm
+   
+    "v_ya" @ io.dump
+
 %end
 
