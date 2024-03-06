@@ -95,7 +95,6 @@ feature_size = 4096;
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen-VL-Chat", trust_remote_code=True)
 model = AutoModelForCausalLM.from_pretrained("./", device_map="cuda", trust_remote_code=True).eval()
 
-"""
 ## wte & lm_head & ln_f
 w = model.transformer.wte.weight
 save_weight(w, "wte");
@@ -148,13 +147,11 @@ for i in range(0, 32):
     w = model.transformer.h[i].mlp.c_proj.weight;
     name = pname + "mlp.o_proj.weight";
     save_weight(w, name);
-"""
 
 ### visual part of Qwen-vl
 w = model.transformer.visual.conv1.weight
 save_weight(w, "v.conv1.weight");
 
-"""
 w = get_abs_pos( model.transformer.visual.positional_embedding, 1024);
 save_weight(w, "v.pos_emb");
 w = model.transformer.visual.conv1.weight
@@ -183,6 +180,7 @@ save_weight(w, "v.pool.ln_kv.weight");
 w = model.transformer.visual.attn_pool.ln_kv.bias
 save_weight(w, "v.pool.ln_kv.bias");
 
+
 blocks = model.transformer.visual.transformer.resblocks;
 for i in range(0, 48):
     pname = "v.b_" + str(i) + ".";
@@ -202,11 +200,16 @@ for i in range(0, 48):
     save_weight(w, name);
 
     w = blocks[i].attn.in_proj.weight;
-    name = pname + "attn.in_proj.weight";
-    save_weight(w, name);
+    [wq, wk, wv] = w.view([16, 104*3, 1664]).split(104, 1);
+    save_weight(wq, pname + "attn.in_proj_q.weight");
+    save_weight(wk, pname + "attn.in_proj_k.weight");
+    save_weight(wv, pname + "attn.in_proj_v.weight");
+
     w = blocks[i].attn.in_proj.bias;
-    name = pname + "attn.in_proj.bias";
-    save_weight(w, name);
+    [bq, bk, bv] = w.view([16, 104*3]).split(104, 1);
+    save_weight(bq, pname + "attn.in_proj_q.bias");
+    save_weight(bk, pname + "attn.in_proj_k.bias");
+    save_weight(bv, pname + "attn.in_proj_v.bias");
 
     w = blocks[i].attn.out_proj.weight;
     name = pname + "attn.out_proj.weight";
@@ -228,4 +231,3 @@ for i in range(0, 48):
     name = pname + "mlp.c_proj.bias";
     save_weight(w, name);
 
-"""

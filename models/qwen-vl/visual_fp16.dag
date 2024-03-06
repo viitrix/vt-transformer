@@ -1,5 +1,5 @@
 1664    "CONV_CHANNELS"             !
-4992    "VISUAL_ATTN_INTERNAL"      !
+104     "VISUAL_HIDE_HEAD"          !
 8192    "VISUAL_MLP_INTERNAL"       !
 14      "CONV_KERNEL_SIZE"          !
 448     "IMAGE_WIDTH"               !
@@ -19,7 +19,7 @@
     "HIDDEN_SIZE" @ 1           "G_DEVICE" @ "fp16" op.create "v.ln_post.weight" !
     "HIDDEN_SIZE" @ 1           "G_DEVICE" @ "fp16" op.create "v.ln_post.bias" !
 
-    "HIDDEN_SIZE" @ "CONV_CHANNELS" @ 2 "G_DEVICE" @ "fp16" op.create "v.pool.kv_proj.weight" ! 
+    "HIDDEN_SIZE" @ "CONV_CHANNELS" @ 2   "G_DEVICE" @ "fp16" op.create "v.pool.kv_proj.weight" ! 
     "HIDDEN_SIZE" @ "HIDDEN_SIZE" @ 2     "G_DEVICE" @ "fp16" op.create "v.pool.out_proj.weight" !
     "HIDDEN_SIZE" @ 1                     "G_DEVICE" @ "fp16" op.create "v.pool.out_proj.bias" !
     "HIDDEN_SIZE" @ 1                     "G_DEVICE" @ "fp16" op.create "v.pool.ln_q.weight" !
@@ -33,8 +33,13 @@
         "CONV_CHANNELS" @ 1                   "G_DEVICE" @ "fp16" op.create "v.b_%%.ln_2.weight" !
         "CONV_CHANNELS" @ 1                   "G_DEVICE" @ "fp16" op.create "v.b_%%.ln_2.bias" !
 
-        "VISUAL_ATTN_INTERNAL" @ "CONV_CHANNELS" @ 2 "G_DEVICE" @ "fp16" op.create "v.b_%%.attn.in_proj.weight" !
-        "VISUAL_ATTN_INTERNAL" @ 1                   "G_DEVICE" @ "fp16" op.create "v.b_%%.attn.in_proj.bias" !
+        "CONV_CHANNELS" @ "CONV_CHANNELS" @ 2   "G_DEVICE" @ "fp16" op.create "v.b_%%.attn.in_proj_q.weight" !
+        "CONV_CHANNELS" @ 1                     "G_DEVICE" @ "fp16" op.create "v.b_%%.attn.in_proj_q.bias" !
+        "CONV_CHANNELS" @ "CONV_CHANNELS" @ 2   "G_DEVICE" @ "fp16" op.create "v.b_%%.attn.in_proj_k.weight" !
+        "CONV_CHANNELS" @ 1                     "G_DEVICE" @ "fp16" op.create "v.b_%%.attn.in_proj_k.bias" !
+        "CONV_CHANNELS" @ "CONV_CHANNELS" @ 2   "G_DEVICE" @ "fp16" op.create "v.b_%%.attn.in_proj_v.weight" !
+        "CONV_CHANNELS" @ 1                     "G_DEVICE" @ "fp16" op.create "v.b_%%.attn.in_proj_v.bias" !
+
         "CONV_CHANNELS" @ "CONV_CHANNELS" @ 2        "G_DEVICE" @ "fp16" op.create "v.b_%%.attn.out_proj.weight" !
         "CONV_CHANNELS" @ 1                          "G_DEVICE" @ "fp16" op.create "v.b_%%.attn.out_proj.bias" !
         
@@ -74,10 +79,14 @@
        "v.b_%%." "ln_2.weight"          |   visual_load_one
        "v.b_%%." "ln_2.bias"            |   visual_load_one
 
-       "v.b_%%." "attn.in_proj.weight"  |   visual_load_one
-       "v.b_%%." "attn.in_proj.bias"    |   visual_load_one
-       "v.b_%%." "attn.out_proj.weight" |   visual_load_one
-       "v.b_%%." "attn.out_proj.bias"   |   visual_load_one
+       "v.b_%%." "attn.in_proj_q.weight"  |   visual_load_one
+       "v.b_%%." "attn.in_proj_q.bias"    |   visual_load_one
+       "v.b_%%." "attn.in_proj_k.weight"  |   visual_load_one
+       "v.b_%%." "attn.in_proj_k.bias"    |   visual_load_one
+       "v.b_%%." "attn.in_proj_v.weight"  |   visual_load_one
+       "v.b_%%." "attn.in_proj_v.bias"    |   visual_load_one
+       "v.b_%%." "attn.out_proj.weight"   |   visual_load_one
+       "v.b_%%." "attn.out_proj.bias"     |   visual_load_one
 
        "v.b_%%." "mlp.c_fc.weight"      |   visual_load_one
        "v.b_%%." "mlp.c_fc.bias"        |   visual_load_one
@@ -98,9 +107,20 @@
     ; working memroy in device
     1 "CONV_CHANNELS" @ 1024 3 "G_DEVICE" @ "fp16" op.create "v_xa" !
     1 "CONV_CHANNELS" @ 1024 3 "G_DEVICE" @ "fp16" op.create "v_xb" !
-    
-    "v_xb" @ 0 1 1024 "CONV_CHANNELS" @ 3 op.view "v_yb" !
+    1 "CONV_CHANNELS" @ 1024 3 "G_DEVICE" @ "fp16" op.create "v_xc" !
+
     "v_xa" @ 0 1 1024 "CONV_CHANNELS" @ 3 op.view "v_ya" !
+    "v_xb" @ 0 1 1024 "CONV_CHANNELS" @ 3 op.view "v_yb" !
+    "v_xc" @ 0 1 1024 "CONV_CHANNELS" @ 3 op.view "v_yc" !
+    
+    "v_xa" @ 0 1024 1 "CONV_CHANNELS" @ 3 op.view "v_za" !
+    "v_xb" @ 0 1024 1 "CONV_CHANNELS" @ 3 op.view "v_zb" !
+    "v_xb" @ 0 1024 1 "CONV_CHANNELS" @ 3 op.view "v_zc" !
+
+    "v_xa" @ 0 1024 1 16 "VISUAL_HIDE_HEAD" @ 4 op.view "v_wa" !
+    "v_xb" @ 0 1024 1 16 "VISUAL_HIDE_HEAD" @ 4 op.view "v_wb" !
+    "v_xb" @ 0 1024 1 16 "VISUAL_HIDE_HEAD" @ 4 op.view "v_wc" !
+
 %end
 
 %def visual_main
@@ -115,8 +135,17 @@
     "v_yb" @  "v.pos_emb" @ "v_yb" @ op.add
     
     "v_yb" @ "v.mean_c" @ "v.var_c" @ "v.ln_pre.weight" @ "v.ln_pre.bias" @ "v_ya" @ "RMS_EPS" @ op.layernorm
-   
-    "v_ya" @ io.dump
+
+    %for 0 0
+        "v_za" @ "v.mean_c" @ "v.var_c" @ "v.b_%%.ln_1.weight" @ "v.b_%%.ln_1.bias" @ "v_zb" @ "RMS_EPS" @ op.layernorm
+        
+        ;;; get query
+        "v_zb" @ "v.b_%%.attn.in_proj_q.weight" @ "v.b_%%.attn.in_proj_q.bias" @ "v_za" @ op.linear
+
+        "v_za" @ io.dump
+
+
+    %endf
 
 %end
 

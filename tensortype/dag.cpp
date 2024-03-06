@@ -212,9 +212,6 @@ UserWord Enviroment::compile(const std::string& txt) {
                 if ( !loop_begin.has_value() || !loop_end.has_value() ) {
                     vt_panic("Can't find begin and end !");
                 }
-                if ( loop_begin == loop_end ) {
-                    vt_panic("Invalid loop_begin and loop_end!");
-                }
                 if ( loop_end > loop_begin ) {
                     for (int l = loop_begin.value(); l <= loop_end.value(); l++) {
                         std::stringstream ss;
