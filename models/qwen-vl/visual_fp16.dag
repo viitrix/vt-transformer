@@ -1,5 +1,8 @@
 1664    "CONV_CHANNELS"             !
-104     "VISUAL_HIDE_HEAD"          !
+
+16      "VISUAL_HEAD_NUM"           !           
+104     "VISUAL_HEAD_LEN"           !
+
 8192    "VISUAL_MLP_INTERNAL"       !
 14      "CONV_KERNEL_SIZE"          !
 448     "IMAGE_WIDTH"               !
@@ -103,23 +106,30 @@
     1 3 "IMAGE_WIDTH" @ dup   4   "dnnl" "float" op.create "v_xinput~" !
     1 "CONV_CHANNELS" @ 32 32 4   "dnnl" "float" op.create "v_xa~" !
     1 "CONV_CHANNELS" @ 32 32 4   "dnnl" "fp16" op.create "v_xa_half~" !
+    
 
     ; working memroy in device
     1 "CONV_CHANNELS" @ 1024 3 "G_DEVICE" @ "fp16" op.create "v_xa" !
     1 "CONV_CHANNELS" @ 1024 3 "G_DEVICE" @ "fp16" op.create "v_xb" !
     1 "CONV_CHANNELS" @ 1024 3 "G_DEVICE" @ "fp16" op.create "v_xc" !
+    1 "CONV_CHANNELS" @ 1024 3 "G_DEVICE" @ "fp16" op.create "v_xd" !
 
     "v_xa" @ 0 1 1024 "CONV_CHANNELS" @ 3 op.view "v_ya" !
     "v_xb" @ 0 1 1024 "CONV_CHANNELS" @ 3 op.view "v_yb" !
     "v_xc" @ 0 1 1024 "CONV_CHANNELS" @ 3 op.view "v_yc" !
+    "v_xd" @ 0 1 1024 "CONV_CHANNELS" @ 3 op.view "v_yd" !
     
-    "v_xa" @ 0 1024 1 "CONV_CHANNELS" @ 3 op.view "v_za" !
-    "v_xb" @ 0 1024 1 "CONV_CHANNELS" @ 3 op.view "v_zb" !
-    "v_xb" @ 0 1024 1 "CONV_CHANNELS" @ 3 op.view "v_zc" !
+    "v_xa" @ 0 1 1024 "VISUAL_HEAD_NUM" @  "VISUAL_HEAD_LEN" @ 4 op.view "v_za" !
+    "v_xb" @ 0 1 1024 "VISUAL_HEAD_NUM" @  "VISUAL_HEAD_LEN" @ 4 op.view "v_zb" !
+    "v_xc" @ 0 1 1024 "VISUAL_HEAD_NUM" @  "VISUAL_HEAD_LEN" @ 4 op.view "v_zc" !
+    "v_xd" @ 0 1 1024 "VISUAL_HEAD_NUM" @  "VISUAL_HEAD_LEN" @ 4 op.view "v_zd" !
 
-    "v_xa" @ 0 1024 1 16 "VISUAL_HIDE_HEAD" @ 4 op.view "v_wa" !
-    "v_xb" @ 0 1024 1 16 "VISUAL_HIDE_HEAD" @ 4 op.view "v_wb" !
-    "v_xb" @ 0 1024 1 16 "VISUAL_HIDE_HEAD" @ 4 op.view "v_wc" !
+    "v_xa" @ 0 1 "VISUAL_HEAD_NUM" @ 1024  "VISUAL_HEAD_LEN" @ 4 op.view "v_wa" !
+    "v_xb" @ 0 1 "VISUAL_HEAD_NUM" @ 1024  "VISUAL_HEAD_LEN" @ 4 op.view "v_wb" !
+    "v_xc" @ 0 1 "VISUAL_HEAD_NUM" @ 1024  "VISUAL_HEAD_LEN" @ 4 op.view "v_wc" !
+    "v_xd" @ 0 1 "VISUAL_HEAD_NUM" @ 1024  "VISUAL_HEAD_LEN" @ 4 op.view "v_wd" !
+
+    1 "VISUAL_HEAD_NUM" @ 1024 1024 4 "G_DEVICE" @ "fp16" op.create "v_xll" !
 
 %end
 
@@ -131,19 +141,36 @@
     "v_xa" @ "v_xa_half~" @ op.copy
     
     ;; pre-processing before attention
+    
     "v_xa" @ 0 1 "CONV_CHANNELS" @ 1024 1 4 op.view "v_yb" @ op.transpose_0213
     "v_yb" @  "v.pos_emb" @ "v_yb" @ op.add
     
     "v_yb" @ "v.mean_c" @ "v.var_c" @ "v.ln_pre.weight" @ "v.ln_pre.bias" @ "v_ya" @ "RMS_EPS" @ op.layernorm
 
     %for 0 0
-        "v_za" @ "v.mean_c" @ "v.var_c" @ "v.b_%%.ln_1.weight" @ "v.b_%%.ln_1.bias" @ "v_zb" @ "RMS_EPS" @ op.layernorm
+        "v_ya" @ "v.mean_c" @ "v.var_c" @ "v.b_%%.ln_1.weight" @ "v.b_%%.ln_1.bias" @ "v_yb" @ "RMS_EPS" @ op.layernorm
+   
+        ;;; v_wc is query
+        "v_yb" @ "v.b_%%.attn.in_proj_q.weight" @ "v.b_%%.attn.in_proj_q.bias" @ "v_ya" @ op.linear
+        "v_za" @ "v_wc" @ op.transpose_0213     
+
+        ;;; v_wd is key
+        "v_yb" @ "v.b_%%.attn.in_proj_k.weight" @ "v.b_%%.attn.in_proj_k.bias" @ "v_ya" @ op.linear
+        "v_za" @ "v_wd" @ op.transpose_0213     
+   
+        "v_wc" @ "v_wd" @ "v_xll" @ op.querykey
+        "v_xll" @ "v_xll" @ op.softmax
+
+        ;;; v_wb is value
+        "v_yb" @ "v.b_%%.attn.in_proj_v.weight" @ "v.b_%%.attn.in_proj_v.bias" @ "v_ya" @ op.linear
+        "v_za" @ "v_wb" @ op.transpose_0213
+
+        "v_xll" @ "v_wb" @ "v_wa" @ op.attn
+        "v_wa"  @ "v_zb" @ op.transpose_0213
         
-        ;;; get query
-        "v_zb" @ "v.b_%%.attn.in_proj_q.weight" @ "v.b_%%.attn.in_proj_q.bias" @ "v_za" @ op.linear
+        "v_yb"  @ "v.b_%%.attn.out_proj.weight" @ "v.b_%%.attn.out_proj.bias" @ "v_ya" @ op.linear
 
-        "v_za" @ io.dump
-
+        "v_ya" @ io.dump
 
     %endf
 
