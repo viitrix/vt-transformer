@@ -103,76 +103,83 @@
     visual_load_weights
 
     ; variable for conv in dnnl tensor
-    1 3 "IMAGE_WIDTH" @ dup   4   "dnnl" "float" op.create "v_xinput~" !
-    1 "CONV_CHANNELS" @ 32 32 4   "dnnl" "float" op.create "v_xa~" !
-    1 "CONV_CHANNELS" @ 32 32 4   "dnnl" "fp16" op.create "v_xa_half~" !
+    1 3 "IMAGE_WIDTH" @ dup   4   "dnnl" "float" op.create "v_img~" !
+    1 "CONV_CHANNELS" @ 32 32 4   "dnnl" "float" op.create "v_imgx~" !
+    1 "CONV_CHANNELS" @ 32 32 4   "dnnl" "fp16" op.create "v_imgx_half~" !
     
-
     ; working memroy in device
-    1 "CONV_CHANNELS" @ 1024 3 "G_DEVICE" @ "fp16" op.create "v_xa" !
-    1 "CONV_CHANNELS" @ 1024 3 "G_DEVICE" @ "fp16" op.create "v_xb" !
-    1 "CONV_CHANNELS" @ 1024 3 "G_DEVICE" @ "fp16" op.create "v_xc" !
-    1 "CONV_CHANNELS" @ 1024 3 "G_DEVICE" @ "fp16" op.create "v_xd" !
+    1 1024 "CONV_CHANNELS" @ 3 "G_DEVICE" @ "fp16" op.create "v_xinput" !
+    1 1024 "CONV_CHANNELS" @ 3 "G_DEVICE" @ "fp16" op.create "v_xa" !
+    1 1024 "CONV_CHANNELS" @ 3 "G_DEVICE" @ "fp16" op.create "v_xb" !
+    1 1024 "CONV_CHANNELS" @ 3 "G_DEVICE" @ "fp16" op.create "v_xc" !
+    1 1024 "CONV_CHANNELS" @ 3 "G_DEVICE" @ "fp16" op.create "v_xd" !
 
-    "v_xa" @ 0 1 1024 "CONV_CHANNELS" @ 3 op.view "v_ya" !
-    "v_xb" @ 0 1 1024 "CONV_CHANNELS" @ 3 op.view "v_yb" !
-    "v_xc" @ 0 1 1024 "CONV_CHANNELS" @ 3 op.view "v_yc" !
-    "v_xd" @ 0 1 1024 "CONV_CHANNELS" @ 3 op.view "v_yd" !
-    
-    "v_xa" @ 0 1 1024 "VISUAL_HEAD_NUM" @  "VISUAL_HEAD_LEN" @ 4 op.view "v_za" !
-    "v_xb" @ 0 1 1024 "VISUAL_HEAD_NUM" @  "VISUAL_HEAD_LEN" @ 4 op.view "v_zb" !
-    "v_xc" @ 0 1 1024 "VISUAL_HEAD_NUM" @  "VISUAL_HEAD_LEN" @ 4 op.view "v_zc" !
-    "v_xd" @ 0 1 1024 "VISUAL_HEAD_NUM" @  "VISUAL_HEAD_LEN" @ 4 op.view "v_zd" !
+    "v_xa" @ 0 1 1024 "VISUAL_HEAD_NUM" @  "VISUAL_HEAD_LEN" @ 4 op.view "v_ya" !
+    "v_xb" @ 0 1 1024 "VISUAL_HEAD_NUM" @  "VISUAL_HEAD_LEN" @ 4 op.view "v_yb" !
+    "v_xc" @ 0 1 1024 "VISUAL_HEAD_NUM" @  "VISUAL_HEAD_LEN" @ 4 op.view "v_yc" !
+    "v_xd" @ 0 1 1024 "VISUAL_HEAD_NUM" @  "VISUAL_HEAD_LEN" @ 4 op.view "v_yd" !
 
-    "v_xa" @ 0 1 "VISUAL_HEAD_NUM" @ 1024  "VISUAL_HEAD_LEN" @ 4 op.view "v_wa" !
-    "v_xb" @ 0 1 "VISUAL_HEAD_NUM" @ 1024  "VISUAL_HEAD_LEN" @ 4 op.view "v_wb" !
-    "v_xc" @ 0 1 "VISUAL_HEAD_NUM" @ 1024  "VISUAL_HEAD_LEN" @ 4 op.view "v_wc" !
-    "v_xd" @ 0 1 "VISUAL_HEAD_NUM" @ 1024  "VISUAL_HEAD_LEN" @ 4 op.view "v_wd" !
+    "v_xa" @ 0 1 "VISUAL_HEAD_NUM" @ 1024  "VISUAL_HEAD_LEN" @ 4 op.view "v_za" !
+    "v_xb" @ 0 1 "VISUAL_HEAD_NUM" @ 1024  "VISUAL_HEAD_LEN" @ 4 op.view "v_zb" !
+    "v_xc" @ 0 1 "VISUAL_HEAD_NUM" @ 1024  "VISUAL_HEAD_LEN" @ 4 op.view "v_zc" !
+    "v_xd" @ 0 1 "VISUAL_HEAD_NUM" @ 1024  "VISUAL_HEAD_LEN" @ 4 op.view "v_zd" !
 
     1 "VISUAL_HEAD_NUM" @ 1024 1024 4 "G_DEVICE" @ "fp16" op.create "v_xll" !
+
+    
+    1 1024 "VISUAL_MLP_INTERNAL" @ 3 "G_DEVICE" @ "fp16" op.create "v_xmlp" !
+
 
 %end
 
 %def visual_main
     ;; image->conv1->device
-    "v_xinput~" @ app.fill
-    "v_xinput~" @ "v.conv1.weight~" @ op.null "v_xa~" @ 14 0 op.conv2d
-    "v_xa_half~" @ "v_xa~" @ op.convert
-    "v_xa" @ "v_xa_half~" @ op.copy
+    "v_img~" @ app.fill
+    "v_img~" @ "v.conv1.weight~" @ op.null "v_imgx~" @ 14 0 op.conv2d
+    "v_imgx_half~" @ "v_imgx~" @ op.convert
+    "v_xa" @ "v_imgx_half~" @ op.copy
     
     ;; pre-processing before attention
     
-    "v_xa" @ 0 1 "CONV_CHANNELS" @ 1024 1 4 op.view "v_yb" @ op.transpose_0213
-    "v_yb" @  "v.pos_emb" @ "v_yb" @ op.add
-    
-    "v_yb" @ "v.mean_c" @ "v.var_c" @ "v.ln_pre.weight" @ "v.ln_pre.bias" @ "v_ya" @ "RMS_EPS" @ op.layernorm
+    { "v_xa" @ 0 1 "CONV_CHANNELS" @ 1024 1 4 op.view } 
+    { "v_xb" @ 0 1 1024 "CONV_CHANNELS" @ 1 4 op.view } op.transpose_0213
 
-    %for 0 0
-        "v_ya" @ "v.mean_c" @ "v.var_c" @ "v.b_%%.ln_1.weight" @ "v.b_%%.ln_1.bias" @ "v_yb" @ "RMS_EPS" @ op.layernorm
-   
-        ;;; v_wc is query
-        "v_yb" @ "v.b_%%.attn.in_proj_q.weight" @ "v.b_%%.attn.in_proj_q.bias" @ "v_ya" @ op.linear
-        "v_za" @ "v_wc" @ op.transpose_0213     
+    "v_xb" @ "v.pos_emb" @ "v_xa" @ op.add
+    "v_xa" @ "v.mean_c" @ "v.var_c" @ "v.ln_pre.weight" @ "v.ln_pre.bias" @ "v_xinput" @ "RMS_EPS" @ op.layernorm
 
-        ;;; v_wd is key
-        "v_yb" @ "v.b_%%.attn.in_proj_k.weight" @ "v.b_%%.attn.in_proj_k.bias" @ "v_ya" @ op.linear
-        "v_za" @ "v_wd" @ op.transpose_0213     
-   
-        "v_wc" @ "v_wd" @ "v_xll" @ op.querykey
+    ;; attention layer by layer
+    %for 0 47 
+        "v_xinput" @ "v.mean_c" @ "v.var_c" @ "v.b_%%.ln_1.weight" @ "v.b_%%.ln_1.bias" @ "v_xa" @ "RMS_EPS" @ op.layernorm
+  
+        ;; v_zb is queryi && y_zc is key
+        "v_xa" @ "v.b_%%.attn.in_proj_q.weight" @ "v.b_%%.attn.in_proj_q.bias" @ "v_xc" @ op.linear
+        "v_yc" @ "v_zb" @ op.transpose_0213 
+        "v_xa" @ "v.b_%%.attn.in_proj_k.weight" @ "v.b_%%.attn.in_proj_k.bias" @ "v_xd" @ op.linear
+        "v_yd" @ "v_zc" @ op.transpose_0213     
+  
+        ;; query@key
+        "v_zb" @ "v_zc" @ "v_xll" @ op.querykey
         "v_xll" @ "v_xll" @ op.softmax
 
-        ;;; v_wb is value
-        "v_yb" @ "v.b_%%.attn.in_proj_v.weight" @ "v.b_%%.attn.in_proj_v.bias" @ "v_ya" @ op.linear
-        "v_za" @ "v_wb" @ op.transpose_0213
+        ;; v_zb is value do attn
+        "v_xa" @ "v.b_%%.attn.in_proj_v.weight" @ "v.b_%%.attn.in_proj_v.bias" @ "v_xc" @ op.linear
+        "v_yc" @ "v_zb" @ op.transpose_0213
+        "v_xll" @ "v_zb" @ "v_zc" @ op.attn
+       
+        ;; post process
+        "v_zc"  @ "v_yb" @ op.transpose_0213
+        "v_xb"  @ "v.b_%%.attn.out_proj.weight" @ "v.b_%%.attn.out_proj.bias" @ "v_xa" @ op.linear
+        "v_xinput" @ "v_xa" @ "v_xinput" @ op.add
 
-        "v_xll" @ "v_wb" @ "v_wa" @ op.attn
-        "v_wa"  @ "v_zb" @ op.transpose_0213
-        
-        "v_yb"  @ "v.b_%%.attn.out_proj.weight" @ "v.b_%%.attn.out_proj.bias" @ "v_ya" @ op.linear
+        ;; mlp
+        "v_xinput" @ "v.mean_c" @ "v.var_c" @ "v.b_%%.ln_2.weight" @ "v.b_%%.ln_2.bias" @ "v_xa" @ "RMS_EPS" @ op.layernorm
+        "v_xa" @ "v.b_%%.mlp.c_fc.weight" @ "v.b_%%.mlp.c_fc.bias" @ "v_xmlp" @ op.linear    
+        "v_xmlp" @ "v_xmlp" @ op.gelu
+        "v_xmlp" @ "v.b_%%.mlp.c_proj.weight" @ "v.b_%%.mlp.c_proj.bias" @ "v_xa" @ op.linear
 
-        "v_ya" @ io.dump
-
+        "v_xinput" @ "v_xa" @ "v_xinput" @ op.add
     %endf
-
+    
+    "v_xinput" @ io.dump
 %end
 

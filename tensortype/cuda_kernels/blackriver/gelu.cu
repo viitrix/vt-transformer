@@ -32,21 +32,27 @@ def bloom_gelu_back(g: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
 */
 
 namespace vt { namespace cuda {
+template <typename T>
+int gelu_forward(const T* src, T* target, int nElementNumber, cudaStream_t stream);
 
-__global__ void gelu(float* target, const float* src, int nElementNumber) {
+template<typename T>
+__global__ void gelu(T* target, const T* src, int nElementNumber) {
     size_t i = blockIdx.x * blockDim.x + threadIdx.x;
 
 	if (i < nElementNumber) {
         float value = src[i];
-        target[i] = value * (0.5F + 0.5F * tanhf(value * (0.79788456F + 0.03567741F * value * value)));
+        //target[i] = value * (0.5F + 0.5F * tanhf(value * (0.79788456F + 0.03567741F * value * value)));
+        target[i] = value * normcdf(value);
     }
 }
 
-int gelu_forward(const float* src, float* target, int nElementNumber, cudaStream_t stream) {
+
+template <>
+int gelu_forward<float>(const float* src, float* target, int nElementNumber, cudaStream_t stream) {
     dim3 block_size(256);
 	dim3 num_of_blocks((nElementNumber + block_size.x - 1) / block_size.x);
 
-    gelu <<< num_of_blocks, block_size, 0, stream >>> (target, src, nElementNumber);
+    gelu<float> <<< num_of_blocks, block_size, 0, stream >>> (target, src, nElementNumber);
     
     cudaError_t err = cudaGetLastError();
     if (err != cudaSuccess) {
@@ -56,6 +62,23 @@ int gelu_forward(const float* src, float* target, int nElementNumber, cudaStream
     
     return 0;
 }
+
+template <>
+int gelu_forward<__half>(const __half* src, __half* target, int nElementNumber, cudaStream_t stream) {
+    dim3 block_size(256);
+	dim3 num_of_blocks((nElementNumber + block_size.x - 1) / block_size.x);
+
+    gelu<__half> <<< num_of_blocks, block_size, 0, stream >>> (target, src, nElementNumber);
+    
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        fprintf(stderr, "Failed to launch vectorAdd kernel (error code %s)!\n", cudaGetErrorString(err));
+        exit(-1);
+    }
+    
+    return 0;
+}
+
 
 __global__ void gelu_bw(const float* out_g, const float* xi, float* x_g, int nElementNumber) {
     size_t i = blockIdx.x * blockDim.x + threadIdx.x;

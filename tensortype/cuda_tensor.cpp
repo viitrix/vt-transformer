@@ -1513,7 +1513,15 @@ ComputingReturn  CUDATensor<DT>::op_gelu(tensor_t self, tensor_t out) {
         float* dst = (float *)out->cuda_float()->data();
 
         auto stream = ComputingContext::cuda_stream;
-        cuda::gelu_forward(src, dst, self->items(), stream);
+        cuda::gelu_forward<float>(src, dst, self->items(), stream);
+        return OP_OK;
+    }
+    if ( DT == DataType::FP16 ) {
+        device_fp16_t* src = (device_fp16_t *)data();
+        device_fp16_t* dst = (device_fp16_t *)out->cuda_fp16()->data();
+
+        auto stream = ComputingContext::cuda_stream;
+        cuda::gelu_forward<device_fp16_t>(src, dst, self->items(), stream);
         return OP_OK;
     }
 

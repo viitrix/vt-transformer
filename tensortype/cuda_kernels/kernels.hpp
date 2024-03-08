@@ -80,7 +80,9 @@ int causal_mask(const int *mask, T *out,
                   const int full_tokens,
                   cudaStream_t stream);
 
-int gelu_forward(const float* src, float* target, int nElementNumber, cudaStream_t stream);
+template <typename T>
+int gelu_forward(const T* src, T* target, int nElementNumber, cudaStream_t stream);
+
 int gelu_backward(const float* out_g, const float* xi, float* x_g, int nElementNumber, cudaStream_t stream);
 int nllloss_forward(const int* ids, const float* logsoftmax, float *output, float *dout, int n, int vocab, float loss_scale, cudaStream_t stream);
 void LtSgemm(cublasLtHandle_t ltHandle,
