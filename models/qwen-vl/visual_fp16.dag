@@ -25,10 +25,10 @@
     "HIDDEN_SIZE" @ "CONV_CHANNELS" @ 2   "G_DEVICE" @ "fp16" op.create "v.pool.kv_proj.weight" ! 
     "HIDDEN_SIZE" @ "HIDDEN_SIZE" @ 2     "G_DEVICE" @ "fp16" op.create "v.pool.out_proj.weight" !
     "HIDDEN_SIZE" @ 1                     "G_DEVICE" @ "fp16" op.create "v.pool.out_proj.bias" !
-    "HIDDEN_SIZE" @ 1                     "G_DEVICE" @ "fp16" op.create "v.pool.ln_q.weight" !
-    "HIDDEN_SIZE" @ 1                     "G_DEVICE" @ "fp16" op.create "v.pool.ln_q.bias" !
     "HIDDEN_SIZE" @ 1                     "G_DEVICE" @ "fp16" op.create "v.pool.ln_kv.weight" !
     "HIDDEN_SIZE" @ 1                     "G_DEVICE" @ "fp16" op.create "v.pool.ln_kv.bias" !
+    1 1024 "HIDDEN_SIZE" @ 3              "G_DEVICE" @ "fp16" op.create "v.pool.pos_emb" !
+    1 256 "HIDDEN_SIZE" @ 3               "G_DEVICE" @ "fp16" op.create "v.pool.query" !
 
     %for 0 47
         "CONV_CHANNELS" @ 1                   "G_DEVICE" @ "fp16" op.create "v.b_%%.ln_1.weight" !
@@ -71,10 +71,10 @@
     "v.pool.kv_proj.weight"         visual_load_one 
     "v.pool.out_proj.weight"        visual_load_one 
     "v.pool.out_proj.bias"          visual_load_one 
-    "v.pool.ln_q.weight"            visual_load_one 
-    "v.pool.ln_q.bias"              visual_load_one 
     "v.pool.ln_kv.weight"           visual_load_one 
     "v.pool.ln_kv.bias"             visual_load_one 
+    "v.pool.pos_emb"                visual_load_one
+    "v.pool.query"                  visual_load_one
 
     %for 0 47
        "v.b_%%." "ln_1.weight"          |   visual_load_one
@@ -125,10 +125,11 @@
     "v_xd" @ 0 1 "VISUAL_HEAD_NUM" @ 1024  "VISUAL_HEAD_LEN" @ 4 op.view "v_zd" !
 
     1 "VISUAL_HEAD_NUM" @ 1024 1024 4 "G_DEVICE" @ "fp16" op.create "v_xll" !
-
-    
     1 1024 "VISUAL_MLP_INTERNAL" @ 3 "G_DEVICE" @ "fp16" op.create "v_xmlp" !
-
+        
+    ;; used for pool resampler
+    1 1024 "HIDDEN_SIZE" @   3 "G_DEVICE" @ "fp16" op.create "v_xpa" !
+    1 1024 "HIDDEN_SIZE" @   3 "G_DEVICE" @ "fp16" op.create "v_xpb" !
 
 %end
 
@@ -179,7 +180,17 @@
 
         "v_xinput" @ "v_xa" @ "v_xinput" @ op.add
     %endf
+
+    ;; resampler  
+    "v_xinput" @ "v.pool.kv_proj.weight" @ op.null "v_xpa" @ op.linear
+    "v_xpa" @ "v.mean_h" @ "v.var_h" @ "v.pool.ln_kv.weight" @ "v.pool.ln_kv.bias" @ "v_xpb" @ "RMS_EPS" @ op.layernorm
+
+    "v.pool.pos_emb" @ io.dump
     
-    "v_xinput" @ io.dump
+    ;; key: v_xpa  value: v_xpb
+    "v_xpb" @ "v.pool.pos_emb" @ "v_xpa" @ op.add
+
+    "v_xpa" @ io.dump
+
 %end
 

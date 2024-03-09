@@ -81,15 +81,17 @@ QWenLMHeadModel(
 )
 '''
 
-def save_weight(w, wfile):
+def save_weight(w, wfile, f32=False):
     print("dumping " + wfile + " ...");
     ofile_name = "./weights/" + wfile + ".fp16";
     w16 = w.cpu().float().detach().numpy().flatten().astype('float16');
     w16.tofile(ofile_name);
 
-    ofile_name = "./weights/" + wfile + ".fp32";
-    w32 = w.cpu().float().detach().numpy().flatten();
-    w32.tofile(ofile_name);
+    if ( f32 ):
+        ofile_name = "./weights/" + wfile + ".fp32";
+        w32 = w.cpu().float().detach().numpy().flatten();
+        w32.tofile(ofile_name);
+
 
 feature_size = 4096;
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen-VL-Chat", trust_remote_code=True)
@@ -148,9 +150,10 @@ for i in range(0, 32):
     name = pname + "mlp.o_proj.weight";
     save_weight(w, name);
 
+
 ### visual part of Qwen-vl
 w = model.transformer.visual.conv1.weight
-save_weight(w, "v.conv1.weight");
+save_weight(w, "v.conv1.weight", True);
 
 w = get_abs_pos( model.transformer.visual.positional_embedding, 1024);
 save_weight(w, "v.pos_emb");
@@ -171,15 +174,28 @@ w = model.transformer.visual.attn_pool.attn.out_proj.weight
 save_weight(w, "v.pool.out_proj.weight");
 w = model.transformer.visual.attn_pool.attn.out_proj.bias
 save_weight(w, "v.pool.out_proj.bias");
-w = model.transformer.visual.attn_pool.ln_q.weight
-save_weight(w, "v.pool.ln_q.weight");
-w = model.transformer.visual.attn_pool.ln_q.bias
-save_weight(w, "v.pool.ln_q.bias");
 w = model.transformer.visual.attn_pool.ln_kv.weight
 save_weight(w, "v.pool.ln_kv.weight");
 w = model.transformer.visual.attn_pool.ln_kv.bias
 save_weight(w, "v.pool.ln_kv.bias");
 
+
+"""
+w = model.transformer.visual.attn_pool.pos_embed
+save_weight(w, "v.pool.pos_emb");
+w = model.transformer.visual.attn_pool.ln_q.weight
+save_weight(w, "v.pool.ln_q.weight");
+w = model.transformer.visual.attn_pool.ln_q.bias
+save_weight(w, "v.pool.ln_q.bias");
+"""
+
+w = model.transformer.visual.attn_pool.ln_q(model.transformer.visual.attn_pool.query);
+w = w + model.transformer.visual.attn_pool.pos_embed
+save_weight(w, "v.pool.query");
+w = get_abs_pos(model.transformer.visual.attn_pool.pos_embed, 1024);
+save_weight(w, "v.pool.pos_emb");
+
+raise Exception("==DEBUG==");
 
 blocks = model.transformer.visual.transformer.resblocks;
 for i in range(0, 48):
