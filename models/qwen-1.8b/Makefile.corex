@@ -21,7 +21,7 @@ bench: bench.cpp memory.hpp
 	g++ $(FLAGS) -o $@ $< $(INC) $(LINK)
 
 run: chat 
-	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${COREX_DIR}/lib64:${DNNL_DIR}/lib:${VT_SOURCE}/install/lib ./chat $(target)
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${DNNL_DIR}/lib:${COREX_DIR}/lib64:${DNNL_DIR}/lib:${VT_SOURCE}/install/lib ./chat $(target)
 
 test: bench 
 	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${COREX_DIR}/lib64:${DNNL_DIR}/lib:${VT_SOURCE}/install/lib ./bench $(target)
