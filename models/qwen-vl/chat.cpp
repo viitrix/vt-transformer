@@ -14,7 +14,7 @@ const size_t MEM_CTX_SIZE = 4 * 1024 * 1024 * 1024l;
 
 struct ChatApplication {
     ChatApplication() {
-        tokenizer_ = vt::build_tokenizer_qwen("./qwen.tiktoken");
+        tokenizer_ = vt::build_tokenizer_qwen("./qwen.tiktoken", true);
     }
     ~ChatApplication() {
         delete tokenizer_;
@@ -68,9 +68,7 @@ struct ChatApplication {
             auto start = std::chrono::high_resolution_clock::now();
             int next = -1;
             for ( int t = 0; t < (int)max_output; t++) {
-                int batch = 1;
                 int len = id.size();
-                write_all(&batch, sizeof(int));
                 write_all(&len, sizeof(int));
                 write_all(id.data(), id.size() * sizeof(int));
                 write_all(mask.data(), mask.size() * sizeof(int));
@@ -164,23 +162,20 @@ void do_inference(vt::Enviroment* env, const int argc, const char* argv[]) {
     }
     env->execute(visual_cmd);
 
+
     int ok = 1;
     vt_assert( vt::CollectiveContext::pipe_write(0, &ok, sizeof(int)) > 0, "pipe_write error");
 
     vt::DaG* target_cmd = env->build(main_cmd);
 
     for (;;) {
-        int batches = -1;
         int id = -1;
-        vt::CollectiveContext::pipe_read(&batches, sizeof(int));;
-        if ( batches <= 0) {
+
+        vt::CollectiveContext::pipe_read(&id, sizeof(int));;
+        if ( id == -1 ) {
             break;
         }
 
-        vt::CollectiveContext::pipe_read(&id, sizeof(int));;
-        vt_assert(id > 0, "tokens can't must more than zero!");
-
-        env->stack().push_number(batches);
         env->stack().push_number(id);
         env->run(target_cmd);
     }

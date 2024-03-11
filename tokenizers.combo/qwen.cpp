@@ -15,16 +15,28 @@ namespace vt {
 
 struct QwenTokenizer : public Tokenizer {
     TiktokenHandle rustObj;
-    QwenTokenizer(const char* hash_file) {
+    QwenTokenizer(const char* hash_file, bool is_visual) {
         // building special tokens manual ..
         std::string specs;
         specs.append("<|endoftext|>\n");
         specs.append("<|im_start|>\n");
         specs.append("<|im_end|>\n");
+
         for (int i = 0; i < 205; i++) {
             std::stringstream ss;
             ss << "<|extra_" << i << "|>" << std::endl;
             specs.append(ss.str());
+        }
+        if ( is_visual ) {
+            specs.append("<ref>\n");
+            specs.append("</ref>\n");
+            specs.append("<box>\n");
+            specs.append("</box>\n");
+            specs.append("<quad>\n");
+            specs.append("</quad>\n");
+            specs.append("<img>\n");
+            specs.append("</img>\n");
+            specs.append("<imgpad>\n");
         }
 
         const std::string reg = R""""((?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+)"""";
@@ -87,8 +99,8 @@ struct QwenTokenizer : public Tokenizer {
     }
 };
 
-Tokenizer* build_tokenizer_qwen(const char* file_name) {
-    return new QwenTokenizer(file_name);
+Tokenizer* build_tokenizer_qwen(const char* file_name, bool is_visual) {
+    return new QwenTokenizer(file_name, is_visual);
 }
 
 // ================================================================
