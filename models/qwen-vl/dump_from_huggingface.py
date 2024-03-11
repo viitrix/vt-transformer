@@ -179,6 +179,21 @@ save_weight(w, "v.pool.ln_kv.weight");
 w = model.transformer.visual.attn_pool.ln_kv.bias
 save_weight(w, "v.pool.ln_kv.bias");
 
+w = model.transformer.visual.attn_pool.attn.in_proj_weight
+[wq, wk, wv] = w.view([3*4096, 4096]).split(4096, 0);
+save_weight(wq, "v.pool.attn.in_q.weight");
+save_weight(wk, "v.pool.attn.in_k.weight");
+save_weight(wv, "v.pool.attn.in_v.weight");
+w = model.transformer.visual.attn_pool.attn.in_proj_bias
+[bq, bk, bv] = w.split(4096, 0);
+save_weight(bq, "v.pool.attn.in_q.bias");
+save_weight(bk, "v.pool.attn.in_k.bias");
+save_weight(bv, "v.pool.attn.in_v.bias");
+
+w = model.transformer.visual.attn_pool.attn.out_proj.weight
+save_weight(w, "v.pool.attn.out.weight");
+w = model.transformer.visual.attn_pool.attn.out_proj.bias
+save_weight(w, "v.pool.attn.out.bias");
 
 """
 w = model.transformer.visual.attn_pool.pos_embed
@@ -188,14 +203,11 @@ save_weight(w, "v.pool.ln_q.weight");
 w = model.transformer.visual.attn_pool.ln_q.bias
 save_weight(w, "v.pool.ln_q.bias");
 """
-
 w = model.transformer.visual.attn_pool.ln_q(model.transformer.visual.attn_pool.query);
 w = w + model.transformer.visual.attn_pool.pos_embed
 save_weight(w, "v.pool.query");
 w = get_abs_pos(model.transformer.visual.attn_pool.pos_embed, 1024);
 save_weight(w, "v.pool.pos_emb");
-
-raise Exception("==DEBUG==");
 
 blocks = model.transformer.visual.transformer.resblocks;
 for i in range(0, 48):

@@ -29,7 +29,16 @@
     "HIDDEN_SIZE" @ 1                     "G_DEVICE" @ "fp16" op.create "v.pool.ln_kv.bias" !
     1 1024 "HIDDEN_SIZE" @ 3              "G_DEVICE" @ "fp16" op.create "v.pool.pos_emb" !
     1 256 "HIDDEN_SIZE" @ 3               "G_DEVICE" @ "fp16" op.create "v.pool.query" !
-
+    
+    "HIDDEN_SIZE" @ "HIDDEN_SIZE" @ 2     "G_DEVICE" @ "fp16" op.create "v.pool.attn.out.weight" !
+    "HIDDEN_SIZE" @ 1                     "G_DEVICE" @ "fp16" op.create "v.pool.attn.out.bias" !
+    "HIDDEN_SIZE" @ "HIDDEN_SIZE" @ 2     "G_DEVICE" @ "fp16" op.create "v.pool.attn.in_q.weight" !
+    "HIDDEN_SIZE" @ 1                     "G_DEVICE" @ "fp16" op.create "v.pool.attn.in_q.bias" !
+    "HIDDEN_SIZE" @ "HIDDEN_SIZE" @ 2     "G_DEVICE" @ "fp16" op.create "v.pool.attn.in_k.weight" !
+    "HIDDEN_SIZE" @ 1                     "G_DEVICE" @ "fp16" op.create "v.pool.attn.in_k.bias" !
+    "HIDDEN_SIZE" @ "HIDDEN_SIZE" @ 2     "G_DEVICE" @ "fp16" op.create "v.pool.attn.in_v.weight" !
+    "HIDDEN_SIZE" @ 1                     "G_DEVICE" @ "fp16" op.create "v.pool.attn.in_v.bias" !
+    
     %for 0 47
         "CONV_CHANNELS" @ 1                   "G_DEVICE" @ "fp16" op.create "v.b_%%.ln_1.weight" !
         "CONV_CHANNELS" @ 1                   "G_DEVICE" @ "fp16" op.create "v.b_%%.ln_1.bias" !
@@ -75,6 +84,14 @@
     "v.pool.ln_kv.bias"             visual_load_one 
     "v.pool.pos_emb"                visual_load_one
     "v.pool.query"                  visual_load_one
+    "v.pool.attn.out.weight"        visual_load_one
+    "v.pool.attn.out.bias"          visual_load_one 
+    "v.pool.attn.in_q.weight"        visual_load_one
+    "v.pool.attn.in_q.bias"          visual_load_one 
+    "v.pool.attn.in_k.weight"        visual_load_one
+    "v.pool.attn.in_k.bias"          visual_load_one 
+    "v.pool.attn.in_v.weight"        visual_load_one
+    "v.pool.attn.in_v.bias"          visual_load_one 
 
     %for 0 47
        "v.b_%%." "ln_1.weight"          |   visual_load_one
@@ -128,8 +145,25 @@
     1 1024 "VISUAL_MLP_INTERNAL" @ 3 "G_DEVICE" @ "fp16" op.create "v_xmlp" !
         
     ;; used for pool resampler
-    1 1024 "HIDDEN_SIZE" @   3 "G_DEVICE" @ "fp16" op.create "v_xpa" !
-    1 1024 "HIDDEN_SIZE" @   3 "G_DEVICE" @ "fp16" op.create "v_xpb" !
+    1 1024 "HIDDEN_SIZE" @   3 "G_DEVICE" @ "fp16" op.create "v_xpa"  !
+    1 1024 "HIDDEN_SIZE" @   3 "G_DEVICE" @ "fp16" op.create "v_xpb"  !
+    1 1024 "HIDDEN_SIZE" @   3 "G_DEVICE" @ "fp16" op.create "v_xpc"  !
+    1 256 "HIDDEN_SIZE" @   3 "G_DEVICE" @ "fp16" op.create "v_xpd"  !
+    1 256 "HIDDEN_SIZE" @   3 "G_DEVICE" @ "fp16" op.create "v_xpe"  !
+
+    "v_xpa" @ 0 1 1024 32 128 4 op.view "v_ypa" !
+    "v_xpb" @ 0 1 1024 32 128 4 op.view "v_ypb" !
+    "v_xpc" @ 0 1 1024 32 128 4 op.view "v_ypc" !
+    "v_xpd" @ 0 1 256  32 128 4 op.view "v_ypd" !
+    "v_xpe" @ 0 1 256  32 128 4 op.view "v_ype" !
+
+    "v_xpa" @ 0 1 32 1024 128 4 op.view "v_zpa" !
+    "v_xpb" @ 0 1 32 1024 128 4 op.view "v_zpb" !
+    "v_xpc" @ 0 1 32 1024 128 4 op.view "v_zpc" !
+    "v_xpd" @ 0 1 32 256  128 4 op.view "v_zpd" !
+    "v_xpe" @ 0 1 32 256  128 4 op.view "v_zpe" !
+
+    [1 32 256 1024]               "G_DEVICE" @ "fp16" op.create "v_xpll" !
 
 %end
 
@@ -182,15 +216,30 @@
     %endf
 
     ;; resampler  
-    "v_xinput" @ "v.pool.kv_proj.weight" @ op.null "v_xpa" @ op.linear
-    "v_xpa" @ "v.mean_h" @ "v.var_h" @ "v.pool.ln_kv.weight" @ "v.pool.ln_kv.bias" @ "v_xpb" @ "RMS_EPS" @ op.layernorm
+    "v_xinput" @ "v.pool.kv_proj.weight" @ op.null "v_xpb" @ op.linear
+    "v_xpb" @ "v.mean_h" @ "v.var_h" @ "v.pool.ln_kv.weight" @ "v.pool.ln_kv.bias" @ "v_xpa" @ "RMS_EPS" @ op.layernorm
+  
+    ;; get query
+    "v.pool.query" @ "v.pool.attn.in_q.weight" @ "v.pool.attn.in_q.bias" @ "v_xpd" @ op.linear
+    "v_ypd" @ "v_zpe" @ op.transpose_0213
 
-    "v.pool.pos_emb" @ io.dump
-    
-    ;; key: v_xpa  value: v_xpb
-    "v_xpb" @ "v.pool.pos_emb" @ "v_xpa" @ op.add
+    ;; get key
+    "v_xpa" @ "v.pool.pos_emb" @ "v_xpb" @ op.add
+    "v_xpb" @ "v.pool.attn.in_k.weight" @ "v.pool.attn.in_k.bias" @ "v_xpc" @ op.linear 
+    "v_ypc" @ "v_zpb" @ op.transpose_0213
+  
+     ;; query @ key 
+    "v_zpe" @ "v_zpb" @ "v_xpll" @ op.querykey
+    "v_xpll" @ "v_xpll" @ op.softmax
 
-    "v_xpa" @ io.dump
+    ;; get value
+    "v_xpa" @ "v.pool.attn.in_v.weight" @ "v.pool.attn.in_v.bias" @ "v_xpb" @ op.linear 
+    "v_ypb" @ "v_zpa" @ op.transpose_0213
 
+    "v_xpll" @ "v_zpa" @ "v_zpd" @ op.attn
+    "v_zpd" @ "v_ype" @ op.transpose_0213
+    "v_xpe" @ "v.pool.attn.out.weight" @ "v.pool.attn.out.bias" @ "v_xpd" @ op.linear
+
+    "v_xpd" @ io.dump
 %end
 
