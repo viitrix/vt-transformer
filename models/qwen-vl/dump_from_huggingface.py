@@ -97,6 +97,7 @@ feature_size = 4096;
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen-VL-Chat", trust_remote_code=True)
 model = AutoModelForCausalLM.from_pretrained("./", device_map="cuda", trust_remote_code=True).eval()
 
+"""
 ## wte & lm_head & ln_f
 w = model.transformer.wte.weight
 save_weight(w, "wte");
@@ -149,7 +150,7 @@ for i in range(0, 32):
     w = model.transformer.h[i].mlp.c_proj.weight;
     name = pname + "mlp.o_proj.weight";
     save_weight(w, name);
-
+"""
 
 ### visual part of Qwen-vl
 w = model.transformer.visual.conv1.weight
@@ -167,6 +168,11 @@ w = model.transformer.visual.ln_post.weight
 save_weight(w, "v.ln_post.weight");
 w = model.transformer.visual.ln_post.bias
 save_weight(w, "v.ln_post.bias");
+w = model.transformer.visual.proj
+w = torch.transpose(w, 0, 1);
+save_weight(w, "v.proj.weight");
+
+raise Exception("");
 
 w = model.transformer.visual.attn_pool.kv_proj.weight
 save_weight(w, "v.pool.kv_proj.weight");
