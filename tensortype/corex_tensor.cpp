@@ -2,6 +2,10 @@
 #include "host_tensor.hpp"
 #include <corex_kernels.hpp>
 
+#ifdef _USING_DEVICE_DNNL_
+#include "dnnl_tensor.hpp"
+#endif
+
 namespace vt {
 
 using device_fp16_t = __half;
@@ -554,6 +558,15 @@ ComputingReturn CXTensor<DT>::op_copy(tensor_t self, tensor_t src) {
             COREX_CHECK(cudaMemcpyAsync(y, x, s, cudaMemcpyHostToDevice, stream));
             return OP_OK;
         }
+#ifdef _USING_DEVICE_DNNL_
+        if ( src->is_dnnl() ) {
+            void* x = src->dnnl_float()->data();
+            void* y = data();
+
+            auto stream = ComputingContext::corex_stream;
+            CUDA_CHECK(cudaMemcpyAsync(y, x, s, cudaMemcpyHostToDevice, stream));
+        }
+#endif
         auto stream = ComputingContext::corex_stream;
         COREX_CHECK(cudaMemcpyAsync(data(), src->cx_float()->data(), s, cudaMemcpyDeviceToDevice, stream));
         return OP_OK;
@@ -567,6 +580,16 @@ ComputingReturn CXTensor<DT>::op_copy(tensor_t self, tensor_t src) {
             COREX_CHECK(cudaMemcpyAsync(y, x, s, cudaMemcpyHostToDevice, stream));
             return OP_OK;
         }
+#ifdef _USING_DEVICE_DNNL_
+        if ( src->is_dnnl() ) {
+            void* x = src->dnnl_int()->data();
+            void* y = data();
+
+            auto stream = ComputingContext::corex_stream;
+            CUDA_CHECK(cudaMemcpyAsync(y, x, s, cudaMemcpyHostToDevice, stream));
+            return OP_OK;
+        }
+#endif
         auto stream = ComputingContext::corex_stream;
         COREX_CHECK(cudaMemcpyAsync(data(), src->cx_int()->data(), s, cudaMemcpyDeviceToDevice, stream));
         return OP_OK;
@@ -580,6 +603,17 @@ ComputingReturn CXTensor<DT>::op_copy(tensor_t self, tensor_t src) {
             COREX_CHECK(cudaMemcpyAsync(y, x, s, cudaMemcpyHostToDevice, stream));
             return OP_OK;
         }
+#ifdef _USING_DEVICE_DNNL_
+        if ( src->is_dnnl() ) {
+            void* x = src->dnnl_fp16()->data();
+            void* y = data();
+
+            auto stream = ComputingContext::corex_stream;
+            CUDA_CHECK(cudaMemcpyAsync(y, x, s, cudaMemcpyHostToDevice, stream));
+            return OP_OK;
+        }
+#endif
+
         auto stream = ComputingContext::corex_stream;
         COREX_CHECK(cudaMemcpyAsync(data(), src->cx_fp16()->data(), s, cudaMemcpyDeviceToDevice, stream));
         return OP_OK;
@@ -766,9 +800,9 @@ ComputingReturn CXTensor<DT>::op_linear(tensor_t self, tensor_t w_, tensor_t b_,
         int n = batch * tokens;
         int k = inSize;
 
-        vt_assert( check_aligned(A, 32), " corex gemm must 32 alignment!");
-        vt_assert( check_aligned(B, 32), " corex gemm must 32 alignment!");
-        vt_assert( check_aligned(C, 32), " corex gemm must 32 alignment!");
+        vt_assert( check_aligned(A, 64), " corex gemm must 32 alignment!");
+        vt_assert( check_aligned(B, 64), " corex gemm must 32 alignment!");
+        vt_assert( check_aligned(C, 64), " corex gemm must 32 alignment!");
 
         CXBLAS_CHECK( cublasGemmEx(ComputingContext::cxblas_handle,
                        CUBLAS_OP_T, CUBLAS_OP_N,
@@ -802,11 +836,9 @@ ComputingReturn CXTensor<DT>::op_linear(tensor_t self, tensor_t w_, tensor_t b_,
         int n = batch * tokens;
         int k = inSize;
 
-        /*
         vt_assert( check_aligned(A, 64), " corex fp16 gemm must 64 alignment!");
         vt_assert( check_aligned(B, 64), " corex fp16 gemm must 64 alignment!");
         vt_assert( check_aligned(C, 64), " corex fp16 gemm must 64 alignment!");
-        */
 
         CXBLAS_CHECK( cublasGemmEx(ComputingContext::cxblas_handle,
                        CUBLAS_OP_T, CUBLAS_OP_N,
@@ -1229,7 +1261,7 @@ ComputingReturn  CXTensor<DT>::op_gelu(tensor_t self, tensor_t out) {
         corex::kr_gelu<float>(src, dst, self->items(), stream);
         return OP_OK;
     }
-    if ( DT == DataType::Float ) {
+    if ( DT == DataType::FP16 ) {
         device_fp16_t* src = (device_fp16_t *)data();
         device_fp16_t* dst = (device_fp16_t *)out->cx_fp16()->data();
 

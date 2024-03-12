@@ -158,6 +158,10 @@ void do_inference(vt::Enviroment* env, const int argc, const char* argv[]) {
 #ifdef _USING_DEVICE_DCU_
         env->stack().push_string("dcu");
 #endif
+#ifdef _USING_DEVICE_COREX_
+        env->stack().push_string("corex");
+#endif
+
         env->run(init_bin);
         delete init_bin;
     }
@@ -213,7 +217,7 @@ int main(int argc, const char* argv[] ) {
         }
     } else if ( vt::CollectiveContext::pipe_rank == 1) {
         vt::MemoryContext::boot( MEM_CTX_SIZE );
-#ifdef _USING_DEVICE_CUDA_
+#ifdef _USING_DEVICE_DNNL_
         vt::ComputingContext::boot_dnnl( 0 );
 #endif
 #ifdef _USING_DEVICE_CUDA_
@@ -222,6 +226,10 @@ int main(int argc, const char* argv[] ) {
 #ifdef _USING_DEVICE_DCU_
         vt::ComputingContext::boot_dcu( 0 );
 #endif
+#ifdef _USING_DEVICE_COREX_
+        vt::ComputingContext::boot_corex( 0 );
+#endif
+
         vt::Enviroment* env = new vt::Enviroment();
         env->insert_native_word("app.mem", MemoryCounting::creator);
         env->insert_native_word("app.align", MemoryAlign::creator);
