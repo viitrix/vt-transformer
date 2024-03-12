@@ -54,6 +54,7 @@ struct ChatApplication {
             history.push_back(new_user);
             history.push_back("<|im_start|>assistant\n");
             std::vector<int> input_tokens = std::move( build_from_history(history) );
+            insert_image(input_tokens);
 
             std::vector<int> id;
             std::vector<int> mask;
@@ -102,6 +103,15 @@ struct ChatApplication {
 
         int n = -1;
         write_all(&n, sizeof(int));
+    }
+
+    void insert_image(std::vector<int>& tokens) {
+        for (int i = 0; i < (int)tokens.size() - 1; i++) {
+            if ( tokens[i] == image_ids[0] && tokens[i+1] == image_ids[2] ) {
+                tokens.insert(tokens.begin() + i + 1, 256, image_ids[1]);
+                break;
+            }
+        }
     }
 
     std::vector<int> build_from_history(const std::list<std::string>& history) {
@@ -216,6 +226,7 @@ int main(int argc, const char* argv[] ) {
         env->insert_native_word("app.mem", MemoryCounting::creator);
         env->insert_native_word("app.align", MemoryAlign::creator);
         env->insert_native_word("app.fill", MemoryFill::creator);
+        env->insert_native_word("app.insert", InsertImage::creator);
 
         do_inference(env, argc - 1, &argv[1]);
 

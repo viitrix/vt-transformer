@@ -6,6 +6,8 @@ const int INTERMEDIATE_SIZE = 11008;
 const int HEADS_NUM = 32;
 const int HEAD_HIDDEN = 128;
 
+const int image_ids[] = { 151857, 151859, 151858 };
+
 struct MemoryFill : public vt::NativeWord {
     static std::vector<float> source;
     void run(vt::Stack& stack) override {
@@ -16,6 +18,31 @@ struct MemoryFill : public vt::NativeWord {
     NWORD_CREATOR_DEFINE_LR(MemoryFill)
 };
 std::vector<float> MemoryFill::source;
+
+struct InsertImage : public vt::NativeWord {
+    void run(vt::Stack& stack) override {
+        auto ids = stack.pop_tensor();
+        auto image = stack.pop_tensor();
+        auto embed = stack.pop_tensor();
+
+        int* tokens = (int *)ids->device_data();
+        for (int i = 0; i < (int)ids->items(); i++) {
+            if ( tokens[i] == image_ids[0] ) {
+                std::cout << i << std::endl;
+                vt_assert(i + 256 < (int)ids->items(), "Token's length error for image");
+                vt_assert(tokens[i + 256 + 1] == image_ids[2], "Token's image format error!");
+
+                auto ret = embed->op_view(embed, (i + 1) * HIDDEN_SIZE, {1, 256, 4096});
+                auto target = std::get<1>(ret);
+
+                target->op_copy(target, image);
+                break;
+            }
+        }
+
+    }
+    NWORD_CREATOR_DEFINE_LR(InsertImage)
+};
 
 struct MemoryAlign : public vt::NativeWord {
     void run(vt::Stack& stack) override {

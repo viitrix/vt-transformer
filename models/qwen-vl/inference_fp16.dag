@@ -368,6 +368,8 @@
     {
         "ids~" @ "wte.weight" @ "xinput~" @ op.embed
         "xinput" @ "xinput~" @ op.copy
+    
+        "xinput" @ "v_xpd" @ "ids~" @ app.insert 
     }
 
     %for 0 31

@@ -14,8 +14,9 @@
 namespace vt {
 
 struct QwenTokenizer : public Tokenizer {
+    const bool is_visual;
     TiktokenHandle rustObj;
-    QwenTokenizer(const char* hash_file, bool is_visual) {
+    QwenTokenizer(const char* hash_file, bool _visual) : is_visual(_visual) {
         // building special tokens manual ..
         std::string specs;
         specs.append("<|endoftext|>\n");

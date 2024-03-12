@@ -246,10 +246,7 @@
     
     ;; post processing
     "v_xpd" @  "v.mean_h" @ "v.var_h" @ "v.ln_post.weight" @ "v.ln_post.bias" @ "v_xpe" @ "RMS_EPS" @ op.layernorm
-
     "v_xpe" @  "v.proj.weight" @ op.null "v_xpd" @ op.linear
-
-    "v_xpd" @ io.dump
 
 %end
 

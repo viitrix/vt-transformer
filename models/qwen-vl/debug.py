@@ -30,14 +30,14 @@ model = AutoModelForCausalLM.from_pretrained("./", device_map="cuda", trust_remo
 #response, history = model.chat(tokenizer, "hello world in the sky", history=None)
 
 ### debug visual part
-vfeature = model.transformer.visual.encode(["./demo.png"]);
+#vfeature = model.transformer.visual.encode(["./demo.png"]);
 
-'''
 query = tokenizer.from_list_format([
         {'image': './demo.png'},
         {'text': '图片上的道路机动车是否可以通行？'},
         ])
-response, history = model.chat(tokenizer, query=query, history=None)
-print(response)
-'''
+print(query);
+
+#response, history = model.chat(tokenizer, query=query, history=None)
+#print(response)
 
