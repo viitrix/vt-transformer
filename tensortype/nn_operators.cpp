@@ -524,6 +524,17 @@ namespace op {
         NWORD_CREATOR_DEFINE_LR(Conv2D);
     };
 
+    struct FlashAttention : public NativeWord {
+        void run(Stack& stack) override {
+            tensor_t dst = stack.pop_tensor();
+            tensor_t value = stack.pop_tensor();
+            tensor_t key = stack.pop_tensor();
+            tensor_t query = stack.pop_tensor();
+            query->op_flash_attention(query, key, value, dst);
+        }
+        NWORD_CREATOR_DEFINE_LR(FlashAttention);
+    };
+
     struct LossBackward : public NativeWord {
         void run(Stack& stack) override {
             tensor_t lm_head_g = stack.pop_tensor();
@@ -798,6 +809,7 @@ void load_nn_operators(Enviroment& env) {
     env.insert_native_word("op.sampling_top1", op::SamplingTop1::creator);
     env.insert_native_word("op.sampling_top3", op::SamplingTop3::creator);
     env.insert_native_word("op.conv2d", op::Conv2D::creator);
+    env.insert_native_word("op.flash_attention", op::FlashAttention::creator);
     env.insert_native_word("op.loss_backward", op::LossBackward::creator);
     env.insert_native_word("op.layernorm_backward", op::LayernormBackward::creator);
     env.insert_native_word("op.linear_backward", op::LinearBackward::creator);

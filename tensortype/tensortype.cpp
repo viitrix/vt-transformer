@@ -311,6 +311,12 @@ ComputingReturn TensorType::op_conv2d(tensor_t self, tensor_t weight, tensor_t b
     op_check(ret, "op_conv2d");
 }
 
+ComputingReturn TensorType::op_flash_attention(tensor_t query, tensor_t key, tensor_t value, tensor_t dst) {
+    vt_assert(query.get() == this, "can't be here!");
+    auto ret = impl()->op_flash_attention(query, key, value, dst);
+    op_check(ret, "op_flash_attention");
+}
+
 std::variant<ComputingReturn, float> TensorType::op_loss_backward(tensor_t self, tensor_t ids, tensor_t mask, tensor_t lm_head, tensor_t all_logits, tensor_t x_g, tensor_t lm_head_g) {
     vt_assert(self.get() == this, "can't be here!");
 

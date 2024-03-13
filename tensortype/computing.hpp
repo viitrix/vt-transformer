@@ -153,6 +153,9 @@ struct TransformerComputing {
     virtual ComputingReturn op_conv2d(tensor_t self, tensor_t weight, tensor_t bias, tensor_t dst, int stride, int padding) {
         return OP_TODO_ERROR;
     }
+    virtual ComputingReturn op_flash_attention(tensor_t query, tensor_t key, tensor_t value, tensor_t dst) {
+        return OP_TODO_ERROR;
+    }
     virtual std::variant<ComputingReturn, float> op_loss_backward(tensor_t self, tensor_t ids, tensor_t mask, tensor_t lm_head, tensor_t all_logits, tensor_t x_g, tensor_t lm_head_g) {
         return OP_TODO_ERROR;
     }
