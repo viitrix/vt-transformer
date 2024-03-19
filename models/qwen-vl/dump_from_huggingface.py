@@ -172,8 +172,6 @@ w = model.transformer.visual.proj
 w = torch.transpose(w, 0, 1);
 save_weight(w, "v.proj.weight");
 
-raise Exception("");
-
 w = model.transformer.visual.attn_pool.kv_proj.weight
 save_weight(w, "v.pool.kv_proj.weight");
 w = model.transformer.visual.attn_pool.attn.out_proj.weight
