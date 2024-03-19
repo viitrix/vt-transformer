@@ -38,7 +38,8 @@ set(cuda_kernel_files
     blackriver/rms_norm.cu
     blackriver/quantize.cu
     blackriver/linear2d_q.cu
-    blackriver/misc.cu)
+    blackriver/misc.cu
+    blackriver/flash_attention.cu)
 
 
 add_library(cuda_kernels STATIC ${cuda_kernel_files})
