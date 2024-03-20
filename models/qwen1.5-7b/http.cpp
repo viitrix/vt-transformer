@@ -6,6 +6,7 @@
 #include <sys/wait.h>
 #include <atomic>
 #include <condition_variable>
+#include <queue>
 #include <mutex>
 #include <sstream>
 #include <thread>
@@ -21,7 +22,7 @@
 const size_t MEM_CTX_SIZE = 4 * 1024 * 1024 * 1024l;
 
 struct ChatApplication {
-    ChatApplication() {
+    ChatApplication(std::queue<std::string>& mq, std::mutex& mt) : mq_(mq), mt_(mt) {
         tokenizer_ = vt::build_tokenizer_qwen("./qwen.tiktoken");
     }
     ~ChatApplication() {
@@ -38,12 +39,26 @@ struct ChatApplication {
         vt_assert(dummy == 1, "wait_all_ready error");
     }
 
-    const size_t max_input = 512;
+    const size_t max_input = 3072;
     const size_t max_output = 512;
 
-    void run() {
-        httplib::Server svr;
+    static void server(std::queue<std::string>& mq, std::mutex& mt, httplib::Server& svr) {
+        svr.Get("/chat", [&](const httplib::Request &req, httplib::Response &res) {
+            // parsing command
+            bool clean_cache = false;
+            if (req.has_param("clean")) {
+                if ( req.get_param_value("clean") == "true" ) {
+                    clean_cache = true;
+                }
+            }
 
+            // query input data
+
+
+        });
+    }
+
+    void run() {
         wait_all_ready();
 
         std::list<std::string>  history;
@@ -114,8 +129,6 @@ struct ChatApplication {
 
         int n = -1;
         write_all(&n, sizeof(int));
-
-
     }
 
     std::vector<int> build_from_history(const std::list<std::string>& history) {
@@ -140,6 +153,8 @@ struct ChatApplication {
     }
 
 private:
+    std::queue<std::string>& mq_;
+    std::mutex& mt_;
     vt::Tokenizer* tokenizer_;
 };
 
@@ -199,11 +214,27 @@ int main(int argc, char* argv[] ) {
     vt::CollectiveContext::boot_pipe(1);
 
     if ( vt::CollectiveContext::pipe_rank == 0) {
-        ChatApplication* app = new ChatApplication();
-        app->run();
-        delete app;
+        httplib::Server svr;
+
+        std::queue<std::string> mq;
+        std::mutex mt;
+
+        std::thread tserver([&] {
+            ChatApplication::server(mq, mt, svr);
+        });
+
+        std::thread tchat([&] {
+            ChatApplication* app = new ChatApplication(mq, mt);
+            app->run();
+            delete app;
+        });
+
 
         // wait for all child processes finished
+        tchat.join();
+        svr.stop();
+        tserver.join();
+
         {
             int status = 0;
             while ( wait(&status) != -1) {
