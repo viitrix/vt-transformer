@@ -4,6 +4,15 @@
 #include <list>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <atomic>
+#include <condition_variable>
+#include <queue>
+#include <mutex>
+#include <sstream>
+#include <thread>
+
+#define CPPHTTPLIB_OPENSSL_SUPPORT
+#include <httplib.h>
 
 #include <tokenizer_combo.hpp>
 #include <tensortype_inc.hpp>
@@ -14,7 +23,8 @@ const size_t MEM_CTX_SIZE = 4 * 1024 * 1024 * 1024l;
 
 struct ChatApplication {
     ChatApplication() {
-        tokenizer_ = vt::build_tokenizer_qwen("./qwen.tiktoken", true);
+        tokenizer_ = vt::build_tokenizer_qwen("./qwen.tiktoken");
+        inferencing_ = false;
     }
     ~ChatApplication() {
         delete tokenizer_;
@@ -30,8 +40,56 @@ struct ChatApplication {
         vt_assert(dummy == 1, "wait_all_ready error");
     }
 
-    const size_t max_input = 512;
+    const size_t max_input = 1024;
     const size_t max_output = 512;
+
+    static void server(ChatApplication* app, httplib::Server& svr) {
+        svr.Post("/chat", [&](const httplib::Request &req, httplib::Response &res, const httplib::ContentReader &content_reader) {
+            if ( app->inferencing_ == true ) {
+                res.set_content("{'error': 'System is busy!'}\r\n\r\n", "application/json");
+                return;
+            }
+            if (req.is_multipart_form_data()) {
+                res.set_content("{'error': 'Don't support multipart post!'}\r\n\r\n", "application/json");
+                return;
+            }
+            if (req.has_param("reset_cache")) {
+                if ( req.get_param_value("reset_cache") == "true" ) {
+                    app->writeline("!");
+                    return;
+                }
+            }
+
+            std::string body;
+            content_reader([&](const char *data, size_t data_length) {
+                    body.append(data, data_length);
+                    return true;
+                });
+            
+            int n = app->insert_image(body); 
+            if ( n < 0 ) {
+                res.set_content("{'error': '<image>...</image> format error or image file don't exist!'}\r\n\r\n", "application/json");
+                return;
+            }
+            
+            if ( n > 0) {
+                n = -1;
+                app->write_all(&n, sizeof(int));
+            }
+            app->writeline(body);
+
+            res.set_chunked_content_provider("text/event-stream", [&](size_t offset, httplib::DataSink &sink) {
+                    std::string one_token = app->readtoken();
+                    if ( one_token == "" ) {
+                        sink.write("\r\n\r\n", 4);
+                        sink.done();
+                        return true;
+                    }
+                    sink.write(one_token.data(), one_token.size());
+                    return true;
+                });
+        });
+    }
 
     void run() {
         wait_all_ready();
@@ -40,7 +98,7 @@ struct ChatApplication {
         history.push_back("<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n");
 
         std::string text;
-        while( readline(">> ", text) ) {
+        while( readline(text) ) {
             if ( text.size() <= 0 ) {
                 continue;
             }
@@ -50,11 +108,14 @@ struct ChatApplication {
                 continue;
             }
 
+            inferencing_ = true;
+
             std::string new_user =  "<|im_start|>user\n" + text + "<|im_end|>\n";
             history.push_back(new_user);
             history.push_back("<|im_start|>assistant\n");
             std::vector<int> input_tokens = std::move( build_from_history(history) );
-            insert_image(input_tokens);
+
+            
 
             std::vector<int> id;
             std::vector<int> mask;
@@ -85,9 +146,8 @@ struct ChatApplication {
                 mask.push_back(2);
 
                 std::string nstr = tokenizer_->decode(next);
-                //std::cout << nstr << std::flush;
-                printf("%s", nstr.c_str());
-                fflush(stdout);
+
+                writetoken(nstr);
             }
             auto stop = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
@@ -95,23 +155,58 @@ struct ChatApplication {
             std::string talk = tokenizer_->decode( out_tokens );
             std::cout << "\n====== Generated " << out_tokens.size() << " tokens, using " << duration.count() / 1000.0 << " seconds, ";
             std::cout << (next == tokenizer_->token_eos()) << " eos ending ===== " << std::endl;
-            //std::cout << talk << std::endl;
+            std::cout << talk << std::endl;
+
+            writetoken("");
+            inferencing_ = false;
 
             talk = talk + "<|im_end|>\n";
             history.push_back(talk);
         }
 
-        int n = -1;
+        int n = 0;
         write_all(&n, sizeof(int));
     }
 
-    void insert_image(std::vector<int>& tokens) {
-        for (int i = 0; i < (int)tokens.size() - 1; i++) {
-            if ( tokens[i] == image_ids[0] && tokens[i+1] == image_ids[2] ) {
-                tokens.insert(tokens.begin() + i + 1, 256, image_ids[1]);
-                break;
+    int insert_image(std::string& text) {
+        size_t begin = text.find("<img>");
+        size_t end = text.find("</img>");
+
+        if ( (begin == std::string::npos) && (end == std::string::npos) ) {
+            return 0;
+        }
+        if ( (begin == std::string::npos) || (end == std::string::npos) ) {
+            return -1;
+        }
+        
+        begin += 5;
+        if ( begin >= end ) {
+            return -1;
+        }
+        size_t len = end - begin;
+        std::string image_file = text.substr( begin, len);
+        {
+            std::ifstream f(image_file.c_str());
+            if ( ! f.good() ) {
+                return -1;
             }
         }
+
+        std::string new_text = text.substr(0, begin);
+        for (int i = 0; i < 256; i++) {
+            new_text = new_text + "<imgpad>";
+        }
+        new_text = new_text + text.substr(end);
+        text = new_text;
+        
+        vt::ImageLoader* img_loader = vt::build_imageloader_qwen(image_file.c_str());
+        std::vector<float> source;
+        img_loader->preprocess(source);
+        std::cout << source.size() << std::endl;
+        MemoryFill::fill(source);
+        delete img_loader;
+
+        return 1;
     }
 
     std::vector<int> build_from_history(const std::list<std::string>& history) {
@@ -127,15 +222,48 @@ struct ChatApplication {
         return all_tokens;
     }
 
-    bool readline(const std::string& prop, std::string& code) {
-        std::cout << prop << std::flush;
-        if ( std::getline(std::cin, code) ) {
-            return true;
+    void writetoken(std::string token) {
+        std::lock_guard lk(mt_);
+        omq_.push(token);
+        ocv_.notify_all();
+    }
+
+    std::string readtoken() {
+        std::unique_lock<std::mutex> lk(mt_);
+        ocv_.wait(lk);
+
+        auto token = omq_.front();
+        omq_.pop();
+        return token;
+    }
+
+    void writeline(std::string text) {
+        std::lock_guard lk(mt_);
+        imq_.push(text);
+        icv_.notify_all();
+    }
+
+    bool readline(std::string& code) {
+        std::unique_lock<std::mutex> lk(mt_);
+        icv_.wait(lk);
+
+        code = imq_.front();
+        imq_.pop();
+        if ( code == "" ) {
+            return false;
         }
-        return false;
+        return true;
     }
 
 private:
+    std::mutex mt_;
+    bool inferencing_;
+
+    std::queue<std::string> imq_;
+    std::condition_variable icv_;
+    std::queue<std::string> omq_;
+    std::condition_variable ocv_;
+
     vt::Tokenizer* tokenizer_;
 };
 
@@ -146,7 +274,7 @@ void do_inference(vt::Enviroment* env, const int argc, const char* argv[]) {
 
     {
         std::string all_code;
-        for(int i = 0; i < argc - 1; i++) {
+        for(int i = 0; i < argc ; i++) {
             const char* dag_file = argv[i];
             all_code += vt::fileToString(dag_file);
         }
@@ -167,36 +295,31 @@ void do_inference(vt::Enviroment* env, const int argc, const char* argv[]) {
     }
     env->execute(init_cmd);
 
-    // do image pre-processing
-    {
-        const char* image_file = argv[argc-1];
-        vt::ImageLoader* img_loader = vt::build_imageloader_qwen(image_file);
-        std::vector<float> source;
-        img_loader->preprocess(source);
-        MemoryFill::fill(source);
-        delete img_loader;
-    }
-    env->execute(visual_cmd);
-
-
     int ok = 1;
     vt_assert( vt::CollectiveContext::pipe_write(0, &ok, sizeof(int)) > 0, "pipe_write error");
 
-    vt::DaG* target_cmd = env->build(main_cmd);
+    vt::DaG* target_code = env->build(main_cmd);
+    vt::DaG* visual_code = env->build(visual_cmd);
 
     for (;;) {
-        int id = -1;
+        int id = 0;
 
         vt::CollectiveContext::pipe_read(&id, sizeof(int));;
-        if ( id == -1 ) {
+        if ( id == 0 ) {
             break;
+        }
+        if ( id == -1 ) {
+            std::cout<< "KAKAKA" << std::endl;
+            env->run(visual_code);
+            continue;
         }
 
         env->stack().push_number(id);
-        env->run(target_cmd);
+        env->run(target_code);
     }
 
-    delete target_cmd;
+    delete visual_code;
+    delete target_code;
 }
 
 int main(int argc, const char* argv[] ) {
@@ -207,10 +330,22 @@ int main(int argc, const char* argv[] ) {
     vt::CollectiveContext::boot_pipe(1);
 
     if ( vt::CollectiveContext::pipe_rank == 0) {
-        ChatApplication* app = new ChatApplication();
-        app->run();
-        delete app;
+        httplib::Server svr;
 
+        ChatApplication* app = new ChatApplication();
+
+        std::thread tserver([&] {
+                ChatApplication::server(app, svr);
+                svr.listen("localhost", 1234);
+            });
+
+        app->run();
+
+        // close threads
+        svr.stop();
+        tserver.join();
+
+        delete app;
         // wait for all child processes finished
         {
             int status = 0;

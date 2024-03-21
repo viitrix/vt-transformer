@@ -14,36 +14,25 @@ const int image_ids[] = { 151857, 151859, 151858 };
 
 const char* shfile = "/tmp/qwen-vl";
 const int shid = 20240321;
-const size_t shsize = 448 * 448 * 3 * 4 + 4096;
+const size_t shsize = 448 * 448 * 3 * 4;
 
 struct MemoryFill : public vt::NativeWord {
     static void fill(std::vector<float>& source) {
         key_t key = ftok(shfile, shid);
-
         int shmid = shmget(key, shsize, 0666 | IPC_CREAT);
+        float* out = (float*)shmat(shmid, (void*)0, 0);
 
-        unsigned char* buf = (unsigned char*)shmat(shmid, (void*)0, 0);
-
-        *(int *)buf = (int)source.size() * sizeof(float);
-
-        float* out = (float *)( buf + sizeof(int) );
         memcpy(out, source.data(), source.size() * sizeof(float));
     }
     void run(vt::Stack& stack) override {
-        void* src = nullptr;
-        size_t n = 0;
-        {
-            key_t key = ftok(shfile, shid);
-            int shmid = shmget(key, shsize, 0666 | IPC_CREAT);
-            unsigned char* buf = (unsigned char*)shmat(shmid, (void*)0, 0);
-
-            n = *(int *)buf;
-            src = buf + sizeof(int);
-        }
+        key_t key = ftok(shfile, shid);
+        int shmid = shmget(key, shsize, 0666 | IPC_CREAT);
+        void* src  = shmat(shmid, (void*)0, 0);
+     
 
         auto tensor = stack.pop_tensor();
         void* dst = tensor->dnnl_float()->data();
-        memcpy(dst, src, n);
+        memcpy(dst, src, shsize);
     }
     NWORD_CREATOR_DEFINE_LR(MemoryFill)
 };
@@ -68,7 +57,6 @@ struct InsertImage : public vt::NativeWord {
                 break;
             }
         }
-
     }
     NWORD_CREATOR_DEFINE_LR(InsertImage)
 };
