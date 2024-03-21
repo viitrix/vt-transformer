@@ -46,7 +46,6 @@ struct InsertImage : public vt::NativeWord {
         int* tokens = (int *)ids->device_data();
         for (int i = 0; i < (int)ids->items(); i++) {
             if ( tokens[i] == image_ids[0] ) {
-                std::cout << i << std::endl;
                 vt_assert(i + 256 < (int)ids->items(), "Token's length error for image");
                 vt_assert(tokens[i + 256 + 1] == image_ids[2], "Token's image format error!");
 

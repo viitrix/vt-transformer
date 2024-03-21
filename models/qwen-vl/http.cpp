@@ -23,7 +23,7 @@ const size_t MEM_CTX_SIZE = 4 * 1024 * 1024 * 1024l;
 
 struct ChatApplication {
     ChatApplication() {
-        tokenizer_ = vt::build_tokenizer_qwen("./qwen.tiktoken");
+        tokenizer_ = vt::build_tokenizer_qwen("./qwen.tiktoken", true);
         inferencing_ = false;
     }
     ~ChatApplication() {
@@ -115,8 +115,6 @@ struct ChatApplication {
             history.push_back("<|im_start|>assistant\n");
             std::vector<int> input_tokens = std::move( build_from_history(history) );
 
-            
-
             std::vector<int> id;
             std::vector<int> mask;
             for (size_t i = 0; i < input_tokens.size(); i++ ) {
@@ -202,7 +200,6 @@ struct ChatApplication {
         vt::ImageLoader* img_loader = vt::build_imageloader_qwen(image_file.c_str());
         std::vector<float> source;
         img_loader->preprocess(source);
-        std::cout << source.size() << std::endl;
         MemoryFill::fill(source);
         delete img_loader;
 
@@ -309,7 +306,6 @@ void do_inference(vt::Enviroment* env, const int argc, const char* argv[]) {
             break;
         }
         if ( id == -1 ) {
-            std::cout<< "KAKAKA" << std::endl;
             env->run(visual_code);
             continue;
         }
