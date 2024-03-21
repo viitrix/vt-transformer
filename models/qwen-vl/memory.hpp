@@ -1,5 +1,9 @@
 #ifndef _MEMORY_HPP_
 
+#include <sys/ipc.h>
+#include <sys/shm.h>
+
+
 const int VOCAB_SIZE = 151936;
 const int HIDDEN_SIZE = 4096;
 const int INTERMEDIATE_SIZE = 11008;
@@ -8,16 +12,41 @@ const int HEAD_HIDDEN = 128;
 
 const int image_ids[] = { 151857, 151859, 151858 };
 
+const char* shfile = "/tmp/qwen-vl";
+const int shid = 20240321;
+const size_t shsize = 448 * 448 * 3 * 4 + 4096;
+
 struct MemoryFill : public vt::NativeWord {
-    static std::vector<float> source;
+    static void fill(std::vector<float>& source) {
+        key_t key = ftok(shfile, shid);
+
+        int shmid = shmget(key, shsize, 0666 | IPC_CREAT);
+
+        unsigned char* buf = (unsigned char*)shmat(shmid, (void*)0, 0);
+
+        *(int *)buf = (int)source.size() * sizeof(float);
+
+        float* out = (float *)( buf + sizeof(int) );
+        memcpy(out, source.data(), source.size() * sizeof(float));
+    }
     void run(vt::Stack& stack) override {
+        void* src = nullptr;
+        size_t n = 0;
+        {
+            key_t key = ftok(shfile, shid);
+            int shmid = shmget(key, shsize, 0666 | IPC_CREAT);
+            unsigned char* buf = (unsigned char*)shmat(shmid, (void*)0, 0);
+
+            n = *(int *)buf;
+            src = buf + sizeof(int);
+        }
+
         auto tensor = stack.pop_tensor();
         void* dst = tensor->dnnl_float()->data();
-        memcpy(dst, source.data(), source.size() * sizeof (float) );
+        memcpy(dst, src, n);
     }
     NWORD_CREATOR_DEFINE_LR(MemoryFill)
 };
-std::vector<float> MemoryFill::source;
 
 struct InsertImage : public vt::NativeWord {
     void run(vt::Stack& stack) override {
