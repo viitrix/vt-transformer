@@ -22,8 +22,9 @@
 const size_t MEM_CTX_SIZE = 4 * 1024 * 1024 * 1024l;
 
 struct ChatApplication {
-    ChatApplication(std::queue<std::string>& mq, std::mutex& mt) : mq_(mq), mt_(mt) {
+    ChatApplication() {
         tokenizer_ = vt::build_tokenizer_qwen("./qwen.tiktoken");
+        inferencing_ = false;
     }
     ~ChatApplication() {
         delete tokenizer_;
@@ -39,22 +40,43 @@ struct ChatApplication {
         vt_assert(dummy == 1, "wait_all_ready error");
     }
 
-    const size_t max_input = 3072;
-    const size_t max_output = 512;
+    const size_t max_input = 2048;
+    const size_t max_output = 1024;
 
-    static void server(std::queue<std::string>& mq, std::mutex& mt, httplib::Server& svr) {
-        svr.Get("/chat", [&](const httplib::Request &req, httplib::Response &res) {
-            // parsing command
-            bool clean_cache = false;
-            if (req.has_param("clean")) {
-                if ( req.get_param_value("clean") == "true" ) {
-                    clean_cache = true;
+    static void server(ChatApplication* app, httplib::Server& svr) {
+        svr.Post("/chat", [&](const httplib::Request &req, httplib::Response &res, const httplib::ContentReader &content_reader) {
+            if ( app->inferencing_ == true ) {
+                res.set_content("{'error': 'System is busy!'}\r\n\r\n", "application/json");
+                return;
+            }
+            if (req.is_multipart_form_data()) {
+                res.set_content("{'error': 'Don't support multipart post!'}\r\n\r\n", "application/json");
+                return;
+            }
+            if (req.has_param("reset_cache")) {
+                if ( req.get_param_value("reset_cache") == "true" ) {
+                    app->writeline("!");
                 }
             }
 
-            // query input data
+            std::string body;
+            content_reader([&](const char *data, size_t data_length) {
+                    body.append(data, data_length);
+                    return true;
+                });
 
+            app->writeline(body);
 
+            res.set_chunked_content_provider("text/event-stream", [&](size_t offset, httplib::DataSink &sink) {
+                    std::string one_token = app->readtoken();
+                    if ( one_token == "" ) {
+                        sink.write("\r\n\r\n", 4);
+                        sink.done();
+                        return true;
+                    }
+                    sink.write(one_token.data(), one_token.size());
+                    return true;
+                });
         });
     }
 
@@ -65,7 +87,7 @@ struct ChatApplication {
         history.push_back("<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n");
 
         std::string text;
-        while( readline(">> ", text) ) {
+        while( readline(text) ) {
             if ( text.size() <= 0 ) {
                 continue;
             }
@@ -74,6 +96,8 @@ struct ChatApplication {
                 history.push_back("<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n");
                 continue;
             }
+
+            inferencing_ = true;
 
             std::string new_user =  "<|im_start|>user\n" + text + "<|im_end|>\n";
             history.push_back(new_user);
@@ -111,9 +135,11 @@ struct ChatApplication {
                 mask.push_back(2);
 
                 std::string nstr = tokenizer_->decode(next);
-                //std::cout << nstr << std::flush;
+
+                writetoken(nstr);
                 printf("%s", nstr.c_str());
                 fflush(stdout);
+
             }
             auto stop = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
@@ -121,7 +147,10 @@ struct ChatApplication {
             std::string talk = tokenizer_->decode( out_tokens );
             std::cout << "\n====== Generated " << out_tokens.size() << " tokens, using " << duration.count() / 1000.0 << " seconds, ";
             std::cout << (next == tokenizer_->token_eos()) << " eos ending ===== " << std::endl;
-            //std::cout << talk << std::endl;
+            // std::cout << talk << std::endl;
+
+            writetoken("");
+            inferencing_ = false;
 
             talk = talk + "<|im_end|>\n";
             history.push_back(talk);
@@ -144,17 +173,48 @@ struct ChatApplication {
         return all_tokens;
     }
 
-    bool readline(const std::string& prop, std::string& code) {
-        std::cout << prop << std::flush;
-        if ( std::getline(std::cin, code) ) {
-            return true;
+    void writetoken(std::string token) {
+        std::lock_guard lk(mt_);
+        omq_.push(token);
+        ocv_.notify_all();
+    }
+
+    std::string readtoken() {
+        std::unique_lock<std::mutex> lk(mt_);
+        ocv_.wait(lk);
+
+        auto token = omq_.front();
+        omq_.pop();
+        return token;
+    }
+
+    void writeline(std::string text) {
+        std::lock_guard lk(mt_);
+        imq_.push(text);
+        icv_.notify_all();
+    }
+
+    bool readline(std::string& code) {
+        std::unique_lock<std::mutex> lk(mt_);
+        icv_.wait(lk);
+
+        code = imq_.front();
+        imq_.pop();
+        if ( code == "" ) {
+            return false;
         }
-        return false;
+        return true;
     }
 
 private:
-    std::queue<std::string>& mq_;
-    std::mutex& mt_;
+    std::mutex mt_;
+    bool inferencing_;
+
+    std::queue<std::string> imq_;
+    std::condition_variable icv_;
+    std::queue<std::string> omq_;
+    std::condition_variable ocv_;
+
     vt::Tokenizer* tokenizer_;
 };
 
@@ -216,25 +276,21 @@ int main(int argc, char* argv[] ) {
     if ( vt::CollectiveContext::pipe_rank == 0) {
         httplib::Server svr;
 
-        std::queue<std::string> mq;
-        std::mutex mt;
+        ChatApplication* app = new ChatApplication();
 
         std::thread tserver([&] {
-            ChatApplication::server(mq, mt, svr);
-        });
+                ChatApplication::server(app, svr);
+                svr.listen("localhost", 1234);
+            });
 
-        std::thread tchat([&] {
-            ChatApplication* app = new ChatApplication(mq, mt);
-            app->run();
-            delete app;
-        });
+        app->run();
 
-
-        // wait for all child processes finished
-        tchat.join();
+        // close threads
         svr.stop();
         tserver.join();
 
+        delete app;
+        // wait for all child processes finished
         {
             int status = 0;
             while ( wait(&status) != -1) {
