@@ -218,13 +218,21 @@ namespace nn {
             }
         }
 
-        void reset() {
+        void reset(bool erased = false) {
             for (size_t i = 0; i < batched_caches_.size(); i++) {
                 ordered_caches_.push_back( batched_caches_[i] );
             }
             batched_caches_.clear();
             right_max = -1;
             left_max = -1;
+
+            if ( erased ) {
+                for ( int i = 0; i < (int)all_caches_.size(); i++) {
+                    all_caches_[i].begin_ = -1;
+                    all_caches_[i].end_ = -1;
+                    all_caches_[i].invalid_ = -1;
+                }
+            }
         }
 
         int do_match(const int tokens, const int* id, const int* mask) {
@@ -305,6 +313,17 @@ namespace nn {
             stack.push_tensor(obj_t);
         }
         NWORD_CREATOR_DEFINE_LR(EasyKVCacheInit)
+    };
+
+    struct EasyKVCacheReset : public NativeWord {
+        void run(Stack& stack) override {
+            tensor_t obj_t = stack.pop_tensor();
+
+            EasyKVCache* cache_man;
+            memcpy( (char *)&cache_man, (char *)obj_t->device_data(), sizeof(EasyKVCache *));
+            cache_man->reset(true);
+        }
+        NWORD_CREATOR_DEFINE_LR(EasyKVCacheReset)
     };
 
     struct EasyKVCacheMatch : public NativeWord {
@@ -473,6 +492,7 @@ void load_nn_kvcache(Enviroment& env) {
     env.insert_native_word("nn.ezkv_match", nn::EasyKVCacheMatch::creator);
     env.insert_native_word("nn.ezkv_position", nn::EasyKVCachePosition::creator);
     env.insert_native_word("nn.ezkv_update", nn::EasyKVCacheUpdate::creator);
+    env.insert_native_word("nn.ezkv_reset", nn::EasyKVCacheReset::creator);
 }
 
 }// end of namespace br

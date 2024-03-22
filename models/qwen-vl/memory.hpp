@@ -10,7 +10,10 @@ const int INTERMEDIATE_SIZE = 11008;
 const int HEADS_NUM = 32;
 const int HEAD_HIDDEN = 128;
 
-const int image_ids[] = { 151857, 151859, 151858 };
+const int IMAGE_BEGIN = 151857;
+const int IMAGE_END = 151858;
+const int IMAGE_PAD_BEGIN = 151859;                 // <imgpad_0>
+const int IMAGE_PAD_END = IMAGE_PAD_BEGIN + 15;     // <imgpad_15>
 
 const char* shfile = "/tmp/qwen-vl";
 const int shid = 20240321;
@@ -28,7 +31,7 @@ struct MemoryFill : public vt::NativeWord {
         key_t key = ftok(shfile, shid);
         int shmid = shmget(key, shsize, 0666 | IPC_CREAT);
         void* src  = shmat(shmid, (void*)0, 0);
-     
+
 
         auto tensor = stack.pop_tensor();
         void* dst = tensor->dnnl_float()->data();
@@ -45,9 +48,9 @@ struct InsertImage : public vt::NativeWord {
 
         int* tokens = (int *)ids->device_data();
         for (int i = 0; i < (int)ids->items(); i++) {
-            if ( tokens[i] == image_ids[0] ) {
+            if ( tokens[i] == IMAGE_BEGIN ) {
                 vt_assert(i + 256 < (int)ids->items(), "Token's length error for image");
-                vt_assert(tokens[i + 256 + 1] == image_ids[2], "Token's image format error!");
+                vt_assert(tokens[i + 256 + 1] == IMAGE_END, "Token's image format error!");
 
                 auto ret = embed->op_view(embed, (i + 1) * HIDDEN_SIZE, {1, 256, 4096});
                 auto target = std::get<1>(ret);

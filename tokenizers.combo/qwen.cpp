@@ -37,7 +37,11 @@ struct QwenTokenizer : public Tokenizer {
             specs.append("</quad>\n");
             specs.append("<img>\n");
             specs.append("</img>\n");
-            specs.append("<imgpad>\n");
+            for ( int i = 0; i < 16; i++) {
+                std::stringstream ss;
+                ss << "<imgpad_" << i << ">" << std::endl;
+                specs.append(ss.str());
+            }
         }
 
         const std::string reg = R""""((?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+)"""";

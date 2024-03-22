@@ -26,7 +26,7 @@ http: http.cpp memory.hpp
 	g++ $(FLAGS) -o $@ $< $(INC) $(LINK)
 
 run16: chat 
-	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${DNNL_DIR}/lib:${CUDA_DIR}/lib64:${NCCL_DIR}/lib:${CUDNN_DIR}/lib:${VT_SOURCE}/install/lib ./chat ./inference_fp16.dag ./visual_fp16.dag ${target}
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${DNNL_DIR}/lib:${CUDA_DIR}/lib64:${NCCL_DIR}/lib:${CUDNN_DIR}/lib:${VT_SOURCE}/install/lib ./chat ./inference_fp16.dag ./visual_fp16.dag
 
 http16: http
 	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${DNNL_DIR}/lib:${CUDA_DIR}/lib64:${NCCL_DIR}/lib:${CUDNN_DIR}/lib:${VT_SOURCE}/install/lib ./http ./inference_fp16.dag ./visual_fp16.dag  

@@ -56,6 +56,7 @@ struct ChatApplication {
             if (req.has_param("reset_cache")) {
                 if ( req.get_param_value("reset_cache") == "true" ) {
                     app->writeline("!");
+                    res.set_content("{'status': 'chat cache is clean!'}\r\n\r\n", "application/json");
                     return;
                 }
             }
@@ -190,9 +191,18 @@ struct ChatApplication {
             }
         }
 
+        std::string pad;
+        {
+            std::hash<std::string> hasher;
+            int id = hasher( image_file ) % 16;
+            std::stringstream ss;
+            ss << "<imgpad_" << id << ">";
+            pad = ss.str();
+        }
+
         std::string new_text = text.substr(0, begin);
         for (int i = 0; i < 256; i++) {
-            new_text = new_text + "<imgpad>";
+            new_text = new_text + pad;
         }
         new_text = new_text + text.substr(end);
         text = new_text;

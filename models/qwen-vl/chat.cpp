@@ -3,6 +3,7 @@
 #include <tuple>
 #include <list>
 #include <unistd.h>
+#include <unordered_map>
 #include <sys/wait.h>
 
 #include <tokenizer_combo.hpp>
@@ -50,11 +51,21 @@ struct ChatApplication {
                 continue;
             }
 
+            int use_image = insert_image(text);
+            if ( use_image < 0) {
+                std::cout << "<img>...</img> input error, please input again" << std::endl;
+                continue;
+            }
+            if ( use_image > 0) {
+                int signal = -1;
+                write_all(&signal, sizeof(int));
+            }
+
             std::string new_user =  "<|im_start|>user\n" + text + "<|im_end|>\n";
             history.push_back(new_user);
             history.push_back("<|im_start|>assistant\n");
             std::vector<int> input_tokens = std::move( build_from_history(history) );
-            insert_image(input_tokens);
+
 
             std::vector<int> id;
             std::vector<int> mask;
@@ -101,18 +112,61 @@ struct ChatApplication {
             history.push_back(talk);
         }
 
-        int n = -1;
-        write_all(&n, sizeof(int));
-    }
-
-    void insert_image(std::vector<int>& tokens) {
-        for (int i = 0; i < (int)tokens.size() - 1; i++) {
-            if ( tokens[i] == image_ids[0] && tokens[i+1] == image_ids[2] ) {
-                tokens.insert(tokens.begin() + i + 1, 256, image_ids[1]);
-                break;
-            }
+        {
+            int signal = 0;
+            write_all(&signal, sizeof(int));
         }
     }
+
+    int insert_image(std::string& text) {
+        size_t begin = text.find("<img>");
+        size_t end = text.find("</img>");
+
+        if ( (begin == std::string::npos) && (end == std::string::npos) ) {
+            return 0;
+        }
+        if ( (begin == std::string::npos) || (end == std::string::npos) ) {
+            return -1;
+        }
+        
+        begin += 5;
+        if ( begin >= end ) {
+            return -1;
+        }
+        size_t len = end - begin;
+        std::string image_file = text.substr( begin, len);
+        {
+            std::ifstream f(image_file.c_str());
+            if ( ! f.good() ) {
+                return -1;
+            }
+        }
+
+        std::string pad;
+        {
+            std::hash<std::string> hasher;
+            int id = hasher( image_file ) % 16;
+            std::stringstream ss;
+            ss << "<imgpad_" << id << ">";
+            pad = ss.str();
+        }
+
+        std::string new_text = text.substr(0, begin);
+        for (int i = 0; i < 256; i++) {
+            new_text = new_text + pad;
+        }
+        new_text = new_text + text.substr(end);
+        text = new_text;
+        
+        vt::ImageLoader* img_loader = vt::build_imageloader_qwen(image_file.c_str());
+        std::vector<float> source;
+        img_loader->preprocess(source);
+        MemoryFill::fill(source);
+        delete img_loader;
+
+        return 1;
+    }
+
 
     std::vector<int> build_from_history(const std::list<std::string>& history) {
         std::vector<int> all_tokens;
@@ -146,7 +200,7 @@ void do_inference(vt::Enviroment* env, const int argc, const char* argv[]) {
 
     {
         std::string all_code;
-        for(int i = 0; i < argc - 1; i++) {
+        for(int i = 0; i < argc; i++) {
             const char* dag_file = argv[i];
             all_code += vt::fileToString(dag_file);
         }
@@ -167,41 +221,35 @@ void do_inference(vt::Enviroment* env, const int argc, const char* argv[]) {
     }
     env->execute(init_cmd);
 
-    // do image pre-processing
-    {
-        const char* image_file = argv[argc-1];
-        vt::ImageLoader* img_loader = vt::build_imageloader_qwen(image_file);
-        std::vector<float> source;
-        img_loader->preprocess(source);
-        MemoryFill::fill(source);
-        delete img_loader;
-    }
-    env->execute(visual_cmd);
-
-
     int ok = 1;
     vt_assert( vt::CollectiveContext::pipe_write(0, &ok, sizeof(int)) > 0, "pipe_write error");
 
-    vt::DaG* target_cmd = env->build(main_cmd);
+    vt::DaG* target_code = env->build(main_cmd);
+    vt::DaG* visual_code = env->build(visual_cmd);
 
     for (;;) {
         int id = -1;
 
         vt::CollectiveContext::pipe_read(&id, sizeof(int));;
-        if ( id == -1 ) {
+        if ( id == 0 ) {
             break;
+        }
+        if ( id == -1 ) {
+            env->run(visual_code);
+            continue;
         }
 
         env->stack().push_number(id);
-        env->run(target_cmd);
+        env->run(target_code);
     }
 
-    delete target_cmd;
+    delete visual_code;
+    delete target_code;
 }
 
 int main(int argc, const char* argv[] ) {
     if ( argc < 3 ) {
-        std::cout << "usage: ./chat [dag_files]  [img_file]" << std::endl;
+        std::cout << "usage: ./chat [dag_files] " << std::endl;
         return -1;
     }
     vt::CollectiveContext::boot_pipe(1);
