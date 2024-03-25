@@ -140,7 +140,7 @@ UserWord Enviroment::compile(const std::string& txt) {
         }
 
         static bool is_valid_name(std::string const &str) {
-            if ( str == "true" || str == "false" || str == "null" || str == "@" || str == "!" || str == "!!"  ) {
+            if ( str == "true" || str == "false" || str == "null" || str == "@" || str == "!" || str == "!!" || str == "jnz" ) {
                 return false;
             }
             if (str.find_first_not_of("_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789") == std::string::npos) {
@@ -348,7 +348,8 @@ UserWord Enviroment::compile(const std::string& txt) {
             newCode = WordCode::new_string( "" );
         } else if ( token == "@" ||
                     token == "!"  ||
-                    token == "!!" ) {
+                    token == "!!" ||
+                    token == "jnz" ) {
             newCode = WordCode::new_builtin( token );
         } else if ( token[0] == '"' || token[0] == '\'' || token[0] == '$' ) {
             if ( token[0] == '"' || token[0] == '\'' ) {
@@ -391,36 +392,54 @@ UserWord Enviroment::compile(const std::string& txt) {
 
 namespace builtin {
     struct BuiltinGet : public BuiltinOperator {
-        void run(Enviroment* env) override {
+        int run(Enviroment* env) override {
             auto& hash = env->hash();
             auto& stack = env->stack();
 
             auto name = stack.pop_string();
             auto value = hash.find(name);
             stack.push( Hash::Item2Cell(value) );
+            return 1;
         }
     };
 
     struct BuiltinSet : public BuiltinOperator {
-        void run(Enviroment* env) override {
+        int run(Enviroment* env) override {
             auto& hash = env->hash();
             auto& stack = env->stack();
 
             auto name = stack.pop_string();
             Cell cell = stack.pop();
             hash.set(name, Hash::Cell2Item(cell));
+            return 1;
         }
     };
 
-    struct BuiltinDrop : public BuiltinOperator {
-        BuiltinDrop() {
+    struct BuiltinRemove : public BuiltinOperator {
+        BuiltinRemove() {
         }
-        void run(Enviroment* env) override {
+        int run(Enviroment* env) override {
             auto& hash = env->hash();
             auto& stack = env->stack();
 
             auto name = stack.pop_string();
             hash.drop(name);
+            return 1;
+        }
+    };
+
+    struct BuiltinJNZ : public BuiltinOperator {
+        BuiltinJNZ() {
+        }
+        int run(Enviroment* env) override {
+            auto& stack = env->stack();
+
+            int steps = stack.pop_number();
+            int cond = stack.pop_number();
+            if ( cond ) {
+                return steps;
+            }
+            return 1;
         }
     };
 }
@@ -450,7 +469,9 @@ void Enviroment::linking(DaG& dag, UserWord& word) {
                     } else if ( code.str_ == "!" ) {
                         op = new builtin::BuiltinSet();
                     } else if ( code.str_ == "!!" ) {
-                        op = new builtin::BuiltinDrop();
+                        op = new builtin::BuiltinRemove();
+                    } else if ( code.str_ == "jnz" ) {
+                        op = new builtin::BuiltinJNZ();
                     } else {
                         vt_panic("Find an unsupoorted builtin operator!");
                     }
@@ -584,6 +605,15 @@ namespace base {
         NWORD_CREATOR_DEFINE_LR(IntDiv)
     };
 
+    struct Equals : public NativeWord {
+        void run(Stack& stack) override {
+            double a = stack.pop_number();
+            double b = stack.pop_number();
+            stack.push_number( a == b);
+        }
+        NWORD_CREATOR_DEFINE_LR(Equals)
+    };
+
     struct Combin : public NativeWord {
         void run(Stack& stack) override {
             auto a = stack.pop_string();
@@ -621,6 +651,7 @@ void Enviroment::load_base_words() {
     insert_native_word("*", base::Mul::creator );
     insert_native_word("/", base::Div::creator );
     insert_native_word("//", base::IntDiv::creator );
+    insert_native_word("==", base::Equals::creator );
 
     insert_native_word("|", base::Combin::creator );
 }

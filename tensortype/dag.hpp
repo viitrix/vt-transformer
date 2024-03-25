@@ -343,7 +343,7 @@ struct Enviroment;
 struct BuiltinOperator {
     virtual ~BuiltinOperator() {
     }
-    virtual void run(Enviroment* env) = 0;
+    virtual int run(Enviroment* env) = 0;
 };
 struct NativeWord {
     virtual ~NativeWord() {
@@ -425,8 +425,9 @@ private:
         auto& builtins_ = dag->builtins_;
         auto& natives_ = dag->natives_;
 
-        for ( size_t i = 0; i < binary_.size(); i++) {
-            auto& byte = binary_[i];
+        for ( size_t pc = 0; pc < binary_.size(); ) {
+            auto& byte = binary_[pc];
+            int steps = 1;
             switch( byte.type_ ) {
                 case WordByte::Number:
                     stack_.push_number( byte.num_ );
@@ -437,7 +438,7 @@ private:
                     break;
 
                 case WordByte::BuiltinOperator:
-                    builtins_[ byte.idx_ ]->run( this );
+                    steps = builtins_[ byte.idx_ ]->run( this );
                     break;
 
                 case WordByte::Native:
@@ -448,7 +449,8 @@ private:
                     vt_panic("Runing binary error can't bere!");
                     break;
             }
-
+            vt_assert( steps > 0, " DAG don't support loop ");
+            pc += steps;
         }
     }
 
