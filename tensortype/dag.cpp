@@ -140,7 +140,7 @@ UserWord Enviroment::compile(const std::string& txt) {
         }
 
         static bool is_valid_name(std::string const &str) {
-            if ( str == "true" || str == "false" || str == "null" || str == "@" || str == "!" || str == "!!" || str == "jnz" ) {
+            if ( str == "true" || str == "false" || str == "null" || str == "@" || str == "!" || str == "!!" || str == "jnz" || str =="jz" ) {
                 return false;
             }
             if (str.find_first_not_of("_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789") == std::string::npos) {
@@ -349,7 +349,8 @@ UserWord Enviroment::compile(const std::string& txt) {
         } else if ( token == "@" ||
                     token == "!"  ||
                     token == "!!" ||
-                    token == "jnz" ) {
+                    token == "jnz"||
+                    token == "jz" ) {
             newCode = WordCode::new_builtin( token );
         } else if ( token[0] == '"' || token[0] == '\'' || token[0] == '$' ) {
             if ( token[0] == '"' || token[0] == '\'' ) {
@@ -442,6 +443,21 @@ namespace builtin {
             return 1;
         }
     };
+
+    struct BuiltinJZ : public BuiltinOperator {
+        BuiltinJZ() {
+        }
+        int run(Enviroment* env) override {
+            auto& stack = env->stack();
+
+            int steps = stack.pop_number();
+            int cond = stack.pop_number();
+            if ( !cond ) {
+                return steps;
+            }
+            return 1;
+        }
+    };
 }
 
 
@@ -472,6 +488,8 @@ void Enviroment::linking(DaG& dag, UserWord& word) {
                         op = new builtin::BuiltinRemove();
                     } else if ( code.str_ == "jnz" ) {
                         op = new builtin::BuiltinJNZ();
+                    } else if ( code.str_ == "jz" ) {
+                        op = new builtin::BuiltinJZ();
                     } else {
                         vt_panic("Find an unsupoorted builtin operator!");
                     }

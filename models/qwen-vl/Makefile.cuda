@@ -34,4 +34,4 @@ http16: http
 
 
 clean:
-	rm -f chat 
+	rm -f chat http

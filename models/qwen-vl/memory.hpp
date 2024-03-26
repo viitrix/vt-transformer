@@ -48,11 +48,11 @@ struct InsertImage : public vt::NativeWord {
 
         int* tokens = (int *)ids->device_data();
         for (int i = 0; i < (int)ids->items(); i++) {
-            if ( tokens[i] == IMAGE_BEGIN ) {
-                vt_assert(i + 256 < (int)ids->items(), "Token's length error for image");
-                vt_assert(tokens[i + 256 + 1] == IMAGE_END, "Token's image format error!");
+            if ( tokens[i] >= IMAGE_PAD_BEGIN ) {
+                vt_assert(i + 256 < (int)ids->items() - 1, "Token's length error for image");
+                vt_assert(tokens[i + 256] == IMAGE_END, "Token's image format error!");
 
-                auto ret = embed->op_view(embed, (i + 1) * HIDDEN_SIZE, {1, 256, 4096});
+                auto ret = embed->op_view(embed, i * HIDDEN_SIZE, {1, 256, 4096});
                 auto target = std::get<1>(ret);
 
                 target->op_copy(target, image);
