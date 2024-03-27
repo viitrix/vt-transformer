@@ -74,6 +74,11 @@ std::variant<ComputingReturn, size_t> DNNLTensor<_DTYPE_>::op_sizeof(tensor_t se
 }
 
 template <DataType _DTYPE_>
+ComputingReturn DNNLTensor<_DTYPE_>::op_zero(tensor_t self) {
+    memset(mem_, 0, size_);
+}
+
+template <DataType _DTYPE_>
 ComputingReturn DNNLTensor<_DTYPE_>::io_save(tensor_t self, const char* fileName) {
     std::ofstream wf(fileName, std::ios::out | std::ios::binary);
 
