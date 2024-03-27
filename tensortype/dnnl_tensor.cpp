@@ -297,6 +297,67 @@ std::variant<ComputingReturn, tensor_t> DNNLTensor<_DTYPE_>::op_view(tensor_t se
     return OP_TODO_ERROR;
 }
 
+template<DataType _DT_>
+std::variant<ComputingReturn, tensor_t> DNNLTensor<_DT_>::op_view_as(tensor_t self, size_t offset, const std::vector<size_t>& newShape_, const char* dtype) {
+    DataType DT = DataType_from(dtype);
+
+    ShapeType newShape(newShape_);
+
+    void *newData = nullptr;
+    if ( _DT_ == DataType::Float ) {
+        newData = (char *)data() + offset * sizeof(float);
+    } else if ( _DT_ == DataType::Int ) {
+        newData = (char *)data() + offset * sizeof(int);
+    } else if ( _DT_ == DataType::FP16 ) {
+        newData = (char *)data() + offset * sizeof(local_fp16_t);
+    } else {
+        return OP_TODO_ERROR;
+    }
+
+    if ( DT == DataType::Float ) {
+        auto* newTensor = new DNNLTensor<DataType::Float>(newShape, newData);
+        return std::make_shared<TensorType>(newTensor, newShape);
+    }
+    if ( DT == DataType::Int ) {
+        auto* newTensor = new DNNLTensor<DataType::Int>(newShape, newData);
+        return std::make_shared<TensorType>(newTensor, newShape);
+    }
+    if ( DT == DataType::FP16 ) {
+        auto* newTensor = new DNNLTensor<DataType::FP16>(newShape, newData);
+        return std::make_shared<TensorType>(newTensor, newShape);
+    }
+    return OP_TODO_ERROR;
+}
+
+template<DataType DT>
+ComputingReturn DNNLTensor<DT>::op_reshape(tensor_t self, size_t offset, const std::vector<size_t>& newShape_) {
+    ShapeType newShape(newShape_);
+    if ( owner_ == true ) {
+        return OP_INPUT_ERROR;
+    }
+
+    if ( newShape.numel() + offset > self->items()  ) {
+        return OP_INPUT_ERROR;
+    }
+
+    if ( DT == DataType::Float ) {
+        mem_  = (char *)data() + offset * sizeof(float);
+        return OP_OK;
+    }
+    if ( DT == DataType::Int ) {
+        mem_  = (char *)data() + offset * sizeof(int);
+        return OP_OK;
+    }
+
+    if ( DT == DataType::FP16 ) {
+        mem_  = (char *)data() + offset * sizeof(local_fp16_t);
+        return OP_OK;
+    }
+
+    return OP_TODO_ERROR;
+}
+
+
 template <DataType _DTYPE_>
 ComputingReturn DNNLTensor<_DTYPE_>::op_conv2d(tensor_t self, tensor_t weight, tensor_t bias, tensor_t dst, int _stride, int _padding) {
     dnnl::memory::dims strides{_stride, _stride};
