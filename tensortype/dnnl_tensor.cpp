@@ -76,6 +76,7 @@ std::variant<ComputingReturn, size_t> DNNLTensor<_DTYPE_>::op_sizeof(tensor_t se
 template <DataType _DTYPE_>
 ComputingReturn DNNLTensor<_DTYPE_>::op_zero(tensor_t self) {
     memset(mem_, 0, size_);
+    return OP_OK;
 }
 
 template <DataType _DTYPE_>
@@ -144,7 +145,106 @@ ComputingReturn DNNLTensor<DT>::op_fill(tensor_t self, float value) {
         }
         return OP_OK;
     }
+    if ( DT == DataType::Int ) {
+        int *dst = (int *)mem_;
+        int v = value;
+        for (size_t i = 0; i < items; i++) {
+            dst[i] = v;
+        }
+        return OP_OK;
+    }
+
     return OP_TODO_ERROR;
+}
+
+template<DataType DT>
+ComputingReturn DNNLTensor<DT>::op_alibi(tensor_t self) {
+    int heads = self->shape()[1];
+    int tokens = self->shape()[3];
+
+    auto s = std::get<1>(self->op_sizeof(self));
+    if ( DT == DataType::Float ) {
+        std::vector<float> buffer;
+        vt::fill_alibi<float>(buffer, heads, tokens);
+
+        memcpy( data(), buffer.data(), s);
+        return OP_OK;
+    }
+    if ( DT == DataType::FP16 ) {
+        std::vector<local_fp16_t> buffer;
+        vt::fill_alibi<local_fp16_t>(buffer, heads, tokens);
+        memcpy( data(), buffer.data(), s);
+        return OP_OK;
+    }
+    return OP_TODO_ERROR;
+}
+
+template<typename T>
+void fill_causal_mask(int* m, T* o, T minv, int full_tokens, int nt_end) {
+    for ( int i = 0; i < full_tokens; i++) {
+        o[i] = minv;
+    }
+
+    for ( int i = 0; i <= nt_end; i++) {
+        if ( m[i] != 0 ) {
+            o[i] = 0;
+        }
+    }
+}
+
+template<DataType DT>
+ComputingReturn DNNLTensor<DT>::op_causal_mask(tensor_t self, tensor_t out) {
+    int batch = self->shape()[0];
+    int full_tokens = self->shape()[1];
+    int new_tokens = out->shape()[2];
+
+    int* mask  = (int *)data();
+
+    float*          out32 = nullptr;
+    local_fp16_t*   out16 = nullptr;
+
+    if ( out->dtype() == DataType::Float ) {
+        out32 = (float *)out->dnnl_float()->data();
+    }
+    if ( out->dtype() == DataType::FP16 ) {
+        out16 = (local_fp16_t *)out->dnnl_fp16()->data();
+    }
+
+    for (int e = 0; e < batch * new_tokens; e++) {
+        int b = e / new_tokens;
+        int nt = e % new_tokens;
+        int nt_end = full_tokens - new_tokens + nt;
+
+        int* m = &mask[ b * full_tokens ];
+        if ( out32 != nullptr) {
+            float* o = &out32[ b * new_tokens * full_tokens + nt * full_tokens ];
+            float minv = std::numeric_limits<float>::lowest();
+            fill_causal_mask<float>(m, o, minv, full_tokens, nt_end);
+        }
+        if ( out16 != nullptr ) {
+            local_fp16_t* o = &out16[ b * new_tokens * full_tokens + nt * full_tokens ];
+            local_fp16_t minv = (unsigned short)0xFC00U;
+            fill_causal_mask<local_fp16_t>(m, o, minv, full_tokens, nt_end);
+        }
+    }
+
+    return OP_TODO_ERROR;
+}
+
+template<DataType DT>
+ComputingReturn DNNLTensor<DT>::op_rotary_cache(tensor_t self, float base) {
+    if ( DT == DataType::Float ) {
+        // building inv_freq
+        int len = self->shape()[0];
+        int dims = self->shape()[1];
+
+        std::vector<float> cos_sin;
+        vt::fill_rotary_cache(cos_sin, len, dims, base);
+
+        memcpy( data(), cos_sin.data(), self->items() * sizeof(float));
+        return OP_OK;
+    }
+    return OP_OUTPUT_ERROR;
 }
 
 template<DataType DT>
