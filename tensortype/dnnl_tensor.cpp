@@ -250,10 +250,14 @@ ComputingReturn DNNLTensor<DT>::op_rotary_cache(tensor_t self, float base) {
 
 template<DataType DT>
 ComputingReturn DNNLTensor<DT>::op_scale(tensor_t self, float scale) {
-    if (   DT == DataType::Float
-        || DT == DataType::Int
-        || DT == DataType::FP16 ) {
-        
+    if (   DT == DataType::Float) {
+        dnnl_kernels::eltwise_operate<DNNLTensor<DataType::Float>>(self->dnnl_float(), self->dnnl_float(), self->items(), 
+            dnnl::algorithm::eltwise_linear, scale, 0.0);
+        return OP_OK;
+    }
+    if (   DT == DataType::FP16) {
+        dnnl_kernels::eltwise_operate<DNNLTensor<DataType::FP16>>(self->dnnl_fp16(),  self->dnnl_fp16(), self->items(), 
+            dnnl::algorithm::eltwise_linear, scale, 0.0);
         return OP_OK;
     }
 
@@ -267,22 +271,22 @@ ComputingReturn DNNLTensor<DT>::op_add(tensor_t self, tensor_t b, tensor_t c) {
         return OP_OK;
     }
     if (   DT == DataType::FP16) {
-        dnnl_kernels::binary_operate_float(self, b, c, dnnl::algorithm::binary_add);
+        dnnl_kernels::binary_operate_fp16(self, b, c, dnnl::algorithm::binary_add);
         return OP_OK;
     }
-
     return OP_TODO_ERROR;
 }
 
 template<DataType DT>
 ComputingReturn DNNLTensor<DT>::op_mul(tensor_t self, tensor_t b, tensor_t c) {
-    if (   DT == DataType::Float
-        || DT == DataType::Int
-        || DT == DataType::FP16 ) {
-        
+    if (   DT == DataType::Float) {
+        dnnl_kernels::binary_operate_float(self, b, c, dnnl::algorithm::binary_mul);
         return OP_OK;
     }
-
+    if (   DT == DataType::FP16) {
+        dnnl_kernels::binary_operate_fp16(self, b, c, dnnl::algorithm::binary_mul);
+        return OP_OK;
+    }
     return OP_TODO_ERROR;
 }
 

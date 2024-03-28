@@ -43,5 +43,18 @@ void binary_operate_fp16(tensor_t a, tensor_t b, tensor_t c, dnnl::algorithm op 
     binary_prim.execute(*ComputingContext::dnnl_stream, binary_args);
 }
 
+template<typename T>
+void eltwise_operate(T* in, T* out,  size_t items, ::dnnl::algorithm op, float alpha, float beta) {
+    auto src_md = in->build_memory_desc( {items},  dnnl::memory::format_tag::a);
+    auto dst_md = out->build_memory_desc( {items},  dnnl::memory::format_tag::a);
+    auto src_mem = in->build_memory(src_md);
+    auto dst_mem = out->build_memory(dst_md);
+
+    auto eltwise_pd = dnnl::eltwise_forward::primitive_desc(*ComputingContext::dnnl_engine,
+        dnnl::prop_kind::forward_inference, op, src_md, dst_md, alpha, beta);
+
+    auto eltwise_prim = dnnl::eltwise_forward(eltwise_pd);
+}
+
 }}
 #endif
