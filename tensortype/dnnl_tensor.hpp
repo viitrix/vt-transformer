@@ -40,7 +40,6 @@ struct DNNLTensor : public TransformerComputing {
         return mem_;
     }
 
-private:
     dnnl::memory::desc build_memory_desc(const std::vector<size_t>& shape, DataType dt, dnnl::memory::format_tag tag) {
         dnnl::memory::dims dims;
         for(int i = 0; i < (int)shape.size(); i++) {
@@ -95,6 +94,9 @@ public:
     std::variant<ComputingReturn, tensor_t> op_view_as(tensor_t self, size_t offset, const std::vector<size_t>& newShape, const char* dtype) override;
     ComputingReturn op_reshape(tensor_t self, size_t offset, const std::vector<size_t>& newShape) override;
 
+    ComputingReturn op_scale(tensor_t self, float scale) override;
+    ComputingReturn op_add(tensor_t self, tensor_t b, tensor_t c) override;
+    ComputingReturn op_mul(tensor_t self, tensor_t b, tensor_t c) override;
     ComputingReturn op_conv2d(tensor_t self, tensor_t weight, tensor_t bias, tensor_t dst, int stride, int padding) override;
 
 protected:

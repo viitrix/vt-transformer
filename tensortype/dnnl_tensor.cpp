@@ -1,4 +1,5 @@
 #include "dnnl_tensor.hpp"
+#include "dnnl_kernels/misc.hpp"
 
 namespace vt {
 
@@ -245,6 +246,44 @@ ComputingReturn DNNLTensor<DT>::op_rotary_cache(tensor_t self, float base) {
         return OP_OK;
     }
     return OP_OUTPUT_ERROR;
+}
+
+template<DataType DT>
+ComputingReturn DNNLTensor<DT>::op_scale(tensor_t self, float scale) {
+    if (   DT == DataType::Float
+        || DT == DataType::Int
+        || DT == DataType::FP16 ) {
+        
+        return OP_OK;
+    }
+
+    return OP_TODO_ERROR;
+}
+
+template<DataType DT>
+ComputingReturn DNNLTensor<DT>::op_add(tensor_t self, tensor_t b, tensor_t c) {
+    if (   DT == DataType::Float) {
+        dnnl_kernels::binary_operate_float(self, b, c, dnnl::algorithm::binary_add);
+        return OP_OK;
+    }
+    if (   DT == DataType::FP16) {
+        dnnl_kernels::binary_operate_float(self, b, c, dnnl::algorithm::binary_add);
+        return OP_OK;
+    }
+
+    return OP_TODO_ERROR;
+}
+
+template<DataType DT>
+ComputingReturn DNNLTensor<DT>::op_mul(tensor_t self, tensor_t b, tensor_t c) {
+    if (   DT == DataType::Float
+        || DT == DataType::Int
+        || DT == DataType::FP16 ) {
+        
+        return OP_OK;
+    }
+
+    return OP_TODO_ERROR;
 }
 
 template<DataType DT>
