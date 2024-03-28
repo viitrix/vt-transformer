@@ -54,10 +54,11 @@ namespace nn {
                     }
 
                     // twice
+                    offset = blk_shape[0] * blk_shape[1];
                     blk_shape[0] = invalid_;
                     if ( blk_shape[0] > 0) {
                         tensor_t src = std::get<1>(cache_->op_view(cache_, 0, blk_shape));
-                        tensor_t dst = std::get<1>(left_->op_view(left_, dst->items(), blk_shape));
+                        tensor_t dst = std::get<1>(left_->op_view(left_, offset, blk_shape));
                         dst->op_copy(dst, src);
                     }
                 }
@@ -86,10 +87,11 @@ namespace nn {
                     }
 
                     // twice
+                    offset = blk_shape[0] * blk_shape[1];
                     blk_shape[0] = uncached - len1;
                     if ( blk_shape[0] > 0 ) {
-                        tensor_t src = std::get<1>(new_->op_view(new_, src->items(), blk_shape));
                         tensor_t dst = std::get<1>(cache_->op_view(cache_, 0, blk_shape));
+                        tensor_t src = std::get<1>(new_->op_view(new_, offset, blk_shape));
                         dst->op_copy(dst, src);
                     }
                 }

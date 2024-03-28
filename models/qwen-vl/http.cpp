@@ -66,13 +66,13 @@ struct ChatApplication {
                     body.append(data, data_length);
                     return true;
                 });
-            
-            int n = app->insert_image(body); 
+
+            int n = app->insert_image(body);
             if ( n < 0 ) {
                 res.set_content("{'error': '<image>...</image> format error or image file don't exist!'}\r\n\r\n", "application/json");
                 return;
             }
-            
+
             if ( n > 0) {
                 n = -1;
                 app->write_all(&n, sizeof(int));
@@ -177,7 +177,7 @@ struct ChatApplication {
         if ( (begin == std::string::npos) || (end == std::string::npos) ) {
             return -1;
         }
-        
+
         begin += 5;
         if ( begin >= end ) {
             return -1;
@@ -206,7 +206,7 @@ struct ChatApplication {
         }
         new_text = new_text + text.substr(end);
         text = new_text;
-        
+
         vt::ImageLoader* img_loader = vt::build_imageloader_qwen(image_file.c_str());
         std::vector<float> source;
         img_loader->preprocess(source);
@@ -342,7 +342,7 @@ int main(int argc, const char* argv[] ) {
 
         std::thread tserver([&] {
                 ChatApplication::server(app, svr);
-                svr.listen("localhost", 1234);
+                svr.listen("0.0.0.0", 1234);
             });
 
         app->run();
