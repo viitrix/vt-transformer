@@ -91,6 +91,49 @@ void linear_operate(T* src, T* weight, T* bias, T* dst, size_t batch, size_t out
     matmul_prim.execute(*ComputingContext::dnnl_stream, matmul_args);
 }
 
+template<typename T>
+void layernrom_operate(T* x, T* scale, T* bias, T* y, size_t batch_size, size_t hidden_dim, float eps) {
+     auto src_md = x->build_memory_desc({batch_size, 1, hidden_dim}, dnnl::memory::format_tag::tnc);
+     auto dst_md = y->build_memory_desc({batch_size, 1, hidden_dim}, dnnl::memory::format_tag::tnc);
+     
+     auto scale_md = x->build_memory_desc({hidden_dim}, dnnl::memory::format_tag::a);
+     auto bias_md = y->build_memory_desc({hidden_dim}, dnnl::memory::format_tag::a);
+
+    auto lnorm_pd = dnnl::layer_normalization_forward::primitive_desc(*ComputingContext::dnnl_engine,
+            dnnl::prop_kind::forward_inference, src_md, dst_md, eps,
+            dnnl::normalization_flags::use_scale | dnnl::normalization_flags::use_shift);
+
+    auto lnorm_prim = dnnl::layer_normalization_forward(lnorm_pd);
+
+    std::unordered_map<int, dnnl::memory> lnorm_args;
+    lnorm_args[DNNL_ARG_SRC] = x->build_memory(src_md);
+    lnorm_args[DNNL_ARG_DST] = y->build_memory(dst_md);
+    lnorm_args[DNNL_ARG_SCALE] = x->build_memory(scale_md);
+    lnorm_args[DNNL_ARG_SHIFT] = y->build_memory(bias_md);
+
+    lnorm_prim.execute(*ComputingContext::dnnl_stream, lnorm_args);
+}
+
+template <DataType DT>
+void rmsnorm_operate(DNNLTensor<DT>* x, DNNLTensor<DT>* norm2, DNNLTensor<DT>* scale, DNNLTensor<DT>* y, size_t batch_size, size_t hidden_dim, float eps) {
+    // computing norm2
+    {
+        auto src_md = x->build_memory_desc({batch_size, hidden_dim},  dnnl::memory::format_tag::ab);
+        auto nrom2_md = norm2->build_memory_desc({1, hidden_dim},  dnnl::memory::format_tag::ab);
+
+        auto reduction_pd = dnnl::reduction::primitive_desc(
+            *ComputingContext::dnnl_engine, dnnl::algorithm::reduction_norm_lp_power_p_sum, src_md, nrom2_md, 2, 0.f);
+        
+        std::unordered_map<int, dnnl::memory> rmsnorm_args;
+        rmsnorm_args[DNNL_ARG_SRC] = x->build_memory(src_md);
+        rmsnorm_args[DNNL_ARG_DST] = x->build_memory(nrom2_md);
+
+        auto reduction_prim = dnnl::reduction(reduction_pd);
+        reduction_prim.execute(*ComputingContext::dnnl_stream, lnorm_args);
+    }
+    // TODO
+}
+
 
 
 }}

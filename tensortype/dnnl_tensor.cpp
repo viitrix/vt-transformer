@@ -423,6 +423,51 @@ ComputingReturn DNNLTensor<DT>::op_linear(tensor_t self, tensor_t w, tensor_t bi
     return OP_TODO_ERROR;
 }
 
+template <DataType _DTYPE_>
+ComputingReturn DNNLTensor<_DTYPE_>::op_layernorm(tensor_t self, tensor_t mean, tensor_t var, tensor_t scale, tensor_t bias, tensor_t y, float eps) {
+    size_t batch = self->shape()[0];
+    size_t tokens = self->shape()[1];
+    size_t feature = self->shape()[2];
+    
+    vt_assert(mean == nullptr, "Current's impl don't need mean and var!");
+    vt_assert(var == nullptr, "Current's impl don't need mean and var!");
+    
+    size_t num = batch * tokens;
+    if (   _DTYPE_ == DataType::Float) {
+        dnnl_kernels::layernrom_operate<DNNLTensor<DataType::Float>>(self->dnnl_float(), scale->dnnl_float(), bias->dnnl_float(), y->dnnl_float(),
+            num, feature, eps);
+        return OP_OK;
+    }
+    if (   _DTYPE_ == DataType::FP16) {
+        dnnl_kernels::layernrom_operate<DNNLTensor<DataType::FP16>>(self->dnnl_fp16(), scale->dnnl_fp16(), bias->dnnl_fp16(), y->dnnl_fp16(),
+            num, feature, eps);
+        return OP_OK;
+    }
+    return OP_TODO_ERROR;
+}
+
+template <DataType _DTYPE_>
+ComputingReturn DNNLTensor<_DTYPE_>::op_rmsnorm(tensor_t self, tensor_t scale, tensor_t norm2, tensor_t y, float eps) {
+    size_t batch = self->shape()[0];
+    size_t tokens = self->shape()[1];
+    size_t feature = self->shape()[2];
+
+    size_t num = batch * tokens;
+    if (   _DTYPE_ == DataType::Float) {
+        dnnl_kernels::rmsnorm_operate<DataType::Float>(self->dnnl_float(), scale->dnnl_float(), 
+            norm2->dnnl_float(), y->dnnl_float(),
+            num, feature, eps);
+        return OP_OK;
+    }
+    if (   _DTYPE_ == DataType::FP16) {
+        dnnl_kernels::rmsnorm_operate<DataType::FP16>(self->dnnl_fp16(), scale->dnnl_fp16(), 
+            norm2->dnnl_fp16(), y->dnnl_fp16(),
+            num, feature, eps);
+        return OP_OK;
+    }
+    return OP_TODO_ERROR;    
+}
+
 
 
 template <DataType _DTYPE_>
