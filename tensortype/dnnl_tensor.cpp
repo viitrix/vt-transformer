@@ -1,5 +1,5 @@
 #include "dnnl_tensor.hpp"
-#include "dnnl_kernels/misc.hpp"
+#include "dnnl_kernels/impl.hpp"
 
 namespace vt {
 
@@ -248,47 +248,6 @@ ComputingReturn DNNLTensor<DT>::op_rotary_cache(tensor_t self, float base) {
     return OP_OUTPUT_ERROR;
 }
 
-template<DataType DT>
-ComputingReturn DNNLTensor<DT>::op_scale(tensor_t self, float scale) {
-    if (   DT == DataType::Float) {
-        dnnl_kernels::eltwise_operate<DNNLTensor<DataType::Float>>(self->dnnl_float(), self->dnnl_float(), self->items(), 
-            dnnl::algorithm::eltwise_linear, scale, 0.0);
-        return OP_OK;
-    }
-    if (   DT == DataType::FP16) {
-        dnnl_kernels::eltwise_operate<DNNLTensor<DataType::FP16>>(self->dnnl_fp16(),  self->dnnl_fp16(), self->items(), 
-            dnnl::algorithm::eltwise_linear, scale, 0.0);
-        return OP_OK;
-    }
-
-    return OP_TODO_ERROR;
-}
-
-template<DataType DT>
-ComputingReturn DNNLTensor<DT>::op_add(tensor_t self, tensor_t b, tensor_t c) {
-    if (   DT == DataType::Float) {
-        dnnl_kernels::binary_operate_float(self, b, c, dnnl::algorithm::binary_add);
-        return OP_OK;
-    }
-    if (   DT == DataType::FP16) {
-        dnnl_kernels::binary_operate_fp16(self, b, c, dnnl::algorithm::binary_add);
-        return OP_OK;
-    }
-    return OP_TODO_ERROR;
-}
-
-template<DataType DT>
-ComputingReturn DNNLTensor<DT>::op_mul(tensor_t self, tensor_t b, tensor_t c) {
-    if (   DT == DataType::Float) {
-        dnnl_kernels::binary_operate_float(self, b, c, dnnl::algorithm::binary_mul);
-        return OP_OK;
-    }
-    if (   DT == DataType::FP16) {
-        dnnl_kernels::binary_operate_fp16(self, b, c, dnnl::algorithm::binary_mul);
-        return OP_OK;
-    }
-    return OP_TODO_ERROR;
-}
 
 template<DataType DT>
 ComputingReturn DNNLTensor<DT>::op_convert(tensor_t self, tensor_t from) {
@@ -399,6 +358,71 @@ ComputingReturn DNNLTensor<DT>::op_reshape(tensor_t self, size_t offset, const s
 
     return OP_TODO_ERROR;
 }
+
+template<DataType DT>
+ComputingReturn DNNLTensor<DT>::op_scale(tensor_t self, float scale) {
+    if (   DT == DataType::Float) {
+        dnnl_kernels::eltwise_operate<DNNLTensor<DataType::Float>>(self->dnnl_float(), self->dnnl_float(), self->items(), 
+            dnnl::algorithm::eltwise_linear, scale, 0.0);
+        return OP_OK;
+    }
+    if (   DT == DataType::FP16) {
+        dnnl_kernels::eltwise_operate<DNNLTensor<DataType::FP16>>(self->dnnl_fp16(),  self->dnnl_fp16(), self->items(), 
+            dnnl::algorithm::eltwise_linear, scale, 0.0);
+        return OP_OK;
+    }
+
+    return OP_TODO_ERROR;
+}
+
+template<DataType DT>
+ComputingReturn DNNLTensor<DT>::op_add(tensor_t self, tensor_t b, tensor_t c) {
+    if (   DT == DataType::Float) {
+        dnnl_kernels::binary_operate_float(self, b, c, dnnl::algorithm::binary_add);
+        return OP_OK;
+    }
+    if (   DT == DataType::FP16) {
+        dnnl_kernels::binary_operate_fp16(self, b, c, dnnl::algorithm::binary_add);
+        return OP_OK;
+    }
+    return OP_TODO_ERROR;
+}
+
+template<DataType DT>
+ComputingReturn DNNLTensor<DT>::op_mul(tensor_t self, tensor_t b, tensor_t c) {
+    if (   DT == DataType::Float) {
+        dnnl_kernels::binary_operate_float(self, b, c, dnnl::algorithm::binary_mul);
+        return OP_OK;
+    }
+    if (   DT == DataType::FP16) {
+        dnnl_kernels::binary_operate_fp16(self, b, c, dnnl::algorithm::binary_mul);
+        return OP_OK;
+    }
+    return OP_TODO_ERROR;
+}
+
+template<DataType DT>
+ComputingReturn DNNLTensor<DT>::op_linear(tensor_t self, tensor_t w, tensor_t bias, tensor_t dst) {
+    size_t batch = self->shape()[0];
+    size_t tokens = self->shape()[1];
+    size_t inSize = self->shape()[2];
+    size_t outSize = w->shape()[0];
+
+    size_t num = batch * tokens;
+    if (   DT == DataType::Float) {
+        dnnl_kernels::linear_operate<DNNLTensor<DataType::Float>>(self->dnnl_float(), w->dnnl_float(), 
+            bias == nullptr? nullptr : bias->dnnl_float(), dst->dnnl_float(), num, outSize, inSize);
+        return OP_OK;
+    }
+    if (   DT == DataType::FP16) {
+        dnnl_kernels::linear_operate<DNNLTensor<DataType::FP16>>(self->dnnl_fp16(), w->dnnl_fp16(), 
+            bias == nullptr? nullptr : bias->dnnl_fp16(), dst->dnnl_fp16(), num, outSize, inSize);
+        return OP_OK;
+    }
+
+    return OP_TODO_ERROR;
+}
+
 
 
 template <DataType _DTYPE_>

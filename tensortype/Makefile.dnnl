@@ -6,7 +6,7 @@
 ##
 
 
-FLAGS = -Wall -Wmaybe-uninitialized -O3 -D_USING_DEVICE_DNNL_
+FLAGS = -Wall -Wno-maybe-uninitialized -O3 -D_USING_DEVICE_DNNL_
 
 INC = -I. -I../install/include -I../install/include/cuda_kernels \
 	  -I${DNNL_DIR}/include 

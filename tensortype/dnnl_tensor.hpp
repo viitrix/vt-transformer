@@ -97,6 +97,12 @@ public:
     ComputingReturn op_scale(tensor_t self, float scale) override;
     ComputingReturn op_add(tensor_t self, tensor_t b, tensor_t c) override;
     ComputingReturn op_mul(tensor_t self, tensor_t b, tensor_t c) override;
+    
+    ComputingReturn op_linear(tensor_t self, tensor_t w, tensor_t b, tensor_t y) override;
+    ComputingReturn op_layernorm(tensor_t self, tensor_t mean, tensor_t var, tensor_t scale, tensor_t bias, tensor_t y, float eps) override;
+    ComputingReturn op_rmsnorm(tensor_t self, tensor_t scale, tensor_t norm2, tensor_t y, float eps) override;
+    ComputingReturn op_rotary_embed(tensor_t self, tensor_t cached, tensor_t pos, tensor_t y) override;
+
     ComputingReturn op_conv2d(tensor_t self, tensor_t weight, tensor_t bias, tensor_t dst, int stride, int padding) override;
 
 protected:
