@@ -468,6 +468,37 @@ ComputingReturn DNNLTensor<_DTYPE_>::op_rmsnorm(tensor_t self, tensor_t scale, t
     return OP_TODO_ERROR;    
 }
 
+template <DataType DT>
+ComputingReturn DNNLTensor<DT>::op_rotary_embed(tensor_t self, tensor_t cached, tensor_t pos_, tensor_t y) {
+    size_t batch = self->shape()[0];
+    size_t tokens = self->shape()[1];
+    size_t heads = self->shape()[2];
+    size_t hidden = self->shape()[3];
+
+    vt_assert(hidden == cached->shape()[1], "heads number must be same with cache");
+
+    int* pos = (int*) pos_->dnnl_int()->data();
+    if ( DT == DataType::Float ) {
+
+        float* in = (float *)data();
+        float* cos_sin = (float *)cached->dnnl_float()->data();
+        float* out = (float *)y->dnnl_float()->data();
+
+        dnnl_kernels::rotary_embed<float>(in, cos_sin, pos, out, batch, heads, tokens, hidden);
+
+        return OP_OK;
+    }
+    if ( DT == DataType::FP16 ) {
+        local_fp16_t* in = (local_fp16_t *)data();
+        local_fp16_t* out = (local_fp16_t *)y->dnnl_fp16()->data();
+        float* cos_sin = (float *)cached->dnnl_float()->data();
+
+        dnnl_kernels::rotary_embed<local_fp16_t>(in, cos_sin, pos, out, batch, heads, tokens, hidden);
+        return OP_OK;
+    }
+    return OP_TODO_ERROR;  
+}
+
 
 
 template <DataType _DTYPE_>

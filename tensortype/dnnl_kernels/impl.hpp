@@ -115,23 +115,92 @@ void layernrom_operate(T* x, T* scale, T* bias, T* y, size_t batch_size, size_t 
 }
 
 template <DataType DT>
-void rmsnorm_operate(DNNLTensor<DT>* x, DNNLTensor<DT>* norm2, DNNLTensor<DT>* scale, DNNLTensor<DT>* y, size_t batch_size, size_t hidden_dim, float eps) {
-    // computing norm2
-    {
-        auto src_md = x->build_memory_desc({batch_size, hidden_dim},  dnnl::memory::format_tag::ab);
-        auto nrom2_md = norm2->build_memory_desc({1, hidden_dim},  dnnl::memory::format_tag::ab);
-
-        auto reduction_pd = dnnl::reduction::primitive_desc(
-            *ComputingContext::dnnl_engine, dnnl::algorithm::reduction_norm_lp_power_p_sum, src_md, nrom2_md, 2, 0.f);
-        
-        std::unordered_map<int, dnnl::memory> rmsnorm_args;
-        rmsnorm_args[DNNL_ARG_SRC] = x->build_memory(src_md);
-        rmsnorm_args[DNNL_ARG_DST] = x->build_memory(nrom2_md);
-
-        auto reduction_prim = dnnl::reduction(reduction_pd);
-        reduction_prim.execute(*ComputingContext::dnnl_stream, lnorm_args);
+void rmsnorm_operate(DNNLTensor<DT>* x, DNNLTensor<DT>* scale, DNNLTensor<DT>* norm2, DNNLTensor<DT>* y, size_t batch_size, size_t hidden_dim, float eps) {
+    if ( DT != DataType::Float &&  DT != DataType::FP16) {
+        vt_panic("DNNL rmsnor only support float and fp16!");
     }
-    // TODO
+    
+    float rms = 0.0;    
+    #pragma omp parallel for
+    for (size_t i = 0; i < batch_size; i++) {
+        if ( DT == DataType::Float) {    
+            for(size_t j = 0; j < hidden_dim; j++) {
+                float v = ((float *)x->data())[i * hidden_dim + j];
+                rms = rms + v * v;  
+            } 
+        } 
+        if ( DT == DataType::FP16) {    
+            for(size_t j = 0; j < hidden_dim; j++) {
+                float v = fp16_to_fp32(((local_fp16_t *)x->data())[i * hidden_dim + j]);
+                rms = rms + v * v;  
+            } 
+        }
+    }
+
+    rms = rms / (float)hidden_dim;
+    rms = 1.0 / sqrt(rms);
+
+    #pragma omp parallel for
+    for (size_t i = 0; i < batch_size; i++) {
+        if ( DT == DataType::Float) {    
+            for(size_t j = 0; j < hidden_dim; j++) {
+                float* v = &((float *)x->data())[i * hidden_dim + j];
+                *v = *v / rms * ( ((float *)scale->data())[i * hidden_dim + j]);
+            } 
+        } 
+        if ( DT == DataType::FP16) {    
+            for(size_t j = 0; j < hidden_dim; j++) {
+                local_fp16_t* v = &((local_fp16_t *)x->data())[i * hidden_dim + j];
+                *v = fp32_to_fp16( fp16_to_fp32(*v) / rms * ( ((float *)scale->data())[i * hidden_dim + j]) );
+            }
+        }
+    }
+}
+
+
+template <typename T>
+void rotary_embed(T* in, float* cos_sin, int* pos, T* out, size_t batch, size_t  heads, size_t tokens, size_t dims);
+
+template <>
+void rotary_embed<float>(float* in, float* cos_sin, int* pos, float* out, size_t batch, size_t  heads, size_t tokens, size_t dims) {
+    for (size_t b = 0; b < batch; b++) {
+        int p = pos[b];
+        #pragma omp parallel for
+        for (size_t h = 0; h < heads; h++) {
+            for (size_t t = 0; t < tokens; t++) {
+                size_t offset = b * heads * tokens * dims;
+                float* tab = cos_sin + (t + p) * dims * 2;
+                for (size_t i = 0;  i < dims/2; i++) {
+                    int ii = i + dims/2;
+                    float x = in[i+offset];
+                    float y = in[ii+offset];
+                    out[i] = (tab[i*2] * x - tab[i*2+1] * y);
+                    out[ii] = (tab[ii*2] * y + tab[ii*2+1] * x);
+                }
+            }
+        }
+    }
+}
+
+template <>
+void rotary_embed<local_fp16_t>(local_fp16_t* in, float* cos_sin, int* pos, local_fp16_t* out, size_t batch, size_t  heads, size_t tokens, size_t dims) {
+    for (size_t b = 0; b < batch; b++) {
+        int p = pos[b];
+        #pragma omp parallel for
+        for (size_t h = 0; h < heads; h++) {
+            for (size_t t = 0; t < tokens; t++) {
+                size_t offset = b * heads * tokens * dims;
+                float* tab = cos_sin + (t + p) * dims * 2;
+                for (size_t i = 0;  i < dims/2; i++) {
+                    int ii = i + dims/2;
+                    float x = fp16_to_fp32(in[i+offset]);
+                    float y = fp16_to_fp32(in[ii+offset]);                    
+                    out[i] = fp32_to_fp16(tab[i*2] * x - tab[i*2+1] * y);
+                    out[ii] = fp32_to_fp16(tab[ii*2] * y + tab[ii*2+1] * x);
+                }
+            }
+        }
+    }
 }
 
 
