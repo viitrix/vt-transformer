@@ -541,9 +541,50 @@ ComputingReturn DNNLTensor<_DTYPE_>::op_qk(tensor_t self, tensor_t key, tensor_t
         dnnl_kernels::query_key<DNNLTensor<DataType::FP16>>(self->dnnl_fp16(), key->dnnl_fp16(), qk->dnnl_fp16(), num, ntokens, ftokens, hhidden);
         return OP_OK;
     }
-
-
     return OP_TODO_ERROR;
+}
+
+template <DataType _DTYPE_>
+ComputingReturn DNNLTensor<_DTYPE_>::op_softmax(tensor_t self, tensor_t dst) {
+    auto shape_ = self->shape().vec();
+
+    int batch = shape_[0];
+    int heads = shape_[1];
+    int ntokens = shape_[2];
+    int hhidden = shape_[3];
+
+    size_t num = batch * heads * ntokens;
+    if ( _DTYPE_ == DataType::Float) {
+        dnnl_kernels::softmax<DNNLTensor<DataType::Float>>(self->dnnl_float(), dst->dnnl_float(), num, hhidden);
+        return OP_OK;
+    }
+    if ( _DTYPE_ == DataType::FP16) {
+        dnnl_kernels::softmax<DNNLTensor<DataType::FP16>>(self->dnnl_fp16(), dst->dnnl_fp16(), num, hhidden);
+        return OP_OK;
+    }
+    return OP_TODO_ERROR;
+}
+
+template<DataType _DTYPE_>
+ComputingReturn  DNNLTensor<_DTYPE_>::op_attn(tensor_t self, tensor_t value, tensor_t out) {
+    auto shape_ = self->shape().vec();
+    int batch = shape_[0];
+    int heads = shape_[1];
+    int ntokens = shape_[2];
+    int ftokens = shape_[3];
+    int hhidden = value->shape()[3];
+
+
+    size_t num = batch * heads;
+    if ( _DTYPE_ == DataType::Float) {
+        dnnl_kernels::attn<DNNLTensor<DataType::Float>>(self->dnnl_float(), value->dnnl_float(), out->dnnl_float(), num, ntokens, ftokens, hhidden);
+        return OP_OK;
+    }
+    if ( _DTYPE_ == DataType::FP16) {
+        dnnl_kernels::attn<DNNLTensor<DataType::FP16>>(self->dnnl_fp16(), value->dnnl_fp16(), out->dnnl_fp16(), num, ntokens, ftokens, hhidden);
+        return OP_OK;
+    }
+    return OP_TODO_ERROR;    
 }
 
 template <DataType _DTYPE_>

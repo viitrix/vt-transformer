@@ -243,5 +243,45 @@ void query_key(T* query, T* key, T* qk, size_t batch, size_t newTokens, size_t f
     matmul_prim.execute(*ComputingContext::dnnl_stream, matmul_args);    
 }
 
+template<typename T>
+void softmax(T* src, T* dst, size_t batch, size_t hidden ) {
+    auto src_md = src->build_memory_desc( {batch, hidden},  dnnl::memory::format_tag::nc);
+    auto dst_md = dst->build_memory_desc( {batch, hidden}, dnnl::memory::format_tag::nc);
+
+    const int axis = 1;
+    auto softmax_pd = dnnl::softmax_forward::primitive_desc(*ComputingContext::dnnl_engine,
+            dnnl::prop_kind::forward_inference, dnnl::algorithm::softmax_accurate, src_md,
+            dst_md, axis);
+
+    auto softmax_prim = dnnl::softmax_forward(softmax_pd);
+    
+    std::unordered_map<int, dnnl::memory> softmax_args;
+    softmax_args[DNNL_ARG_SRC] = src->build_memory(src_md);
+    softmax_args[DNNL_ARG_DST] = src->build_memory(dst_md);
+
+    softmax_prim.execute(*ComputingContext::dnnl_stream, softmax_args);
+}
+
+
+template<typename T>
+void attn(T* xll, T* value, T* out, size_t batch, size_t newTokens, size_t fullTokens, size_t hidden ) {
+    auto xll_md = xll->build_memory_desc( {batch, newTokens, fullTokens},  dnnl::memory::format_tag::abc);
+    auto v_md = value->build_memory_desc( {batch, fullTokens, hidden}, dnnl::memory::format_tag::abc);
+    auto o_md = out->build_memory_desc( {batch, newTokens, fullTokens}, dnnl::memory::format_tag::abc);
+    
+    dnnl::matmul::primitive_desc matmul_pd;
+
+    matmul_pd = dnnl::matmul::primitive_desc(*ComputingContext::dnnl_engine, xll_md, v_md, o_md);
+    
+    auto matmul_prim = dnnl::matmul(matmul_pd);
+
+    std::unordered_map<int, dnnl::memory> matmul_args;
+    matmul_args[DNNL_ARG_SRC] = xll->build_memory(xll_md);
+    matmul_args[DNNL_ARG_WEIGHTS] = value->build_memory(v_md);
+    matmul_args[DNNL_ARG_DST] = out->build_memory(o_md);
+
+    matmul_prim.execute(*ComputingContext::dnnl_stream, matmul_args);    
+}
+
 }}
 #endif
