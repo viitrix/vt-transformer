@@ -1,15 +1,15 @@
 1e-06                   "RMS_EPS"               !
-10000.0                 "ROTARY_BASE"           !
+1000000.0               "ROTARY_BASE"           !
 2.5                     "TEMPERATURE"           !
 
 151936                  "VOCAB_SIZE"            !
 2048                    "HIDDEN_SIZE"           !
-5504                    "INTERMEDIATE_SIZE"     !
+5504                   "INTERMEDIATE_SIZE"     !
 16                      "HEADS_NUM"             !
 128                     "HEAD_HIDDEN"           !
 
-8                       "MAX_BATCH"             !
-2304                    "MAX_CONTEXT"           !
+1                       "MAX_BATCH"             !
+4096                    "MAX_CONTEXT"           !
 "./weights/"            "G_PATH"                !
 
 %def init_internal_variable
@@ -22,8 +22,8 @@
     "MAX_BATCH" @ "MAX_CONTEXT" @ app.mem 1 $DEVICE @ "fp16" op.create  "_var_"  !
     
     ;; kv cached memroy
-    24 "MAX_BATCH" @ "MAX_CONTEXT" @ 16 + "HIDDEN_SIZE" @ 4 $DEVICE @  "fp16" op.create dup "_kcache_"  !
-    24 "MAX_BATCH" @ "MAX_CONTEXT" @ 16 + "HIDDEN_SIZE" @ 4 $DEVICE @  "fp16" op.create dup "_vcache_"  !
+    32 "MAX_BATCH" @ "MAX_CONTEXT" @ 16 + "HIDDEN_SIZE" @ 4 $DEVICE @  "fp16" op.create dup "_kcache_"  !
+    32 "MAX_BATCH" @ "MAX_CONTEXT" @ 16 + "HIDDEN_SIZE" @ 4 $DEVICE @  "fp16" op.create dup "_vcache_"  !
     nn.ezkv_init "cache_man" !
 
     "MAX_CONTEXT" @ "MAX_BATCH" @ * dup dup dup 
@@ -69,19 +69,19 @@
     ;
     ; dummy split to three tensors, 4096 * 4096 = 16777216
     ;
-    ($L @ "attn.qkv_proj.weight" | @ 0                             "HIDDEN_SIZE" @ dup 2 op.view)  $L @  "query.weight" | !
-    ($L @ "attn.qkv_proj.weight" | @ ("HIDDEN_SIZE" @ dup *)       "HIDDEN_SIZE" @ dup 2 op.view)  $L @  "key.weight" | !
-    ($L @ "attn.qkv_proj.weight" | @ ("HIDDEN_SIZE" @ dup * 2 *)   "HIDDEN_SIZE" @ dup 2 op.view)  $L @  "value.weight" | !
+    ($L @ "attn.qkv_proj.weight" | @ 0                             "HIDDEN_SIZE" @ dup 2 op.view)  $L @  "attn.query.weight" | !
+    ($L @ "attn.qkv_proj.weight" | @ ("HIDDEN_SIZE" @ dup *)       "HIDDEN_SIZE" @ dup 2 op.view)  $L @  "attn.key.weight" | !
+    ($L @ "attn.qkv_proj.weight" | @ ("HIDDEN_SIZE" @ dup * 2 *)   "HIDDEN_SIZE" @ dup 2 op.view)  $L @  "attn.value.weight" | !
     
-    ($L @ "attn.qkv_proj.bias" | @ 0                               "HIDDEN_SIZE" @ 1 op.view)  $L @  "query.bias" | !
-    ($L @ "attn.qkv_proj.bias" | @ ("HIDDEN_SIZE" @ )              "HIDDEN_SIZE" @ 1 op.view)  $L @  "key.bias" | !
-    ($L @ "attn.qkv_proj.bias" | @ ("HIDDEN_SIZE" @ 2 *)           "HIDDEN_SIZE" @ 1 op.view)  $L @  "value.bias" | !
+    ($L @ "attn.qkv_proj.bias" | @ 0                               "HIDDEN_SIZE" @ 1 op.view)  $L @  "attn.query.bias" | !
+    ($L @ "attn.qkv_proj.bias" | @ ("HIDDEN_SIZE" @ )              "HIDDEN_SIZE" @ 1 op.view)  $L @  "attn.key.bias" | !
+    ($L @ "attn.qkv_proj.bias" | @ ("HIDDEN_SIZE" @ 2 *)           "HIDDEN_SIZE" @ 1 op.view)  $L @  "attn.value.bias" | !
     
-    ("HIDDEN_SIZE" @  "HIDDEN_SIZE" @ 2 $DEVICE @  "fp16")  op.create   $L @ "attn.c_proj.weight" |  !
+    ("HIDDEN_SIZE" @  "HIDDEN_SIZE" @ 2 $DEVICE @  "fp16")  op.create   $L @ "attn.o_proj.weight" |  !
 
     ("INTERMEDIATE_SIZE" @  "HIDDEN_SIZE" @ 2 $DEVICE @  "fp16")  op.create  $L @  "mlp.w1.weight"  | !
     ("INTERMEDIATE_SIZE" @  "HIDDEN_SIZE" @ 2 $DEVICE @  "fp16")  op.create  $L @  "mlp.w2.weight"  | !
-    ("HIDDEN_SIZE" @  "INTERMEDIATE_SIZE" @ 2 $DEVICE @  "fp16")  op.create  $L @  "mlp.c_proj.weight" | !
+    ("HIDDEN_SIZE" @  "INTERMEDIATE_SIZE" @ 2 $DEVICE @  "fp16")  op.create  $L @  "mlp.o_proj.weight" | !
 
     $L !!
     $DEVICE !!
@@ -127,12 +127,16 @@
     
     $L @ "ln_1.weight"                     | @ $weights_path @  "ln_1.weight.fp16"                | io.load
     $L @ "ln_2.weight"                     | @ $weights_path @  "ln_2.weight.fp16"                | io.load
-    $L @ "attn.qkv_proj.weight"            | @ $weights_path @  "attn.c_attn.weight.fp16"         | io.load
-    $L @ "attn.qkv_proj.bias"              | @ $weights_path @  "attn.c_attn.bias.fp16"           | io.load
-    $L @ "attn.c_proj.weight"              | @ $weights_path @  "attn.c_proj.weight.fp16"         | io.load
+    $L @ "attn.query.weight"               | @ $weights_path @  "attn.query.weight.fp16"          | io.load
+    $L @ "attn.query.bias"                 | @ $weights_path @  "attn.query.bias.fp16"            | io.load
+    $L @ "attn.key.weight"                 | @ $weights_path @  "attn.key.weight.fp16"            | io.load
+    $L @ "attn.key.bias"                   | @ $weights_path @  "attn.key.bias.fp16"              | io.load
+    $L @ "attn.value.weight"               | @ $weights_path @  "attn.value.weight.fp16"          | io.load
+    $L @ "attn.value.bias"                 | @ $weights_path @  "attn.value.bias.fp16"            | io.load
+    $L @ "attn.o_proj.weight"              | @ $weights_path @  "attn.o_proj.weight.fp16"         | io.load
     $L @ "mlp.w1.weight"                   | @ $weights_path @  "mlp.w1.weight.fp16"              | io.load
     $L @ "mlp.w2.weight"                   | @ $weights_path @  "mlp.w2.weight.fp16"              | io.load
-    $L @ "mlp.c_proj.weight"               | @ $weights_path @  "mlp.c_proj.weight.fp16"          | io.load
+    $L @ "mlp.o_proj.weight"               | @ $weights_path @  "mlp.o_proj.weight.fp16"          | io.load
     
     "Loaded " $weights_path @ | ?
     
@@ -143,29 +147,21 @@
 %def sync_layer_clone
     $L !
 
-    $L @ "ln_1.weight"                        | @ "ln_1.weight"                       !
-    $L @ "ln_2.weight"                        | @ "ln_2.weight"                       !
-    $L @ "attn.qkv_proj.weight"               | @ "attn.qkv_proj.weight"              !
-    $L @ "attn.qkv_proj.bias"                 | @ "attn.qkv_proj.bias"                !
-    $L @ "attn.c_proj.weight"                 | @ "attn.c_proj.weight"                !
-    $L @ "mlp.w1.weight"                      | @ "mlp.w1.weight"                     !
-    $L @ "mlp.w2.weight"                      | @ "mlp.w2.weight"                     !
-    $L @ "mlp.c_proj.weight"                  | @ "mlp.c_proj.weight"                 !
-
-    ;
-    ; dummy split to three tensors, 4096 * 4096 = 16777216
-    ;
-    ("attn.qkv_proj.weight" @ 0                             "HIDDEN_SIZE" @ dup 2 op.view)  "query.weight"  !
-    ("attn.qkv_proj.weight" @ ("HIDDEN_SIZE" @ dup *)       "HIDDEN_SIZE" @ dup 2 op.view)  "key.weight"    !
-    ("attn.qkv_proj.weight" @ ("HIDDEN_SIZE" @ dup * 2 *)   "HIDDEN_SIZE" @ dup 2 op.view)  "value.weight"  !
-   
-    ("attn.qkv_proj.bias" @ 0                             "HIDDEN_SIZE" @ 1 op.view)  "query.bias"  !
-    ("attn.qkv_proj.bias" @ ("HIDDEN_SIZE" @ )            "HIDDEN_SIZE" @ 1 op.view)  "key.bias"    !
-    ("attn.qkv_proj.bias" @ ("HIDDEN_SIZE" @ 2 *)         "HIDDEN_SIZE" @ 1 op.view)  "value.bias"  !
+    $L @ "ln_1.weight"                        | @ "ln_1.weight"                   !
+    $L @ "ln_2.weight"                        | @ "ln_2.weight"                   !
+    $L @ "attn.query.weight"                  | @ "attn.query.weight"             !
+    $L @ "attn.query.bias"                    | @ "attn.query.bias"               !
+    $L @ "attn.key.weight"                    | @ "attn.key.weight"               !
+    $L @ "attn.key.bias"                      | @ "attn.key.bias"                 !
+    $L @ "attn.value.weight"                  | @ "attn.value.weight"             !
+    $L @ "attn.value.bias"                    | @ "attn.value.bias"               !
+    $L @ "attn.o_proj.weight"                 | @ "attn.o_proj.weight"            !
+    $L @ "mlp.w1.weight"                      | @ "mlp.w1.weight"                 !
+    $L @ "mlp.w2.weight"                      | @ "mlp.w2.weight"                 !
+    $L @ "mlp.o_proj.weight"                  | @ "mlp.o_proj.weight"             !
 
     $L !!
 %end
-
 
 %def create_dynamic
     $batch          !
@@ -191,7 +187,7 @@
     }
 
     64 app.align
-
+    
     ;; xa, xb, xquery/key/value, xll, x4a, x4b, all_logits
     dup
     "_var_" @ swap $batch @ $tokens @ "HIDDEN_SIZE" @ 3 op.view "xa" !
@@ -289,27 +285,27 @@
     "cache_man" @  "_position" @ nn.ezkv_position  $pos !
 
     "xinput" @ "ln_1.weight" @ "norm2" @ "xa" @ "RMS_EPS" @ op.rmsnorm
-
+    
     ;; attention
     {
         ;; get key for new tokens, combing cached tokens, position embedding
-        "xa" @ "key.weight" @ "key.bias" @ "xb" @ op.linear
+        "xa" @ "attn.key.weight" @ "attn.key.bias" @ "xb" @ op.linear
         "yb" @ "rotary_cache" @ $pos @ "yc" @  op.rotary_embed
         "cache_man" @ "_kcache_" @ "xc" @ "xfb" @ $L @ nn.ezkv_update
         "yfb" @ "zfa" @ op.transpose_0213
         
         ;; get query@key
-        "xa" @ "query.weight" @ "query.bias" @ "xc" @ op.linear
+        "xa" @ "attn.query.weight" @ "attn.query.bias" @ "xc" @ op.linear
         "yc" @ "rotary_cache" @ $pos @ "yb" @  op.rotary_embed
         "yb" @ "zc" @ op.transpose_0213
-
+        
         ;; query@key + apply causal_mask + softmax
         "zc" @  "zfa" @  "xll" @ op.querykey
         "xll" @ "causal_mask" @ "xll" @ op.add
         "xll" @ "xll" @ op.softmax
         
         ;; get value for new tokens, combing cached tokens 
-        "xa" @ "value.weight" @ "value.bias" @ "xb" @ op.linear
+        "xa" @ "attn.value.weight" @ "attn.value.bias" @ "xb" @ op.linear
         "cache_man" @ "_vcache_" @ "xb" @ "xfa" @ $L @ nn.ezkv_update
         "yfa" @ "zfb" @ op.transpose_0213
 
@@ -320,7 +316,7 @@
     }
     
     ;; do dense & residual
-    "xa" @ "attn.c_proj.weight" @  op.null "xb" @ op.linear
+    "xa" @ "attn.o_proj.weight" @  op.null "xb" @ op.linear
     "xb" @ "xinput" @ "xa" @ op.add
 
     ;; post layer norm
@@ -331,16 +327,16 @@
         ;; xa atteion output
         ;; xb passed post layernorm
         
-        "xb" @ "mlp.w1.weight" @ op.null "x4a" @ op.linear
-        "xb" @ "mlp.w2.weight" @ op.null "x4b" @ op.linear
+        "xb" @ "mlp.w2.weight" @ op.null "x4a" @ op.linear
+        "xb" @ "mlp.w1.weight" @ op.null "x4b" @ op.linear
         
         "x4b" @ "x4a" @ "x4a" @ op.silu_product
-        "x4a" @ "mlp.c_proj.weight" @ op.null "xb" @ op.linear
+        "x4a" @ "mlp.o_proj.weight" @ op.null "xb" @ op.linear
         
         ;; residual
         "xa" @ "xb" @ "xinput" @ op.add
     }
-
+    
     $pos !!
     $L !!
 %end
@@ -352,59 +348,18 @@
 
     "host"             create_input_weight
     "G_DEVICE" @       create_output_weight
-   
-    "G_DEVICE" @    "L0."   create_layer_weight 
-    "G_DEVICE" @    "L1."   create_layer_weight 
-    "G_DEVICE" @    "L2."   create_layer_weight 
-    "G_DEVICE" @    "L3."   create_layer_weight 
-    "G_DEVICE" @    "L4."   create_layer_weight
-    "G_DEVICE" @    "L5."   create_layer_weight 
-    "G_DEVICE" @    "L6."   create_layer_weight 
-    "G_DEVICE" @    "L7."   create_layer_weight 
-    "G_DEVICE" @    "L8."   create_layer_weight 
-    "G_DEVICE" @    "L9."   create_layer_weight
-    "G_DEVICE" @    "L10."  create_layer_weight
-    "G_DEVICE" @    "L11."  create_layer_weight
-    "G_DEVICE" @    "L12."  create_layer_weight
-    "G_DEVICE" @    "L13."  create_layer_weight
-    "G_DEVICE" @    "L14."  create_layer_weight
-    "G_DEVICE" @    "L15."  create_layer_weight
-    "G_DEVICE" @    "L16."   create_layer_weight 
-    "G_DEVICE" @    "L17."   create_layer_weight 
-    "G_DEVICE" @    "L18."   create_layer_weight 
-    "G_DEVICE" @    "L19."   create_layer_weight 
-    "G_DEVICE" @    "L20."   create_layer_weight
-    "G_DEVICE" @    "L21."   create_layer_weight 
-    "G_DEVICE" @    "L22."   create_layer_weight 
-    "G_DEVICE" @    "L23."   create_layer_weight 
-    
+
+    %for 0 23
+        "G_DEVICE" @    "L%%."   create_layer_weight 
+    %endf
+
     "G_PATH" @ load_input_weight
     "G_PATH" @ load_output_weight
 
-    "G_PATH" @ "h_0."  | "L0." load_layer_weight
-    "G_PATH" @ "h_1."  | "L1." load_layer_weight
-    "G_PATH" @ "h_2."  | "L2." load_layer_weight
-    "G_PATH" @ "h_3."  | "L3." load_layer_weight
-    "G_PATH" @ "h_4."  | "L4." load_layer_weight
-    "G_PATH" @ "h_5."  | "L5." load_layer_weight
-    "G_PATH" @ "h_6."  | "L6." load_layer_weight
-    "G_PATH" @ "h_7."  | "L7." load_layer_weight
-    "G_PATH" @ "h_8."  | "L8." load_layer_weight
-    "G_PATH" @ "h_9."  | "L9." load_layer_weight
-    "G_PATH" @ "h_10."  | "L10." load_layer_weight
-    "G_PATH" @ "h_11."  | "L11." load_layer_weight
-    "G_PATH" @ "h_12."  | "L12." load_layer_weight
-    "G_PATH" @ "h_13."  | "L13." load_layer_weight
-    "G_PATH" @ "h_14."  | "L14." load_layer_weight
-    "G_PATH" @ "h_15."  | "L15." load_layer_weight
-    "G_PATH" @ "h_16."  | "L16." load_layer_weight
-    "G_PATH" @ "h_17."  | "L17." load_layer_weight
-    "G_PATH" @ "h_18."  | "L18." load_layer_weight
-    "G_PATH" @ "h_19."  | "L19." load_layer_weight
-    "G_PATH" @ "h_20."  | "L20." load_layer_weight
-    "G_PATH" @ "h_21."  | "L21." load_layer_weight
-    "G_PATH" @ "h_22."  | "L22." load_layer_weight
-    "G_PATH" @ "h_23."  | "L23." load_layer_weight
+    %for 0 23
+        "G_PATH" @ "h_%%."  | "L%%." load_layer_weight
+    %endf
+
 %end
 
 %def gpu_main
@@ -416,30 +371,9 @@
         "xinput" @ "xinput~" @ op.copy
     }
 
-    "L0."   sync_layer_clone 0  layer_forward 
-    "L1."   sync_layer_clone 1  layer_forward    
-    "L2."   sync_layer_clone 2  layer_forward    
-    "L3."   sync_layer_clone 3  layer_forward 
-    "L4."   sync_layer_clone 4  layer_forward 
-    "L5."   sync_layer_clone 5  layer_forward 
-    "L6."   sync_layer_clone 6  layer_forward 
-    "L7."   sync_layer_clone 7  layer_forward 
-    "L8."   sync_layer_clone 8  layer_forward 
-    "L9."   sync_layer_clone 9  layer_forward 
-    "L10."  sync_layer_clone 10 layer_forward 
-    "L11."  sync_layer_clone 11 layer_forward 
-    "L12."  sync_layer_clone 12 layer_forward 
-    "L13."  sync_layer_clone 13 layer_forward 
-    "L14."  sync_layer_clone 14 layer_forward 
-    "L15."  sync_layer_clone 15 layer_forward 
-    "L16."  sync_layer_clone 16 layer_forward
-    "L17."  sync_layer_clone 17 layer_forward
-    "L18."  sync_layer_clone 18 layer_forward
-    "L19."  sync_layer_clone 19 layer_forward
-    "L20."  sync_layer_clone 20 layer_forward
-    "L21."  sync_layer_clone 21 layer_forward
-    "L22."  sync_layer_clone 22 layer_forward
-    "L23."  sync_layer_clone 23 layer_forward
+    %for 0 23
+        "L%%."   sync_layer_clone %% layer_forward 
+    %endf
 
     ;; ln & output    
     {
@@ -456,6 +390,5 @@
     "all_logits" @ op.sampling_top1
     
     0 io.pipe.write
-
 %end
 

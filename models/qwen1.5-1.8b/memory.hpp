@@ -17,6 +17,7 @@ struct MemoryAlign : public vt::NativeWord {
     NWORD_CREATOR_DEFINE_LR(MemoryAlign)
 };
 
+
 struct MemoryCounting : public vt::NativeWord {
     void run(vt::Stack& stack) override {
         size_t tokens = stack.pop_number();

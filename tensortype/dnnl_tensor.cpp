@@ -584,51 +584,6 @@ ComputingReturn  DNNLTensor<_DTYPE_>::op_attn(tensor_t self, tensor_t value, ten
         dnnl_kernels::attn<DNNLTensor<DataType::FP16>>(self->dnnl_fp16(), value->dnnl_fp16(), out->dnnl_fp16(), num, ntokens, ftokens, hhidden);
         return OP_OK;
     }
-    return OP_TODO_ERROR;
-}
-
-template <DataType _DTYPE_>
-ComputingReturn DNNLTensor<_DTYPE_>::op_gelu(tensor_t self, tensor_t dst) {
-    size_t total = self->items();
-
-    if ( _DTYPE_ == DataType::Float ) {
-        float* in = (float *)data();
-        float* out = (float *)dst->dnnl_float()->data();
-        dnnl_kernels::gelu<float>(in, out, total);
-        return OP_OK;
-    }
-    if ( _DTYPE_ == DataType::FP16 ) {
-        local_fp16_t* in = (local_fp16_t *)data();
-        local_fp16_t* out = (local_fp16_t *)dst->dnnl_fp16()->data();
-
-        dnnl_kernels::gelu<local_fp16_t>(in, out, total);
-        return OP_OK;
-    }
-
-    return OP_TODO_ERROR;
-}
-
-template <DataType _DTYPE_>
-ComputingReturn DNNLTensor<_DTYPE_>::op_silu_product(tensor_t self, tensor_t in, tensor_t dst) {
-    size_t total = self->items();
-
-    if ( _DTYPE_ == DataType::Float ) {
-        float* a = (float *)data();
-        float* b = (float *)in->dnnl_float()->data();
-        float* out = (float *)dst->dnnl_float()->data();
-
-        dnnl_kernels::silu_product<float>(a, b, out, total);
-        return OP_OK;
-    }
-    if ( _DTYPE_ == DataType::FP16 ) {
-        local_fp16_t* a = (local_fp16_t *)data();
-        local_fp16_t* b = (local_fp16_t *)in->dnnl_fp16()->data();
-        local_fp16_t* out = (local_fp16_t *)dst->dnnl_fp16()->data();
-
-        dnnl_kernels::silu_product<local_fp16_t>(a, b, out, total);
-        return OP_OK;
-    }
-
     return OP_TODO_ERROR;    
 }
 

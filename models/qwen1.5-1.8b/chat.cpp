@@ -205,6 +205,7 @@ int main(int argc, char* argv[] ) {
 #ifdef _USING_DEVICE_COREX_
         vt::ComputingContext::boot_corex( 0 );
 #endif
+
         vt::Enviroment* env = new vt::Enviroment();
         env->insert_native_word("app.mem", MemoryCounting::creator);
         env->insert_native_word("app.align", MemoryAlign::creator);
