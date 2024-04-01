@@ -3,7 +3,7 @@
 
 namespace vt { namespace dnnl_kernels {
 
-void binary_operate_float(tensor_t a, tensor_t b, tensor_t c, dnnl::algorithm op ) {
+void binary_float(tensor_t a, tensor_t b, tensor_t c, dnnl::algorithm op ) {
     auto amem_desc = a->dnnl_float()->build_memory_desc( a->shape().vec(),  dnnl::memory::format_tag::abcd);
     auto bmem_desc = b->dnnl_float()->build_memory_desc( b->shape().vec(),  dnnl::memory::format_tag::abcd);
     auto cmem_desc = c->dnnl_float()->build_memory_desc( c->shape().vec(),  dnnl::memory::format_tag::abcd);
@@ -23,7 +23,7 @@ void binary_operate_float(tensor_t a, tensor_t b, tensor_t c, dnnl::algorithm op
     binary_prim.execute(*ComputingContext::dnnl_stream, binary_args);
 }
 
-void binary_operate_fp16(tensor_t a, tensor_t b, tensor_t c, dnnl::algorithm op ) {
+void binary_fp16(tensor_t a, tensor_t b, tensor_t c, dnnl::algorithm op ) {
     auto amem_desc = a->dnnl_fp16()->build_memory_desc( a->shape().vec(),  dnnl::memory::format_tag::abcd);
     auto bmem_desc = b->dnnl_fp16()->build_memory_desc( b->shape().vec(),  dnnl::memory::format_tag::abcd);
     auto cmem_desc = c->dnnl_fp16()->build_memory_desc( c->shape().vec(),  dnnl::memory::format_tag::abcd);
@@ -44,7 +44,7 @@ void binary_operate_fp16(tensor_t a, tensor_t b, tensor_t c, dnnl::algorithm op 
 }
 
 template<typename T>
-void eltwise_operate(T* in, T* out,  size_t items, ::dnnl::algorithm op, float alpha, float beta) {
+void eltwise(T* in, T* out,  size_t items, ::dnnl::algorithm op, float alpha, float beta) {
     auto src_md = in->build_memory_desc( {items},  dnnl::memory::format_tag::a);
     auto dst_md = out->build_memory_desc( {items},  dnnl::memory::format_tag::a);
     auto src_mem = in->build_memory(src_md);
@@ -61,7 +61,7 @@ void eltwise_operate(T* in, T* out,  size_t items, ::dnnl::algorithm op, float a
 }
 
 template<typename T>
-void linear_operate(T* src, T* weight, T* bias, T* dst, size_t batch, size_t outFeature, size_t inFeature ) {
+void linear(T* src, T* weight, T* bias, T* dst, size_t batch, size_t outFeature, size_t inFeature ) {
     auto src_md = src->build_memory_desc( {batch, inFeature},  dnnl::memory::format_tag::ab);
     auto w_md = weight->build_memory_desc( {inFeature, outFeature}, dnnl::memory::format_tag::ba);
     dnnl::memory::desc b_md;
@@ -92,7 +92,7 @@ void linear_operate(T* src, T* weight, T* bias, T* dst, size_t batch, size_t out
 }
 
 template<typename T>
-void layernrom_operate(T* x, T* scale, T* bias, T* y, size_t batch_size, size_t hidden_dim, float eps) {
+void layernrom(T* x, T* scale, T* bias, T* y, size_t batch_size, size_t hidden_dim, float eps) {
      auto src_md = x->build_memory_desc({batch_size, 1, hidden_dim}, dnnl::memory::format_tag::tnc);
      auto dst_md = y->build_memory_desc({batch_size, 1, hidden_dim}, dnnl::memory::format_tag::tnc);
      
@@ -115,7 +115,7 @@ void layernrom_operate(T* x, T* scale, T* bias, T* y, size_t batch_size, size_t 
 }
 
 template <DataType DT>
-void rmsnorm_operate(DNNLTensor<DT>* x, DNNLTensor<DT>* scale, DNNLTensor<DT>* norm2, DNNLTensor<DT>* y, size_t batch_size, size_t hidden_dim, float eps) {
+void rmsnorm(DNNLTensor<DT>* x, DNNLTensor<DT>* scale, DNNLTensor<DT>* norm2, DNNLTensor<DT>* y, size_t batch_size, size_t hidden_dim, float eps) {
     if ( DT != DataType::Float &&  DT != DataType::FP16) {
         vt_panic("DNNL rmsnor only support float and fp16!");
     }
@@ -203,7 +203,45 @@ void rotary_embed<local_fp16_t>(local_fp16_t* in, float* cos_sin, int* pos, loca
     }
 }
 
+template <typename T>
+void transpose_0213(T* in, T* out, size_t batch, size_t heads, size_t tokens, size_t dims) {
+    size_t items = batch * heads * tokens * dims;
+    
+    #pragma omp parallel for
+    for ( size_t i = 0; i < items; i++) {
+        size_t d = i % dims;
+        size_t t = (i / dims) % tokens;
+        size_t h = (i / (dims*tokens)) % heads;
+        size_t b = i / (dims*tokens*heads);
+        size_t target = b * (dims*tokens*heads) + t * heads * dims + h * dims + d;
+        out[target] = in[i];
+    }
+}
 
+template<typename T>
+void query_key(T* query, T* key, T* qk, size_t batch, size_t newTokens, size_t fullTokens, size_t hidden ) {
+    auto q_md = query->build_memory_desc( {batch, newTokens, hidden},  dnnl::memory::format_tag::abc);
+    auto k_md = key->build_memory_desc( {batch, hidden, fullTokens}, dnnl::memory::format_tag::acb);
+    auto qk_md = qk->build_memory_desc( {batch, newTokens, fullTokens}, dnnl::memory::format_tag::abc);
+    
+    dnnl::matmul::primitive_desc matmul_pd;
+
+    dnnl::post_ops matmul_ops;
+    matmul_ops.append_eltwise(dnnl::algorithm::eltwise_linear, 1.0/sqrt(hidden), 0.0);
+    dnnl::primitive_attr matmul_attr;
+    matmul_attr.set_post_ops(matmul_ops);
+
+    matmul_pd = dnnl::matmul::primitive_desc(*ComputingContext::dnnl_engine, q_md, k_md, qk_md, matmul_attr);
+    
+    auto matmul_prim = dnnl::matmul(matmul_pd);
+
+    std::unordered_map<int, dnnl::memory> matmul_args;
+    matmul_args[DNNL_ARG_SRC] = query->build_memory(q_md);
+    matmul_args[DNNL_ARG_WEIGHTS] = key->build_memory(k_md);
+    matmul_args[DNNL_ARG_DST] = qk->build_memory(qk_md);
+
+    matmul_prim.execute(*ComputingContext::dnnl_stream, matmul_args);    
+}
 
 }}
 #endif

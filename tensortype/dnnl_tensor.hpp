@@ -103,6 +103,13 @@ public:
     ComputingReturn op_rmsnorm(tensor_t self, tensor_t scale, tensor_t norm2, tensor_t y, float eps) override;
     ComputingReturn op_rotary_embed(tensor_t self, tensor_t cached, tensor_t pos, tensor_t y) override;
 
+    ComputingReturn op_transpose_0213(tensor_t self, tensor_t y) override;
+    ComputingReturn op_qk(tensor_t self, tensor_t k, tensor_t qk) override;
+    ComputingReturn op_softmax(tensor_t self, tensor_t out) override;
+    ComputingReturn op_attn(tensor_t self, tensor_t value, tensor_t out) override;
+    ComputingReturn op_gelu(tensor_t self, tensor_t dst) override;
+    ComputingReturn op_silu_product(tensor_t self, tensor_t in, tensor_t dst) override;
+
     ComputingReturn op_conv2d(tensor_t self, tensor_t weight, tensor_t bias, tensor_t dst, int stride, int padding) override;
 
 protected:
