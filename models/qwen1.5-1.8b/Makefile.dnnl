@@ -1,6 +1,6 @@
 .PHONY: all
 
-FLAGS = -Wall -fopenmp -O3 -DUSING_DEVICE_DNNL_ 
+FLAGS = -Wall -fopenmp -O3 -D_USING_DEVICE_DNNL_ 
 INC = -I../../install/include -I${DNNL_DIR}/include 
 
 LINK = -L../../install/lib \

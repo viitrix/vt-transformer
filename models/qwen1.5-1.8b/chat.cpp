@@ -10,7 +10,7 @@
 
 #include "memory.hpp"
 
-const size_t MEM_CTX_SIZE = 4 * 1024 * 1024 * 1024l;
+const size_t MEM_CTX_SIZE = 8 * 1024 * 1024 * 1024l;
 
 struct ChatApplication {
     ChatApplication() {
@@ -147,6 +147,9 @@ void do_inference(vt::Enviroment* env, const char* dag_file) {
 #ifdef _USING_DEVICE_COREX_
         env->stack().push_string("corex");
 #endif
+#ifdef _USING_DEVICE_DNNL_
+        env->stack().push_string("dnnl");
+#endif
         env->run(init_bin);
         delete init_bin;
     }
@@ -204,6 +207,9 @@ int main(int argc, char* argv[] ) {
 #endif
 #ifdef _USING_DEVICE_COREX_
         vt::ComputingContext::boot_corex( 0 );
+#endif
+#ifdef _USING_DEVICE_DNNL_
+        vt::ComputingContext::boot_dnnl( 0 );
 #endif
 
         vt::Enviroment* env = new vt::Enviroment();
