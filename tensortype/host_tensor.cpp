@@ -51,7 +51,7 @@ ComputingReturn HostTensor<_DTYPE_>::op_copy(tensor_t self, tensor_t src) {
         return OP_OK;
     }
 
-#if _USING_DEVICE_CUDA_
+#ifdef _USING_DEVICE_CUDA_
     if ( src->is_cuda() ) {
         auto stream = ComputingContext::cuda_stream;
         size_t size = std::get<1>( self->op_sizeof(self) );
@@ -60,7 +60,7 @@ ComputingReturn HostTensor<_DTYPE_>::op_copy(tensor_t self, tensor_t src) {
     }
 #endif
 
-#if _USING_DEVICE_DCU_
+#ifdef _USING_DEVICE_DCU_
     if ( src->is_dcu() ) {
         auto stream = ComputingContext::dcu_stream;
         size_t size = std::get<1>( self->op_sizeof(self) );
@@ -69,11 +69,21 @@ ComputingReturn HostTensor<_DTYPE_>::op_copy(tensor_t self, tensor_t src) {
     }
 #endif
 
-#if _USING_DEVICE_COREX_
+#ifdef _USING_DEVICE_COREX_
     if ( src->is_corex() ) {
         auto stream = ComputingContext::corex_stream;
         size_t size = std::get<1>( self->op_sizeof(self) );
         COREX_CHECK(cudaMemcpyAsync(data(), src->device_data(), size , cudaMemcpyDeviceToHost, stream));
+        return OP_OK;
+    }
+#endif
+
+#ifdef _USING_DEVICE_DNNL_
+    if ( src->is_dnnl() ) {
+        size_t s = std::get<1>( self->op_sizeof(self) );
+        void* x = src->device_data();
+        void* y = data();
+        memcpy(y, x, s);
         return OP_OK;
     }
 #endif

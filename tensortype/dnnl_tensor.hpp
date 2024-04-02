@@ -89,6 +89,7 @@ public:
     ComputingReturn op_causal_mask(tensor_t self, tensor_t out) override;
     ComputingReturn op_rotary_cache(tensor_t self, float base) override;
 
+    ComputingReturn op_copy(tensor_t self, tensor_t from) override;
     ComputingReturn op_convert(tensor_t self, tensor_t from) override;
     std::variant<ComputingReturn, tensor_t> op_view(tensor_t self, size_t offset, const std::vector<size_t>& newShape_) override;
     std::variant<ComputingReturn, tensor_t> op_view_as(tensor_t self, size_t offset, const std::vector<size_t>& newShape, const char* dtype) override;

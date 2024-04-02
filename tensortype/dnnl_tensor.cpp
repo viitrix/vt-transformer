@@ -248,6 +248,17 @@ ComputingReturn DNNLTensor<DT>::op_rotary_cache(tensor_t self, float base) {
     return OP_OUTPUT_ERROR;
 }
 
+template<DataType DT>
+ComputingReturn DNNLTensor<DT>::op_copy(tensor_t self, tensor_t from) {
+    auto s = std::get<1>(self->op_sizeof(self));
+    if ( from->is_host() || from->is_dnnl() ) {        
+        void* x = from->device_data();
+        void* y = data();
+        memcpy(y, x, s);
+        return OP_OK;
+    }
+    return OP_TODO_ERROR;
+}
 
 template<DataType DT>
 ComputingReturn DNNLTensor<DT>::op_convert(tensor_t self, tensor_t from) {
