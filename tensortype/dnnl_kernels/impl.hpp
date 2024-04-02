@@ -283,5 +283,51 @@ void attn(T* xll, T* value, T* out, size_t batch, size_t newTokens, size_t fullT
     matmul_prim.execute(*ComputingContext::dnnl_stream, matmul_args);    
 }
 
+template <typename T>
+void gelu(T* in, T* out, size_t items);
+
+template <>
+void gelu<float>(float* src, float* target, size_t items) {
+    #pragma omp parallel for
+    for ( size_t i = 0; i < items; i++) {
+        float value = src[i];
+        target[i] = value * (0.5F + 0.5F * tanhf(value * (0.79788456F + 0.03567741F * value * value)));
+        //target[i] = value * normcdf(value);        
+    }
+}
+
+template <>
+void gelu<local_fp16_t>(local_fp16_t* src, local_fp16_t* target, size_t items) {
+    #pragma omp parallel for
+    for ( size_t i = 0; i < items; i++) {
+        float value = fp16_to_fp32(src[i]);
+        target[i] = fp32_to_fp16(value * (0.5F + 0.5F * tanhf(value * (0.79788456F + 0.03567741F * value * value))));
+    }
+}
+
+template <typename T>
+void silu_product(T* a, T* b,  T* out, size_t items);
+
+template <>
+void silu_product<float>(float* in_act, float* in,  float* out, size_t items) {
+    #pragma omp parallel for
+    for ( size_t i = 0; i < items; i++) {
+        float act = in_act[i];
+        float in_ = in[i];
+        out[i] = act / (1.f + expf(-act)) * in_;
+    }
+}
+
+template <>
+void silu_product<local_fp16_t>(local_fp16_t* in_act, local_fp16_t* in,  local_fp16_t* out, size_t items) {
+    #pragma omp parallel for
+    for ( size_t i = 0; i < items; i++) {
+        float act = fp16_to_fp32( in_act[i] );
+        float in_ = fp16_to_fp32( in[i] );
+        out[i] = fp32_to_fp16( act / (1.f + expf(-act)) * in_ );
+    }
+}
+
+
 }}
 #endif
