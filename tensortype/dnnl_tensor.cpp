@@ -180,19 +180,6 @@ ComputingReturn DNNLTensor<DT>::op_alibi(tensor_t self) {
     return OP_TODO_ERROR;
 }
 
-template<typename T>
-void fill_causal_mask(int* m, T* o, T minv, int full_tokens, int nt_end) {
-    for ( int i = 0; i < full_tokens; i++) {
-        o[i] = minv;
-    }
-
-    for ( int i = 0; i <= nt_end; i++) {
-        if ( m[i] != 0 ) {
-            o[i] = 0;
-        }
-    }
-}
-
 template<DataType DT>
 ComputingReturn DNNLTensor<DT>::op_causal_mask(tensor_t self, tensor_t out) {
     int batch = self->shape()[0];
@@ -206,9 +193,10 @@ ComputingReturn DNNLTensor<DT>::op_causal_mask(tensor_t self, tensor_t out) {
 
     if ( out->dtype() == DataType::Float ) {
         out32 = (float *)out->dnnl_float()->data();
-    }
-    if ( out->dtype() == DataType::FP16 ) {
+    } else if ( out->dtype() == DataType::FP16 ) {
         out16 = (local_fp16_t *)out->dnnl_fp16()->data();
+    } else {
+        return OP_TODO_ERROR;
     }
 
     for (int e = 0; e < batch * new_tokens; e++) {
@@ -220,16 +208,16 @@ ComputingReturn DNNLTensor<DT>::op_causal_mask(tensor_t self, tensor_t out) {
         if ( out32 != nullptr) {
             float* o = &out32[ b * new_tokens * full_tokens + nt * full_tokens ];
             float minv = std::numeric_limits<float>::lowest();
-            fill_causal_mask<float>(m, o, minv, full_tokens, nt_end);
+            dnnl_kernels::fill_causal_mask<float>(m, o, minv, full_tokens, nt_end);
         }
         if ( out16 != nullptr ) {
             local_fp16_t* o = &out16[ b * new_tokens * full_tokens + nt * full_tokens ];
             local_fp16_t minv = (unsigned short)0xFC00U;
-            fill_causal_mask<local_fp16_t>(m, o, minv, full_tokens, nt_end);
+            dnnl_kernels::fill_causal_mask<local_fp16_t>(m, o, minv, full_tokens, nt_end);
         }
     }
 
-    return OP_TODO_ERROR;
+    return OP_OK;
 }
 
 template<DataType DT>

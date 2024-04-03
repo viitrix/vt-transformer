@@ -3,6 +3,19 @@
 
 namespace vt { namespace dnnl_kernels {
 
+template<typename T>
+void fill_causal_mask(int* m, T* o, T minv, int full_tokens, int nt_end) {
+    for ( int i = 0; i < full_tokens; i++) {
+        o[i] = minv;
+    }
+
+    for ( int i = 0; i <= nt_end; i++) {
+        if ( m[i] != 0 ) {
+            o[i] = 0;
+        }
+    }
+}
+
 void binary_float(tensor_t a, tensor_t b, tensor_t c, dnnl::algorithm op ) {
     auto amem_desc = a->dnnl_float()->build_memory_desc( a->shape().vec(),  dnnl::memory::format_tag::abcd);
     auto bmem_desc = b->dnnl_float()->build_memory_desc( b->shape().vec(),  dnnl::memory::format_tag::abcd);
@@ -120,9 +133,9 @@ void rmsnorm(DNNLTensor<DT>* x, DNNLTensor<DT>* scale, DNNLTensor<DT>* norm2, DN
         vt_panic("DNNL rmsnor only support float and fp16!");
     }
     
-    float rms = 0.0;    
-    #pragma omp parallel for
+#pragma omp parallel for
     for (size_t i = 0; i < batch_size; i++) {
+        float rms = 0.0;    
         if ( DT == DataType::Float) {    
             for(size_t j = 0; j < hidden_dim; j++) {
                 float v = ((float *)x->data())[i * hidden_dim + j];
@@ -135,23 +148,20 @@ void rmsnorm(DNNLTensor<DT>* x, DNNLTensor<DT>* scale, DNNLTensor<DT>* norm2, DN
                 rms = rms + v * v;  
             } 
         }
-    }
+  
+        rms = rms / (float)hidden_dim;
+        rms = 1.0 / sqrt(rms + eps);
 
-    rms = rms / (float)hidden_dim;
-    rms = 1.0 / sqrt(rms);
-
-    #pragma omp parallel for
-    for (size_t i = 0; i < batch_size; i++) {
         if ( DT == DataType::Float) {    
             for(size_t j = 0; j < hidden_dim; j++) {
-                float* v = &((float *)x->data())[i * hidden_dim + j];
-                *v = *v / rms * ( ((float *)scale->data())[i * hidden_dim + j]);
+                float v = ((float *)x->data())[i * hidden_dim + j];
+                ((float *)y->data())[i * hidden_dim + j] = v * rms * ( ((float *)scale->data())[j]);
             } 
         } 
         if ( DT == DataType::FP16) {    
             for(size_t j = 0; j < hidden_dim; j++) {
-                local_fp16_t* v = &((local_fp16_t *)x->data())[i * hidden_dim + j];
-                *v = fp32_to_fp16( fp16_to_fp32(*v) / rms * ( ((float *)scale->data())[i * hidden_dim + j]) );
+                float v = fp16_to_fp32(((local_fp16_t *)x->data())[i * hidden_dim + j]);
+                ((local_fp16_t *)y->data())[i * hidden_dim + j] = fp32_to_fp16( v * rms * fp16_to_fp32( ((local_fp16_t *)scale->data())[j]) );
             }
         }
     }

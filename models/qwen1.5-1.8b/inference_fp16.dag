@@ -271,8 +271,6 @@
         "ids~" @ "ids" @ op.copy
     }
 
-    "=================" ? ^
-
     {
         "ids" @ op.get_shape drop swap drop
         "mask" @ op.get_shape drop swap 
@@ -288,6 +286,8 @@
 
     "xinput" @ "ln_1.weight" @ "norm2" @ "xa" @ "RMS_EPS" @ op.rmsnorm
     
+    "xa" @ io.dump ^
+
     ;; attention
     {
         ;; get key for new tokens, combing cached tokens, position embedding

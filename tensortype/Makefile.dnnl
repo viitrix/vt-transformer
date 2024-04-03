@@ -26,7 +26,7 @@ tensortype.o: computing.hpp tensortype.hpp tensortype.cpp
 host_tensor.o: computing.hpp tensortype.hpp host_tensor.hpp host_tensor.cpp
 	$(CXX) $(FLAGS) -c -o $@ $(INC) host_tensor.cpp
 
-dnnl_tensor.o: computing.hpp tensortype.hpp host_tensor.hpp dnnl_tensor.hpp dnnl_tensor.cpp
+dnnl_tensor.o: computing.hpp tensortype.hpp host_tensor.hpp dnnl_tensor.hpp dnnl_kernels/impl.hpp dnnl_tensor.cpp
 	$(CXX) $(FLAGS) -c -o $@ $(INC) dnnl_tensor.cpp
 
 dag.o: tensortype.hpp dag.hpp dag.cpp
