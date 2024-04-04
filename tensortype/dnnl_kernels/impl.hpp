@@ -178,14 +178,14 @@ void rotary_embed<float>(float* in, float* cos_sin, int* pos, float* out, size_t
         #pragma omp parallel for
         for (size_t h = 0; h < heads; h++) {
             for (size_t t = 0; t < tokens; t++) {
-                size_t offset = b * heads * tokens * dims;
+                size_t offset = b * heads * tokens * dims + h * tokens * dims + t * dims;
                 float* tab = cos_sin + (t + p) * dims * 2;
                 for (size_t i = 0;  i < dims/2; i++) {
                     int ii = i + dims/2;
                     float x = in[i+offset];
                     float y = in[ii+offset];
-                    out[i] = (tab[i*2] * x - tab[i*2+1] * y);
-                    out[ii] = (tab[ii*2] * y + tab[ii*2+1] * x);
+                    out[i+offset] = (tab[i*2] * x - tab[i*2+1] * y);
+                    out[ii+offset] = (tab[ii*2] * y + tab[ii*2+1] * x);
                 }
             }
         }
@@ -199,14 +199,14 @@ void rotary_embed<local_fp16_t>(local_fp16_t* in, float* cos_sin, int* pos, loca
         #pragma omp parallel for
         for (size_t h = 0; h < heads; h++) {
             for (size_t t = 0; t < tokens; t++) {
-                size_t offset = b * heads * tokens * dims;
+                size_t offset = b * heads * tokens * dims + h * tokens * dims + t * dims;
                 float* tab = cos_sin + (t + p) * dims * 2;
                 for (size_t i = 0;  i < dims/2; i++) {
                     int ii = i + dims/2;
                     float x = fp16_to_fp32(in[i+offset]);
                     float y = fp16_to_fp32(in[ii+offset]);                    
-                    out[i] = fp32_to_fp16(tab[i*2] * x - tab[i*2+1] * y);
-                    out[ii] = fp32_to_fp16(tab[ii*2] * y + tab[ii*2+1] * x);
+                    out[i+offset] = fp32_to_fp16(tab[i*2] * x - tab[i*2+1] * y);
+                    out[ii+offset] = fp32_to_fp16(tab[ii*2] * y + tab[ii*2+1] * x);
                 }
             }
         }

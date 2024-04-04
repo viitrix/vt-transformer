@@ -279,20 +279,18 @@
 %def layer_forward
     $L !
     "cache_man" @  "_position" @ nn.ezkv_position  $pos !
-
     "xinput" @ "ln_1.weight" @ "norm2" @ "xa" @ "RMS_EPS" @ op.rmsnorm
-    
+
     ;; attention
     {
         ;; get key for new tokens, combing cached tokens, position embedding
         "xa" @ "attn.key.weight" @ "attn.key.bias" @ "xb" @ op.linear
-
-        "xb" @ io.dump ^
-
         "yb" @ "rotary_cache" @ $pos @ "yc" @  op.rotary_embed
+        
+        "yc" @ io.dump ^
         "cache_man" @ "_kcache_" @ "xc" @ "xfb" @ $L @ nn.ezkv_update
         "yfb" @ "zfa" @ op.transpose_0213
-        
+       
         ;; get query@key
         "xa" @ "attn.query.weight" @ "attn.query.bias" @ "xc" @ op.linear
         "yc" @ "rotary_cache" @ $pos @ "yb" @  op.rotary_embed
