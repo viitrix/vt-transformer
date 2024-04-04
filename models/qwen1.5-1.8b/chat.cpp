@@ -10,7 +10,7 @@
 
 #include "memory.hpp"
 
-const size_t MEM_CTX_SIZE = 8 * 1024 * 1024 * 1024l;
+const size_t MEM_CTX_SIZE = 16 * 1024 * 1024 * 1024l;
 
 struct ChatApplication {
     ChatApplication() {

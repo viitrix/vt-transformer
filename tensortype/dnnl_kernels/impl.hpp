@@ -75,13 +75,13 @@ void eltwise(T* in, T* out,  size_t items, ::dnnl::algorithm op, float alpha, fl
 
 template<typename T>
 void linear(T* src, T* weight, T* bias, T* dst, size_t batch, size_t outFeature, size_t inFeature ) {
-    auto src_md = src->build_memory_desc( {batch, inFeature},  dnnl::memory::format_tag::ab);
-    auto w_md = weight->build_memory_desc( {inFeature, outFeature}, dnnl::memory::format_tag::ba);
+    auto src_md = src->build_memory_desc( {1, batch, inFeature},  dnnl::memory::format_tag::abc);
+    auto w_md = weight->build_memory_desc( {1, inFeature, outFeature}, dnnl::memory::format_tag::acb);
     dnnl::memory::desc b_md;
     if ( bias != nullptr) {
-        b_md = bias->build_memory_desc( {outFeature}, dnnl::memory::format_tag::a);
+        b_md = bias->build_memory_desc( {1, 1, outFeature}, dnnl::memory::format_tag::abc);
     }
-    auto dst_md = dst->build_memory_desc( {batch, outFeature}, dnnl::memory::format_tag::ab);
+    auto dst_md = dst->build_memory_desc( {1, batch, outFeature}, dnnl::memory::format_tag::abc);
     
     dnnl::matmul::primitive_desc matmul_pd;
     if ( bias == nullptr) {

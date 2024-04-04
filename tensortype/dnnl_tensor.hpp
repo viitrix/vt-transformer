@@ -29,12 +29,15 @@ struct DNNLTensor : public TransformerComputing {
         mem_ = MemoryContext::alloc(size_);
     }
     DNNLTensor(const ShapeType& shape,  void *mem) : owner_(false), mem_(mem) {
-        if ( _DTYPE_ != DataType::Float
-             && _DTYPE_ != DataType::Int
-             && _DTYPE_ != DataType::FP16 ) {
+        if ( _DTYPE_ == DataType::Float ) {
+            size_ = shape.numel() * sizeof(float);
+        } else if ( _DTYPE_ == DataType::Int ) {
+            size_ = shape.numel() * sizeof(int);
+        } else if ( _DTYPE_ == DataType::FP16 ) {
+            size_ =  shape.numel() * sizeof(local_fp16_t);
+        } else {
             vt_panic("Can't be here!");
         }
-        size_ = 0;
     }
     void* data() {
         return mem_;

@@ -287,6 +287,8 @@
         ;; get key for new tokens, combing cached tokens, position embedding
         "xa" @ "attn.key.weight" @ "attn.key.bias" @ "xb" @ op.linear
 
+        "xb" @ io.dump ^
+
         "yb" @ "rotary_cache" @ $pos @ "yc" @  op.rotary_embed
         "cache_man" @ "_kcache_" @ "xc" @ "xfb" @ $L @ nn.ezkv_update
         "yfb" @ "zfa" @ op.transpose_0213
