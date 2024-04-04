@@ -1,6 +1,6 @@
 .PHONY: all
 
-FLAGS = -Wall -O3 -D_USING_DEVICE_CUDA_ -DUSING_DEVICE_DNNL_ 
+FLAGS = -Wall -O3 -fopenmp -D_USING_DEVICE_CUDA_ -D_USING_DEVICE_DNNL_ 
 INC = -I../../install/include \
 	  -I${DNNL_DIR}/include \
 	  -I${CUDA_DIR}/include \
@@ -30,7 +30,6 @@ run16: chat
 
 run32: chat 
 	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${DNNL_DIR}/lib:${CUDA_DIR}/lib64:${NCCL_DIR}/lib:${CUDNN_DIR}/lib:${VT_SOURCE}/install/lib ./chat ./inference_fp32.dag
-
 
 clean:
 	rm -f chat bech 

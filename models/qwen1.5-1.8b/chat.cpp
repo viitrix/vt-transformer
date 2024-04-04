@@ -140,14 +140,11 @@ void do_inference(vt::Enviroment* env, const char* dag_file) {
         vt::DaG* init_bin = env->build(all_code);
 #ifdef _USING_DEVICE_CUDA_
         env->stack().push_string("cuda");
-#endif
-#ifdef _USING_DEVICE_DCU_
+#elif _USING_DEVICE_DCU_
         env->stack().push_string("dcu");
-#endif
-#ifdef _USING_DEVICE_COREX_
+#elif _USING_DEVICE_COREX_
         env->stack().push_string("corex");
-#endif
-#ifdef _USING_DEVICE_DNNL_
+#elif _USING_DEVICE_DNNL_
         env->stack().push_string("dnnl");
 #endif
         env->run(init_bin);
