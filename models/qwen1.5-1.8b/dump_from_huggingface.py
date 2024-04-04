@@ -30,16 +30,16 @@ Qwen2ForCausalLM(
 '''
 
 def save_weight(w, wfile):
+    """
     print("dumping " + wfile + " ...");
     ofile_name = "./weights/" + wfile + ".fp16";
     w16 = w.cpu().float().detach().numpy().flatten().astype('float16');
     w16.tofile(ofile_name);
+    """
 
-    '''
     ofile_name = "./weights/" + wfile + ".fp32";
     w32 = w.cpu().float().detach().numpy().flatten();
     w32.tofile(ofile_name);
-    '''
 
 pretrain = "./";  ## "Qwen/Qwen1.5-0.5B-Chat"
 model = AutoModelForCausalLM.from_pretrained(pretrain, device_map="cpu").eval()
