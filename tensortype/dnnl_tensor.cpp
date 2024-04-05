@@ -523,6 +523,7 @@ ComputingReturn DNNLTensor<DT>::op_transpose_0213(tensor_t self, tensor_t y) {
 
 template <DataType _DTYPE_>
 ComputingReturn DNNLTensor<_DTYPE_>::op_qk(tensor_t self, tensor_t key, tensor_t qk) {
+#if 0
     auto shape_ = self->shape().vec();
 
     int batch = shape_[0];
@@ -540,6 +541,39 @@ ComputingReturn DNNLTensor<_DTYPE_>::op_qk(tensor_t self, tensor_t key, tensor_t
         dnnl_kernels::query_key<DNNLTensor<DataType::FP16>>(self->dnnl_fp16(), key->dnnl_fp16(), qk->dnnl_fp16(), num, ntokens, ftokens, hhidden);
         return OP_OK;
     }
+#else
+    auto shape_ = self->shape().vec();
+
+    int batch = shape_[0];
+    int heads = shape_[1];
+    int ntokens = shape_[2];
+    int hhidden = shape_[3];
+    int ftokens = key->shape()[2];
+
+    int m = ntokens;
+    int n = ftokens;
+    int k = hhidden;
+
+    float alpha = 1.0 / sqrt(hhidden);
+    float beta = 0.0;
+
+    if ( _DTYPE_ == DataType::Float ) {
+        int HnT = hhidden * ntokens ;
+        int HfT = hhidden * ftokens ;
+        int TT = ftokens * ntokens;
+        for (int i = 0; i < batch * heads; i++) {
+            float* A = (float *)data() + i * HnT;
+            float* B = (float *)(key->dnnl_float()->data()) + i * HfT;
+            float* C = (float *)(qk->dnnl_float()->data()) + i * TT;
+            dnnl::sgemm('N', 'T',
+                        m, n, k,
+                        alpha, A, k,
+                        B, k, beta,
+                        C, n);
+        }
+        return OP_OK;
+    }
+#endif
     return OP_TODO_ERROR;
 }
 

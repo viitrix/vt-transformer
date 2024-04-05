@@ -286,21 +286,22 @@
         ;; get key for new tokens, combing cached tokens, position embedding
         "xa" @ "attn.key.weight" @ "attn.key.bias" @ "xb" @ op.linear
         "yb" @ "rotary_cache" @ $pos @ "yc" @  op.rotary_embed
-        
-        "yc" @ io.dump ^
         "cache_man" @ "_kcache_" @ "xc" @ "xfb" @ $L @ nn.ezkv_update
         "yfb" @ "zfa" @ op.transpose_0213
-       
+
         ;; get query@key
         "xa" @ "attn.query.weight" @ "attn.query.bias" @ "xc" @ op.linear
         "yc" @ "rotary_cache" @ $pos @ "yb" @  op.rotary_embed
         "yb" @ "zc" @ op.transpose_0213
-        
+      
         ;; query@key + apply causal_mask + softmax
         "zc" @  "zfa" @  "xll" @ op.querykey
+        
+        "xll" @ io.dump ^
+
         "xll" @ "causal_mask" @ "xll" @ op.add
         "xll" @ "xll" @ op.softmax
-        
+       
         ;; get value for new tokens, combing cached tokens 
         "xa" @ "attn.value.weight" @ "attn.value.bias" @ "xb" @ op.linear
         "cache_man" @ "_vcache_" @ "xb" @ "xfa" @ $L @ nn.ezkv_update
