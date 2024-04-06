@@ -224,7 +224,7 @@ void transpose_0213(T* in, T* out, size_t batch, size_t heads, size_t tokens, si
         size_t h = (i / (dims*tokens)) % heads;
         size_t b = i / (dims*tokens*heads);
         size_t target = b * (dims*tokens*heads) + t * heads * dims + h * dims + d;
-        out[target] = in[i];
+        out[i] = in[target];
     }
 }
 
