@@ -176,10 +176,10 @@ void rotary_embed<float>(float* in, float* cos_sin, int* pos, float* out, size_t
     for (size_t b = 0; b < batch; b++) {
         int p = pos[b];
         #pragma omp parallel for
-        for (size_t h = 0; h < heads; h++) {
-            for (size_t t = 0; t < tokens; t++) {
-                size_t offset = b * heads * tokens * dims + h * tokens * dims + t * dims;
-                float* tab = cos_sin + (t + p) * dims * 2;
+        for (size_t t = 0; t < tokens; t++) {
+            float* tab = cos_sin + (t + p) * dims * 2;
+            for (size_t h = 0; h < heads; h++) {
+                size_t offset = b * heads * tokens * dims + t * heads * dims + h * dims;
                 for (size_t i = 0;  i < dims/2; i++) {
                     int ii = i + dims/2;
                     float x = in[i+offset];
