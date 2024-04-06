@@ -373,7 +373,9 @@
         "xinput" @ "ln_f.weight" @ "norm2" @ "xb" @ "RMS_EPS" @ op.rmsnorm
         "xb" @ "mask~" @ "lm_head.weight" @ "all_logits" @  op.all_logits 
     }
-   
+  
+    "all_logits" @ io.dump ^
+
     ;; reshape all_logits according to user's masks
     "all_logits" @ 0 rot "VOCAB_SIZE" @ 2 op.view "all_logits" !
 

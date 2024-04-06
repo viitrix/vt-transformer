@@ -1,5 +1,6 @@
 #include "dnnl_tensor.hpp"
 #include "dnnl_kernels/impl.hpp"
+#include "host_tensor.hpp"
 
 namespace vt {
 
@@ -663,6 +664,57 @@ ComputingReturn DNNLTensor<_DTYPE_>::op_silu_product(tensor_t self, tensor_t in,
     }
 
     return OP_TODO_ERROR;    
+}
+
+template<DataType DT>
+std::variant<ComputingReturn,int> DNNLTensor<DT>::op_all_logits(tensor_t self, tensor_t mask_,  tensor_t lm_head, tensor_t output) {
+    int batch = self->shape()[0];
+    int new_tokens = self->shape()[1];
+    int hidden_size = self->shape()[2];
+    int full_tokens = mask_->shape()[1];
+
+    int vocab_size = lm_head->shape()[0];
+
+    int* mask = (int *)mask_->host_int()->data();
+    int pred = 0;
+
+    auto ddt = dnnl::memory::data_type::f16;
+    if ( DT == DataType::Float ) {
+        ddt = dnnl::memory::data_type::f32;
+    }
+    auto src_md = dnnl::memory::desc({1, 1, hidden_size}, ddt, dnnl::memory::format_tag::abc);
+    auto w_md = dnnl::memory::desc({1, hidden_size, vocab_size}, ddt, dnnl::memory::format_tag::acb);
+    auto dst_md = dnnl::memory::desc({1, 1, vocab_size}, ddt, dnnl::memory::format_tag::abc);
+
+    for (int b = 0;  b < batch; b++) {
+        int* mk = &mask[b * full_tokens];
+        for ( int i = 0; i < new_tokens ; i++) {
+            int ii = full_tokens - new_tokens + i;
+            if ( mk[ii] != 2 ) {
+                continue;
+            }
+            int target = i;
+
+            if ( DT == DataType::Float ) {
+                float* dst = (float *)output->dnnl_float()->data() + pred * vocab_size;
+                float* src = (float *)data() + b * new_tokens * hidden_size + target * hidden_size;
+                float* w = (float *)lm_head->dnnl_float()->data();
+                
+                dnnl_kernels::simple_gemm(src, w, dst, src_md, w_md, dst_md);
+                
+            } else if ( DT == DataType::FP16 ) {
+                auto* dst = (local_fp16_t *)output->dnnl_fp16()->data() + pred * vocab_size;
+                auto* src = (local_fp16_t *)data() + b * new_tokens * hidden_size + target * hidden_size;
+                auto* w = (local_fp16_t *)lm_head->dnnl_fp16()->data();
+                dnnl_kernels::simple_gemm(src, w, dst, src_md, w_md, dst_md);
+            } else {
+                return OP_TODO_ERROR;
+            }
+            pred ++;
+        }
+    }
+
+    return pred;
 }
 
 template <DataType _DTYPE_>

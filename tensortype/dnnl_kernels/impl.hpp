@@ -114,6 +114,20 @@ void linear(T* src, T* weight, T* bias, T* dst, size_t batch, size_t outFeature,
 }
 
 template<typename T>
+void simple_gemm(T* src, T* w, T* dst, dnnl::memory::desc src_md, dnnl::memory::desc w_md, dnnl::memory::desc dst_md) {
+    dnnl::matmul::primitive_desc matmul_pd = dnnl::matmul::primitive_desc(*ComputingContext::dnnl_engine, src_md, w_md, dst_md);
+    auto matmul_prim = dnnl::matmul(matmul_pd);
+    
+    std::unordered_map<int, dnnl::memory> matmul_args;
+    matmul_args[DNNL_ARG_SRC] = dnnl::memory(src_md, *ComputingContext::dnnl_engine, src);
+    matmul_args[DNNL_ARG_WEIGHTS] = dnnl::memory(w_md, *ComputingContext::dnnl_engine, w);
+    matmul_args[DNNL_ARG_DST] = dnnl::memory(dst_md, *ComputingContext::dnnl_engine, dst);
+
+    matmul_prim.execute(*ComputingContext::dnnl_stream, matmul_args);
+}
+
+
+template<typename T>
 void layernrom(T* x, T* scale, T* bias, T* y, size_t batch_size, size_t hidden_dim, float eps) {
      auto src_md = x->build_memory_desc({batch_size, 1, hidden_dim}, dnnl::memory::format_tag::tnc);
      auto dst_md = y->build_memory_desc({batch_size, 1, hidden_dim}, dnnl::memory::format_tag::tnc);
