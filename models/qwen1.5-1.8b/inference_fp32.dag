@@ -296,12 +296,9 @@
       
         ;; query@key + apply causal_mask + softmax
         "zc" @  "zfa" @  "xll" @ op.querykey
-        
-        "xll" @ io.dump ^
-
         "xll" @ "causal_mask" @ "xll" @ op.add
         "xll" @ "xll" @ op.softmax
-       
+      
         ;; get value for new tokens, combing cached tokens 
         "xa" @ "attn.value.weight" @ "attn.value.bias" @ "xb" @ op.linear
         "cache_man" @ "_vcache_" @ "xb" @ "xfa" @ $L @ nn.ezkv_update
@@ -309,10 +306,9 @@
 
         ;; do attention and transpose back
         "xll" @ "zfb" @ "zb" @ op.attn          
-        "zb" @ "ya" @ op.transpose_0213          ;; attn->ya 
+        "zb" @ "ya" @ op.transpose_0213          ;; attn->ya
     }
-    
-    ;; do dense & residual
+
     "xa" @ "attn.o_proj.weight" @  op.null "xb" @ op.linear
     "xb" @ "xinput" @ "xa" @ op.add
 

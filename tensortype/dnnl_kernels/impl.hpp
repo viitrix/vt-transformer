@@ -17,9 +17,14 @@ void fill_causal_mask(int* m, T* o, T minv, int full_tokens, int nt_end) {
 }
 
 void binary_float(tensor_t a, tensor_t b, tensor_t c, dnnl::algorithm op ) {
-    auto amem_desc = a->dnnl_float()->build_memory_desc( a->shape().vec(),  dnnl::memory::format_tag::abcd);
-    auto bmem_desc = b->dnnl_float()->build_memory_desc( b->shape().vec(),  dnnl::memory::format_tag::abcd);
-    auto cmem_desc = c->dnnl_float()->build_memory_desc( c->shape().vec(),  dnnl::memory::format_tag::abcd);
+    auto tag = dnnl::memory::format_tag::abcd;
+    if ( a->shape().dim() == 3) {
+        tag = dnnl::memory::format_tag::abc;
+    }
+
+    auto amem_desc = a->dnnl_float()->build_memory_desc( a->shape().vec(),  tag);
+    auto bmem_desc = b->dnnl_float()->build_memory_desc( b->shape().vec(),  tag);
+    auto cmem_desc = c->dnnl_float()->build_memory_desc( c->shape().vec(),  tag);
 
     auto amem = a->dnnl_float()->build_memory(amem_desc);
     auto bmem = b->dnnl_float()->build_memory(bmem_desc);
@@ -37,9 +42,13 @@ void binary_float(tensor_t a, tensor_t b, tensor_t c, dnnl::algorithm op ) {
 }
 
 void binary_fp16(tensor_t a, tensor_t b, tensor_t c, dnnl::algorithm op ) {
-    auto amem_desc = a->dnnl_fp16()->build_memory_desc( a->shape().vec(),  dnnl::memory::format_tag::abcd);
-    auto bmem_desc = b->dnnl_fp16()->build_memory_desc( b->shape().vec(),  dnnl::memory::format_tag::abcd);
-    auto cmem_desc = c->dnnl_fp16()->build_memory_desc( c->shape().vec(),  dnnl::memory::format_tag::abcd);
+    auto tag = dnnl::memory::format_tag::abcd;
+    if ( a->shape().dim() == 3) {
+        tag = dnnl::memory::format_tag::abc;
+    }
+    auto amem_desc = a->dnnl_fp16()->build_memory_desc( a->shape().vec(),  tag);
+    auto bmem_desc = b->dnnl_fp16()->build_memory_desc( b->shape().vec(),  tag);
+    auto cmem_desc = c->dnnl_fp16()->build_memory_desc( c->shape().vec(),  tag);
 
     auto amem = a->dnnl_fp16()->build_memory(amem_desc);
     auto bmem = b->dnnl_fp16()->build_memory(bmem_desc);
@@ -277,7 +286,7 @@ template<typename T>
 void attn(T* xll, T* value, T* out, size_t batch, size_t newTokens, size_t fullTokens, size_t hidden ) {
     auto xll_md = xll->build_memory_desc( {batch, newTokens, fullTokens},  dnnl::memory::format_tag::abc);
     auto v_md = value->build_memory_desc( {batch, fullTokens, hidden}, dnnl::memory::format_tag::abc);
-    auto o_md = out->build_memory_desc( {batch, newTokens, fullTokens}, dnnl::memory::format_tag::abc);
+    auto o_md = out->build_memory_desc( {batch, newTokens, hidden}, dnnl::memory::format_tag::abc);
     
     dnnl::matmul::primitive_desc matmul_pd;
 
