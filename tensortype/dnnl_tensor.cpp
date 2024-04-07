@@ -717,6 +717,55 @@ std::variant<ComputingReturn,int> DNNLTensor<DT>::op_all_logits(tensor_t self, t
     return pred;
 }
 
+template<DataType DT>
+std::variant<ComputingReturn, tensor_t>  DNNLTensor<DT>::op_sampling_top1(tensor_t self) {
+    if ( DT != DataType::Float && DT != DataType::FP16 ) {
+        return OP_INPUT_ERROR;
+    }
+
+    int batch = self->shape()[0];
+    int vocab_size = self->shape()[1];
+
+    std::vector<size_t> ret_shape{ (size_t)batch};
+    tensor_t ret = vt::create_host_int( ret_shape );
+    int* out = (int *)ret->device_data();
+
+    if ( DT == DataType::FP16 ) {
+        local_fp16_t* logits = (local_fp16_t *) self->device_data();
+        dnnl_kernels::easy_top1<local_fp16_t>(logits, out, batch, vocab_size);
+    } else {
+        float* logits = (float *) self->device_data();
+        dnnl_kernels::easy_top1<float>(logits, out, batch, vocab_size);
+    }
+    return ret;
+}
+
+template<DataType DT>
+std::variant<ComputingReturn, tensor_t>  DNNLTensor<DT>::op_sampling_top3(tensor_t self, float temp) {
+    if ( DT != DataType::Float && DT != DataType::FP16 ) {
+        return OP_INPUT_ERROR;
+    }
+
+    int batch = self->shape()[0];
+    int vocab_size = self->shape()[1];
+
+    std::vector<size_t> ret_shape{ (size_t)batch};
+    tensor_t ret = vt::create_host_int( ret_shape );
+    int* out = (int *)ret->device_data();
+
+    std::uniform_real_distribution<> dist(0.0, 1.0);
+    float randx = dist( *ComputingContext::rng );
+
+    if ( DT == DataType::FP16 ) {
+        local_fp16_t* logits = (local_fp16_t *) self->device_data();
+        dnnl_kernels::easy_top3<local_fp16_t>(logits, out, batch, vocab_size, temp, randx);
+    } else {
+        float* logits = (float *) self->device_data();
+        dnnl_kernels::easy_top3<float>(logits, out, batch, vocab_size, temp, randx);
+    }
+    return ret;
+}
+
 template <DataType _DTYPE_>
 ComputingReturn DNNLTensor<_DTYPE_>::op_conv2d(tensor_t self, tensor_t weight, tensor_t bias, tensor_t dst, int _stride, int _padding) {
     dnnl::memory::dims strides{_stride, _stride};

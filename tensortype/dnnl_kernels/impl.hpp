@@ -1,6 +1,9 @@
 #ifndef _DNNL_KERNELS_HPP_
 #define _DNNL_KERNELS_HPP_
 
+#include <algorithm>
+#include <queue>
+
 namespace vt { namespace dnnl_kernels {
 
 template<typename T>
@@ -117,7 +120,7 @@ template<typename T>
 void simple_gemm(T* src, T* w, T* dst, dnnl::memory::desc src_md, dnnl::memory::desc w_md, dnnl::memory::desc dst_md) {
     dnnl::matmul::primitive_desc matmul_pd = dnnl::matmul::primitive_desc(*ComputingContext::dnnl_engine, src_md, w_md, dst_md);
     auto matmul_prim = dnnl::matmul(matmul_pd);
-    
+
     std::unordered_map<int, dnnl::memory> matmul_args;
     matmul_args[DNNL_ARG_SRC] = dnnl::memory(src_md, *ComputingContext::dnnl_engine, src);
     matmul_args[DNNL_ARG_WEIGHTS] = dnnl::memory(w_md, *ComputingContext::dnnl_engine, w);
@@ -358,6 +361,139 @@ void silu_product<local_fp16_t>(local_fp16_t* in_act, local_fp16_t* in,  local_f
         float act = fp16_to_fp32( in_act[i] );
         float in_ = fp16_to_fp32( in[i] );
         out[i] = fp32_to_fp16( act / (1.f + expf(-act)) * in_ );
+    }
+}
+
+template <typename T>
+void easy_top1(T* logits, int* out, size_t batch, size_t vocab_size);
+
+template <>
+void easy_top1<float>(float* logits, int* out, size_t batch, size_t vocab_size) {
+    #pragma omp parallel for
+    for (size_t b = 0; b < batch; b++) {
+        float* src = logits + b * vocab_size;
+
+        float max_v = std::numeric_limits<float>::min();
+        int max_i = -1;
+        for (int i = 0; i < (int)vocab_size; i++) {
+            if ( src[i] > max_v ) {
+                max_v = src[i];
+                max_i = i;
+            }
+        }
+        out[b] = max_i;
+    }
+}
+
+template <>
+void easy_top1<local_fp16_t>(local_fp16_t* logits, int* out, size_t batch, size_t vocab_size) {
+    #pragma omp parallel for
+    for (size_t b = 0; b < batch; b++) {
+        local_fp16_t* src = logits + b * vocab_size;
+
+        float max_v = std::numeric_limits<float>::min();
+        int max_i = -1;
+        for (int i = 0; i < (int)vocab_size; i++) {
+            float v = fp16_to_fp32( src[i] );
+            if ( v > max_v ) {
+                max_v = v;
+                max_i = i;
+            }
+        }
+        out[b] = max_i;
+    }
+}
+
+
+
+struct TopItem {
+    float v;
+    int i;
+    TopItem(int i_, float v_) : v(v_), i(i_) {};       
+};
+
+class Compare {
+public:
+    bool operator() (TopItem foo, TopItem bar) {
+        return foo.v > bar.v;
+    }
+};
+
+
+int do_sampling(std::priority_queue<TopItem, std::vector<TopItem>, Compare>& topk_, float temp, float randx) {
+    std::vector<TopItem> topk;
+    while ( topk_.size() > 0 ) {
+        topk.push_back( topk_.top() );
+        topk_.pop();
+    }
+    const int K = topk.size();
+
+    float sum = 1.0;
+    for(auto i = 0; i < K - 1; i++) {
+        topk[i].v = expf( (topk[i].v - topk[K-1].v) / temp );
+        sum = sum + topk[i].v;
+    }
+    topk[K-1].v = 0;
+    
+    float thres = 0.0;
+    for(auto i = 0; i < K; i++) {
+        thres += topk[i].v / sum;
+        if ( thres >= randx ) {
+            return topk[i].i;
+        }
+    }
+    return topk[K-1].i;
+}
+
+template <typename T>
+void easy_top3(T* logits, int* out, size_t batch, size_t vocab_size, float temp, float randx);
+
+template <>
+void easy_top3<float>(float* logits, int* out, size_t batch, size_t vocab_size, float temp, float randx) {
+
+    #pragma omp parallel for
+    for (size_t b = 0; b < batch; b++) {
+        float* src = logits + b * vocab_size;
+        
+        std::priority_queue<TopItem, std::vector<TopItem>, Compare> topk;
+        for (int i = 0; i < 3; i++) {
+            topk.push( {i, src[i]} );
+        }
+
+        for (int i = 3; i < (int)vocab_size; i++) {
+            float v = src[i];
+            if ( v >  topk.top().v ) {
+                topk.pop();
+                topk.push({i, v});
+            }
+        }
+
+        out[b] = do_sampling(topk, temp, randx);
+    }
+    
+}
+
+template <>
+void easy_top3<local_fp16_t>(local_fp16_t* logits, int* out, size_t batch, size_t vocab_size, float temp, float randx) {
+
+    #pragma omp parallel for
+    for (size_t b = 0; b < batch; b++) {
+        local_fp16_t* src = logits + b * vocab_size;
+        
+        std::priority_queue<TopItem, std::vector<TopItem>, Compare> topk;
+        for (int i = 0; i < 3; i++) {
+            topk.push( {i, fp16_to_fp32(src[i])} );
+        }
+
+        for (int i = 3; i < (int)vocab_size; i++) {
+            float v = fp16_to_fp32(src[i]);
+            if ( v >  topk.top().v ) {
+                topk.pop();
+                topk.push({i, v});
+            }
+        }
+
+        out[b] = do_sampling(topk, temp, randx);
     }
 }
 
