@@ -1,23 +1,25 @@
 .PHONY: all
 
+CXX = /home/teaonly/opt/android-ndk-r26c/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android32-clang++
+
 FLAGS = -Wall -O3 -Wno-maybe-uninitialized
 
-INC = -I. -I../install/include 
+INC = -I. -I../install/include
 
 all: install
 
 libtokenizer_combo.a: qwen.o 
-	 ar rcs $@ $?	
+	ar rcs $@ $?	
 
 qwen.o: qwen.cpp
-	g++ $(FLAGS) -c -o $@ $(INC) $<
+	$(CXX) $(FLAGS) -c -o $@ $(INC) $<
 
 rust/target/release/libtokenizers_c.so:
-	cd rust;cargo build --release
+	cd rust;cargo build --release --target=aarch64-linux-android
 
 install: libtokenizer_combo.a rust/target/release/libtokenizers_c.so
 	mkdir -p ../install/lib
-	cp rust/target/release/libtokenizers_c.so ../install/lib/
+	cp rust/target/aarch64-linux-android/release/libtokenizers_c.so ../install/lib/
 	cp libtokenizer_combo.a ../install/lib/
 	cp tokenizer_combo.hpp ../install/include
 

@@ -165,7 +165,7 @@ ComputingReturn TensorType::op_embed(tensor_t self, tensor_t table, tensor_t out
     vt_assert(self.get() == this, "can't be here!");
     vt_assert(self->dtype() == DataType::Int, "token id must be Int");
     vt_assert(table->dtype() == out->dtype(), " output and table must have same DataType" );
-    vt_assert(table->impl_index() == out->impl_index(), "table and outspace must have same device");
+    //vt_assert(table->impl_index() == out->impl_index(), "table and outspace must have same device");
     vt_assert(table->shape()[1] == out->shape()[2], "table and out must have same hidden size");
     auto ret = impl()->op_embed(self, table, out);
     op_check(ret, "embed");

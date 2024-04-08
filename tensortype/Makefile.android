@@ -1,0 +1,43 @@
+.PHONY: all
+
+CXX = /home/teaonly/opt/android-ndk-r26c/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android32-clang++
+
+FLAGS = -Wall -Wno-uninitialized -fopenmp -O3 -D_USING_DEVICE_DNNL_
+
+INC = -I. -I../install/include -I../install/include/cuda_kernels \
+	  -I${DNNL_DIR}/include 
+
+all: libtensortype.a
+
+
+libtensortype.a: context.o tensortype.o host_tensor.o dnnl_tensor.o dag.o nn_operators.o nn_kvcache.o
+	ar rcs $@ $? 
+
+context.o: context.hpp context.cpp
+	$(CXX) $(FLAGS) -c -o $@ $(INC) context.cpp
+
+tensortype.o: computing.hpp tensortype.hpp tensortype.cpp
+	$(CXX) $(FLAGS) -c -o $@ $(INC) tensortype.cpp
+
+host_tensor.o: computing.hpp tensortype.hpp host_tensor.hpp host_tensor.cpp
+	$(CXX) $(FLAGS) -c -o $@ $(INC) host_tensor.cpp
+
+dnnl_tensor.o: computing.hpp tensortype.hpp host_tensor.hpp dnnl_tensor.hpp dnnl_kernels/impl.hpp dnnl_tensor.cpp
+	$(CXX) $(FLAGS) -c -o $@ $(INC) dnnl_tensor.cpp
+
+dag.o: tensortype.hpp dag.hpp dag.cpp
+	$(CXX) $(FLAGS) -c -o $@ $(INC) dag.cpp
+
+nn_operators.o: computing.hpp tensortype.hpp dag.hpp nn_operators.cpp
+	$(CXX) $(FLAGS) -c -o $@ $(INC) nn_operators.cpp
+
+nn_kvcache.o: computing.hpp tensortype.hpp dag.hpp nn_kvcache.cpp
+	$(CXX) $(FLAGS) -c -o $@ $(INC) nn_kvcache.cpp
+
+install: libtensortype.a
+	cp *.hpp ../install/include
+	mkdir -p ../install/lib
+	cp $< ../install/lib
+
+clean:
+	rm -f *.a *.o

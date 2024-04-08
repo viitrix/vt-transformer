@@ -1,0 +1,27 @@
+.PHONY: all
+
+
+CXX = /home/teaonly/opt/android-ndk-r26c/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android32-clang++
+
+FLAGS = -Wall -fopenmp -O3 -D_USING_DEVICE_DNNL_=1 
+INC = -I../../install/include -I${DNNL_DIR}/include 
+
+LINK = -L../../install/lib \
+	   -L${DNNL_DIR}/lib \
+	   -ltokenizer_combo -ltokenizers_c \
+	   -ltensortype -ldnnl
+
+all: chat
+
+chat: chat.cpp memory.hpp
+	$(CXX) $(FLAGS) -o $@ $< $(INC) $(LINK)
+
+run16: chat 
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${DNNL_DIR}/lib:${VT_SOURCE}/install/lib ./chat ./inference_fp16.dag
+
+run32: chat 
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${DNNL_DIR}/lib:${VT_SOURCE}/install/lib ./chat ./inference_fp32.dag
+
+
+clean:
+	rm -f chat bech 

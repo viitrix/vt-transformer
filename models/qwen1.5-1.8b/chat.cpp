@@ -53,7 +53,7 @@ struct ChatApplication {
             std::string new_user =  "<|im_start|>user\n" + text + "<|im_end|>\n";
             history.push_back(new_user);
             history.push_back("<|im_start|>assistant\n");
-            std::vector<int> input_tokens = std::move( build_from_history(history) );
+            std::vector<int> input_tokens = build_from_history(history);
 
             std::vector<int> id;
             std::vector<int> mask;

@@ -98,8 +98,12 @@ ComputingReturn HostTensor<_DTYPE_>::op_embed(tensor_t self, tensor_t table, ten
     const int items = self->items();
     int* tokens = (int * )self->host_int()->data();
 
+    if ( !(output->is_host() || output->is_dnnl()) ) {
+        vt_panic("Can't do op_embed on output's device!");
+    }
+
     if ( table->dtype() == DataType::Float && output->dtype() == DataType::Float ) {
-        float* dst = (float *)output->host_float()->data();
+        float* dst = (float *)output->device_data();
         float* src = (float *)table->host_float()->data();
         for ( int i = 0; i < items; i++) {
             float* emb = &src[ tokens[i] * feature_size ];
@@ -109,7 +113,7 @@ ComputingReturn HostTensor<_DTYPE_>::op_embed(tensor_t self, tensor_t table, ten
         return OP_OK;
     }
     if ( table->dtype() == DataType::FP16 && output->dtype() == DataType::FP16) {
-        local_fp16_t* dst = (local_fp16_t *)output->host_fp16()->data();
+        local_fp16_t* dst = (local_fp16_t *)output->device_data();
         local_fp16_t* src = (local_fp16_t *)table->host_fp16()->data();
         for ( int i = 0; i < items; i++) {
             local_fp16_t* emb = &src[ tokens[i] * feature_size ];
