@@ -192,7 +192,14 @@ int main(int argc, char* argv[] ) {
         }
     } else if ( vt::CollectiveContext::pipe_rank == 1) {
         vt::MemoryContext::boot( MEM_CTX_SIZE );
-        vt::ComputingContext::boot( 0 );
+#ifdef _USING_DEVICE_DCU_
+        vt::ComputingContext::boot_dcu( 0 );
+#endif
+#ifdef _USING_DEVICE_DNNL_
+        vt::ComputingContext::boot_dnnl( 0 );
+#endif
+
+
         vt::Enviroment* env = new vt::Enviroment();
 
         do_inference(env, dag_file);
