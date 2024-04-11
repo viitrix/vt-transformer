@@ -187,6 +187,13 @@ using cx_q4_t = CXTensor<DataType::Q4>;
 using cx_pq_t = CXTensor<DataType::PQ>;
 #endif
 
+#ifdef _USING_DEVICE_ACL_
+template <DataType _DTYPE_> struct ACLTensor;
+using acl_float_t = ACLTensor<DataType::Float>;
+using acl_fp16_t = ACLTensor<DataType::FP16>;
+using acl_int_t = ACLTensor<DataType::Int>;
+#endif
+
 #ifdef _USING_DEVICE_DNNL_
 template <DataType _DTYPE_> struct DNNLTensor;
 using dnnl_float_t = DNNLTensor<DataType::Float>;
@@ -231,6 +238,12 @@ public:
     TensorType(cx_q8_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Q8), impl_(tensor) {};
     TensorType(cx_q4_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Q4), impl_(tensor) {};
     TensorType(cx_pq_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::PQ), impl_(tensor) {};
+#endif
+
+#ifdef _USING_DEVICE_ACL_
+    TensorType(acl_float_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Float), impl_(tensor) {};
+    TensorType(acl_fp16_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::FP16), impl_(tensor) {};
+    TensorType(acl_int_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Int), impl_(tensor) {};
 #endif
 
 #ifdef _USING_DEVICE_DNNL_
@@ -409,6 +422,27 @@ public:
     }
 #endif
 
+#if _USING_DEVICE_ACL_
+    acl_float_t* acl_float() {
+        if ( impl_.index() != ACL_FLOAT ) {
+            vt_panic("Cant get acl_float from a tensor");
+        }
+        return std::get<ACL_FLOAT>(impl_);
+    }
+    acl_fp16_t* acl_fp16() {
+        if ( impl_.index() != ACL_FP16 ) {
+            vt_panic("Cant get acl_fp16 from a tensor");
+        }
+        return std::get<ACL_FP16>(impl_);
+    }
+    acl_int_t* acl_int() {
+        if ( impl_.index() != ACL_INT ) {
+            vt_panic("Cant get acl_int from a tensor");
+        }
+        return std::get<ACL_INT>(impl_);
+    }
+#endif
+
 #if _USING_DEVICE_DNNL_
     dnnl_float_t* dnnl_float() {
         if ( impl_.index() != DNNL_FLOAT ) {
@@ -467,6 +501,12 @@ public:
         }
 #endif
 
+#ifdef _USING_DEVICE_ACL_
+        if ( (impl_index() <= ImplType::ACL_INT) && (impl_index() >= ImplType::ACL_FLOAT) ) {
+            return "acl";
+        }
+#endif
+
 #ifdef _USING_DEVICE_DNNL_
         if ( (impl_index() <= ImplType::DNNL_INT) && (impl_index() >= ImplType::DNNL_FLOAT) ) {
             return "dnnl";
@@ -483,15 +523,6 @@ public:
         }
         return false;
     }
-#ifdef _USING_DEVICE_DNNL_
-    bool is_dnnl() const {
-        auto ii = impl_index();
-        if ( (ii >= ImplType::DNNL_FLOAT) && (ii <= ImplType::DNNL_INT) ) {
-            return true;
-        }
-        return false;
-    }
-#endif
 
 #ifdef _USING_DEVICE_CUDA_
     bool is_cuda() const {
@@ -523,6 +554,26 @@ public:
     }
 #endif
 
+#ifdef _USING_DEVICE_ACL_
+    bool is_acl() const {
+        auto ii = impl_index();
+        if ( (ii >= ImplType::ACL_FLOAT) && (ii <= ImplType::ACL_INT) ) {
+            return true;
+        }
+        return false;
+    }
+#endif
+
+#ifdef _USING_DEVICE_DNNL_
+    bool is_dnnl() const {
+        auto ii = impl_index();
+        if ( (ii >= ImplType::DNNL_FLOAT) && (ii <= ImplType::DNNL_INT) ) {
+            return true;
+        }
+        return false;
+    }
+#endif
+
     bool is_float() const {
         if (impl_index() == ImplType::HOST_FLOAT) {
             return true;
@@ -541,6 +592,12 @@ public:
 
 #ifdef _USING_DEVICE_COREX_
         if (impl_index() == ImplType::CX_FLOAT) {
+            return true;
+        }
+#endif
+
+#ifdef _USING_DEVICE_ACL_
+        if (impl_index() == ImplType::ACL_FLOAT) {
             return true;
         }
 #endif
@@ -575,6 +632,12 @@ public:
         }
 #endif
 
+#ifdef _USING_DEVICE_ACL_
+        if (impl_index() == ImplType::ACL_FP16) {
+            return true;
+        }
+#endif
+
 #ifdef _USING_DEVICE_DNNL_
         if (impl_index() == ImplType::DNNL_FP16) {
             return true;
@@ -601,6 +664,12 @@ public:
 
 #ifdef _USING_DEVICE_COREX_
         if (impl_index() == ImplType::CX_INT) {
+            return true;
+        }
+#endif
+
+#ifdef _USING_DEVICE_ACL_
+        if (impl_index() == ImplType::ACL_INT) {
             return true;
         }
 #endif
@@ -793,6 +862,12 @@ private:
         CX_PQ,
 #endif
 
+#ifdef _USING_DEVICE_ACL_
+        ACL_FLOAT,
+        ACL_FP16,
+        ACL_INT,
+#endif
+
 #ifdef _USING_DEVICE_DNNL_
         DNNL_FLOAT,
         DNNL_FP16,
@@ -833,6 +908,12 @@ private:
                                         cx_pq_t*,
 #endif
 
+#ifdef _USING_DEVICE_ACL_
+                                        acl_float_t*,
+                                        acl_fp16_t*,
+                                        acl_int_t*,
+#endif
+
 #ifdef _USING_DEVICE_DNNL_
                                         dnnl_float_t*,
                                         dnnl_fp16_t*,
@@ -854,7 +935,7 @@ tensor_t create_host_q8(std::vector<size_t>& shape);
 tensor_t create_host_q4(std::vector<size_t>& shape);
 tensor_t create_host_pq(std::vector<size_t>& shape, int S);
 
-#if _USING_DEVICE_CUDA_
+#ifdef _USING_DEVICE_CUDA_
 tensor_t create_cuda_float(std::vector<size_t>& shape);
 tensor_t create_cuda_fp16(std::vector<size_t>& shape);
 tensor_t create_cuda_int(std::vector<size_t>& shape);
@@ -863,7 +944,7 @@ tensor_t create_cuda_q4(std::vector<size_t>& shape);
 tensor_t create_cuda_pq(std::vector<size_t>& shape, int S);
 #endif
 
-#if _USING_DEVICE_DCU_
+#ifdef _USING_DEVICE_DCU_
 tensor_t create_dcu_float(std::vector<size_t>& shape);
 tensor_t create_dcu_fp16(std::vector<size_t>& shape);
 tensor_t create_dcu_int(std::vector<size_t>& shape);
@@ -872,7 +953,7 @@ tensor_t create_dcu_q4(std::vector<size_t>& shape);
 tensor_t create_dcu_pq(std::vector<size_t>& shape, int S);
 #endif
 
-#if _USING_DEVICE_COREX_
+#ifdef _USING_DEVICE_COREX_
 tensor_t create_cx_float(std::vector<size_t>& shape);
 tensor_t create_cx_fp16(std::vector<size_t>& shape);
 tensor_t create_cx_int(std::vector<size_t>& shape);
@@ -881,7 +962,13 @@ tensor_t create_cx_q4(std::vector<size_t>& shape);
 tensor_t create_cx_pq(std::vector<size_t>& shape, int S);
 #endif
 
-#if _USING_DEVICE_DNNL_
+#ifdef _USING_DEVICE_DNNL_
+tensor_t create_acl_float(std::vector<size_t>& shape);
+tensor_t create_acl_fp16(std::vector<size_t>& shape);
+tensor_t create_acl_int(std::vector<size_t>& shape);
+#endif
+
+#ifdef _USING_DEVICE_DNNL_
 tensor_t create_dnnl_float(std::vector<size_t>& shape);
 tensor_t create_dnnl_fp16(std::vector<size_t>& shape);
 tensor_t create_dnnl_int(std::vector<size_t>& shape);

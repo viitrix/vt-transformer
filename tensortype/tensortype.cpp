@@ -8,6 +8,9 @@
 #ifdef _USING_DEVICE_DNNL_
 #include "dnnl_tensor.hpp"
 #endif
+#ifdef _USING_DEVICE_ACL_
+#include "acl_tensor.hpp"
+#endif
 #ifdef _USING_DEVICE_CUDA_
 #include "cuda_tensor.hpp"
 #endif
@@ -544,6 +547,21 @@ TensorType::~TensorType() {
     }
 #endif
 
+#ifdef _USING_DEVICE_ACL_
+    if ( impl_index() == ImplType::ACL_FLOAT ) {
+        acl_float_t* tensor = std::get<ACL_FLOAT>(impl_);
+        delete tensor;
+    }
+    if ( impl_index() == ImplType::ACL_FP16 ) {
+        acl_fp16_t* tensor = std::get<ACL_FP16>(impl_);
+        delete tensor;
+    }
+    if ( impl_index() == ImplType::ACL_INT ) {
+        acl_int_t* tensor = std::get<ACL_INT>(impl_);
+        delete tensor;
+    }
+#endif
+
 #ifdef _USING_DEVICE_DNNL_
     if ( impl_index() == ImplType::DNNL_FLOAT ) {
         dnnl_float_t* tensor = std::get<DNNL_FLOAT>(impl_);
@@ -668,6 +686,20 @@ TransformerComputing* TensorType::impl() {
     }
 #endif
 
+#ifdef _USING_DEVICE_ACL_
+    if ( impl_index() == ImplType::ACL_FLOAT ) {
+        acl_float_t* tensor = std::get<ACL_FLOAT>(impl_);
+        return tensor;
+    }
+    if ( impl_index() == ImplType::ACL_FP16 ) {
+        acl_fp16_t* tensor = std::get<ACL_FP16>(impl_);
+        return tensor;
+    }
+    if ( impl_index() == ImplType::ACL_INT ) {
+        acl_int_t* tensor = std::get<ACL_INT>(impl_);
+        return tensor;
+    }
+#endif
 
 #ifdef _USING_DEVICE_DNNL_
     if ( impl_index() == ImplType::DNNL_FLOAT ) {
@@ -795,6 +827,21 @@ void* TensorType::device_data(size_t index) {
     }
     if ( index == ImplType::CX_PQ ) {
         cx_pq_t* tensor = std::get<CX_PQ>(impl_);
+        return tensor->data();
+    }
+#endif
+
+#ifdef _USING_DEVICE_ACL_
+    if ( index == ImplType::ACL_FLOAT ) {
+        acl_float_t* tensor = std::get<ACL_FLOAT>(impl_);
+        return tensor->data();
+    }
+    if ( index == ImplType::ACL_INT ) {
+        acl_int_t* tensor = std::get<ACL_INT>(impl_);
+        return tensor->data();
+    }
+    if ( index == ImplType::ACL_FP16 ) {
+        acl_fp16_t* tensor = std::get<ACL_FP16>(impl_);
         return tensor->data();
     }
 #endif

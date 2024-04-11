@@ -1,8 +1,11 @@
 ### TOP DIR
 export VT_SOURCE=$HOME/workspace/vt-transformer
 
-### DNNL
+### DNNL for x86
 export DNNL_DIR=$HOME/opt/dnnl
+
+### ACL for aarch64
+export ACL_DIR=$HOME/opt/acl
 
 ### DCU 
 export DTK_DIR=$HOME/opt/dtk
