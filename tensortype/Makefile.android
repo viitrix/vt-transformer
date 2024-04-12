@@ -4,8 +4,7 @@ CXX = /home/teaonly/opt/android-ndk-r26c/toolchains/llvm/prebuilt/linux-x86_64/b
 
 FLAGS = -Wall -Wno-uninitialized -fopenmp -O3 -D_USING_DEVICE_ACL_
 
-INC = -I. -I../install/include -I../install/include/cuda_kernels \
-	  -I${ACL_DIR}/include 
+INC = -I. -I../install/include -I${ACL_DIR} -I${ACL_DIR}/include 
 
 all: libtensortype.a
 

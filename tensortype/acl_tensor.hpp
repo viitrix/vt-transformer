@@ -6,47 +6,39 @@
 #include "computing.hpp"
 #include "tensortype.hpp"
 
+namespace arm_compute {
+    class Tensor;
+}
+
 namespace vt {
+
 
 template <DataType _DTYPE_>
 struct ACLTensor : public TransformerComputing {
-    virtual ~ACLTensor() {
-        if ( owner_ ) {
-            MemoryContext::free(mem_, size_);
-        }
-    }
-    ACLTensor(const ShapeType& shape) : owner_(true) {
-        if ( _DTYPE_ == DataType::Float ) {
-            size_ = shape.numel() * sizeof(float);
-        } else if ( _DTYPE_ == DataType::Int ) {
-            size_ = shape.numel() * sizeof(int);
-        } else if ( _DTYPE_ == DataType::FP16 ) {
-            size_ =  shape.numel() * sizeof(local_fp16_t);
-        } else {
-            vt_panic("Can't be here!");
-        }
-
-        mem_ = MemoryContext::alloc(size_);
-    }
-    ACLTensor(const ShapeType& shape,  void *mem) : owner_(false), mem_(mem) {
-        if ( _DTYPE_ == DataType::Float ) {
-            size_ = shape.numel() * sizeof(float);
-        } else if ( _DTYPE_ == DataType::Int ) {
-            size_ = shape.numel() * sizeof(int);
-        } else if ( _DTYPE_ == DataType::FP16 ) {
-            size_ =  shape.numel() * sizeof(local_fp16_t);
-        } else {
-            vt_panic("Can't be here!");
-        }
-    }
+    virtual ~ACLTensor();
+    ACLTensor(const ShapeType& shape);
+    ACLTensor(const ShapeType& shape,  void *mem);
     void* data() {
         return mem_;
     }
 
+public:
+    // Interfaces from TransformerComputing
+    ComputingReturn io_dump(tensor_t self) override;
+    ComputingReturn io_load(tensor_t self, const char* fileName) override;
+    ComputingReturn io_save(tensor_t self, const char* fileName) override;
+
+    std::variant<ComputingReturn, size_t> op_sizeof(tensor_t self) override;
+    ComputingReturn op_zero(tensor_t self) override;
+    ComputingReturn op_fill(tensor_t self, float value) override;
+
+    ComputingReturn op_copy(tensor_t self, tensor_t from) override;
 protected:
     const bool owner_;
     void* mem_;
     size_t size_;
+
+    arm_compute::Tensor* t_;
 
     friend struct ACLTensor<DataType::Float>;
     friend struct ACLTensor<DataType::Int>;

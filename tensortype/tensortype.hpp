@@ -962,7 +962,7 @@ tensor_t create_cx_q4(std::vector<size_t>& shape);
 tensor_t create_cx_pq(std::vector<size_t>& shape, int S);
 #endif
 
-#ifdef _USING_DEVICE_DNNL_
+#ifdef _USING_DEVICE_ACL_
 tensor_t create_acl_float(std::vector<size_t>& shape);
 tensor_t create_acl_fp16(std::vector<size_t>& shape);
 tensor_t create_acl_int(std::vector<size_t>& shape);

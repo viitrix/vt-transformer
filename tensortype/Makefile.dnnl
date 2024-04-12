@@ -1,15 +1,8 @@
 .PHONY: all
 
-##
-##CXX = /home/teaonly/opt/android-ndk-r26c/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android32-clang++
-##CXX = g++
-##
-
-
 FLAGS = -Wall -Wno-maybe-uninitialized -fopenmp -O3 -D_USING_DEVICE_DNNL_
 
-INC = -I. -I../install/include -I../install/include/cuda_kernels \
-	  -I${DNNL_DIR}/include 
+INC = -I. -I../install/include -I${DNNL_DIR}/include 
 
 all: libtensortype.a
 
