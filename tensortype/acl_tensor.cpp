@@ -310,9 +310,19 @@ ComputingReturn ACLTensor<DT>::op_fill(tensor_t self, float value) {
 
 template<DataType DT>
 ComputingReturn ACLTensor<DT>::op_copy(tensor_t self, tensor_t from) {
-    arm_compute::NECopy op;
+    arm_compute::NECast op;
+    if ( DT == DataType::Float) {
+        op.configure(  from->acl_float()->t_, t_, arm_compute::ConvertPolicy::SATURATE);
+        op.run();
+        return OP_OK;
+    }
     if ( DT == DataType::FP16) {
-        op.configure(  from->acl_fp16()->t_, t_);
+        op.configure(  from->acl_fp16()->t_, t_, arm_compute::ConvertPolicy::SATURATE);
+        op.run();
+        return OP_OK;
+    }
+    if ( DT == DataType::Int) {
+        op.configure(  from->acl_int()->t_, t_,  arm_compute::ConvertPolicy::SATURATE);
         op.run();
         return OP_OK;
     }
@@ -323,11 +333,11 @@ template<DataType DT>
 ComputingReturn ACLTensor<DT>::op_convert(tensor_t self, tensor_t from) {
     vt_assert( self->shape().dim() == 4, "convert support 4D tensor only!");
     if ( DT == DataType::FP16 && from->is_float() ) {
-        // TODO
+        
         return OP_OK;
     }
     if ( DT == DataType::Float && from->is_fp16() ) {
-        // TODO
+        
         return OP_OK;
     }
     return OP_TODO_ERROR;
@@ -423,6 +433,27 @@ ComputingReturn ACLTensor<DT>::op_reshape(tensor_t self, size_t offset, const st
     return OP_OK;
 }
 
+
+template<DataType DT>
+ComputingReturn ACLTensor<DT>::op_add(tensor_t self, tensor_t b, tensor_t c) {
+    arm_compute::NEArithmeticAddition op;
+    if (   DT == DataType::Float) {
+        op.configure(t_, b->acl_float()->t_, c->acl_float()->t_, arm_compute::ConvertPolicy::SATURATE);
+        op.run();
+        return OP_OK;
+    }
+    if (   DT == DataType::FP16) {
+        op.configure(t_, b->acl_fp16()->t_, c->acl_fp16()->t_, arm_compute::ConvertPolicy::SATURATE);
+        op.run();
+        return OP_OK;
+    }
+    if (   DT == DataType::Int) {
+        op.configure(t_, b->acl_int()->t_, c->acl_int()->t_, arm_compute::ConvertPolicy::SATURATE);
+        op.run();
+        return OP_OK;
+    }
+    return OP_TODO_ERROR;
+}
 
 tensor_t create_acl_float(std::vector<size_t>& shape_) {
     ShapeType shape(shape_);

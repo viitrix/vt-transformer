@@ -41,6 +41,8 @@ public:
     std::variant<ComputingReturn, tensor_t> op_view_as(tensor_t self, size_t offset, const std::vector<size_t>& newShape, const char* dtype) override;
     ComputingReturn op_reshape(tensor_t self, size_t offset, const std::vector<size_t>& newShape) override;
 
+    ComputingReturn op_add(tensor_t self, tensor_t b, tensor_t c) override;
+    
 protected:
     const bool owner_;
     void* mem_;
