@@ -24,10 +24,24 @@ inline arm_compute::TensorShape buildShape(const ShapeType& s) {
     if ( vs.size() == 4 ) {
         return arm_compute::TensorShape( {vs[0], vs[1], vs[2], vs[3]} );
     }
-
     return arm_compute::TensorShape();
 }
 
+template <DataType _DTYPE_> 
+void ACLTensor<_DTYPE_>::buildTensorWithShape(arm_compute::Tensor& target, const std::vector<size_t> newShape) {
+    auto ts = buildShape(newShape);
+    if ( _DTYPE_ == DataType::Float ) {
+        target.allocator()->init( arm_compute::TensorInfo(ts, arm_compute::Format::F32));
+    } else if ( _DTYPE_ == DataType::Int ) {
+        target.allocator()->init( arm_compute::TensorInfo(ts, arm_compute::Format::S32));
+    } else if ( _DTYPE_ == DataType::FP16 ) {
+        target.allocator()->init( arm_compute::TensorInfo(ts, arm_compute::Format::F16));
+    } else {
+        vt_panic("Can't be here!");
+    }
+    
+    target.allocator()->import_memory(mem_);    
+}
 
 template <DataType _DTYPE_> 
 ACLTensor<_DTYPE_>::~ACLTensor()  {
@@ -453,6 +467,52 @@ ComputingReturn ACLTensor<DT>::op_add(tensor_t self, tensor_t b, tensor_t c) {
         return OP_OK;
     }
     return OP_TODO_ERROR;
+}
+
+template<DataType DT>
+ComputingReturn ACLTensor<DT>::op_linear(tensor_t self, tensor_t w, tensor_t bias, tensor_t dst) {
+    size_t batch = self->shape()[0];
+    size_t tokens = self->shape()[1];
+    size_t inSize = self->shape()[2];
+    size_t outSize = w->shape()[0];
+
+    size_t num = batch * tokens;
+    
+    arm_compute::NEGEMM op;
+    arm_compute::GEMMInfo info;
+    info.set_pretranspose_A(true);
+
+    arm_compute::Tensor A;
+    arm_compute::Tensor B;
+    arm_compute::Tensor C;
+    arm_compute::Tensor D;
+
+    buildTensorWithShape(B, {num, inSize});
+    if ( DT == DataType::Float ) {
+        w->acl_float()->buildTensorWithShape(A, {inSize, outSize});
+        if ( bias != nullptr ) {
+            bias->acl_float()->buildTensorWithShape(C, {1, outSize});
+        }
+        dst->acl_float()->buildTensorWithShape(D, {num, outSize});
+    } else if ( DT == DataType::FP16 ) {
+        w->acl_fp16()->buildTensorWithShape(A, {inSize, outSize});
+        if ( bias != nullptr ) {
+            bias->acl_fp16()->buildTensorWithShape(C, {1, outSize});
+        }
+        dst->acl_fp16()->buildTensorWithShape(D, {num, outSize});
+    } else {
+        return OP_TODO_ERROR;
+    }
+    
+    float alpha = 1.0f;
+    float beta  = 0.0f;
+    if ( bias != nullptr ) {
+        op.configure(&A, &B, &C, &D, alpha, beta, info);
+    } else {
+        op.configure(&A, &B, nullptr, &D, alpha, beta, info);
+    }
+    op.run();
+    return OP_OK;
 }
 
 tensor_t create_acl_float(std::vector<size_t>& shape_) {

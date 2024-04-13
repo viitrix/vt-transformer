@@ -22,6 +22,9 @@ struct ACLTensor : public TransformerComputing {
         return mem_;
     }
 
+private:
+    void buildTensorWithShape(arm_compute::Tensor& target, const std::vector<size_t> newShape);
+
 public:
     // Interfaces from TransformerComputing
     ComputingReturn io_dump(tensor_t self) override;
@@ -42,6 +45,7 @@ public:
     ComputingReturn op_reshape(tensor_t self, size_t offset, const std::vector<size_t>& newShape) override;
 
     ComputingReturn op_add(tensor_t self, tensor_t b, tensor_t c) override;
+    ComputingReturn op_linear(tensor_t self, tensor_t w, tensor_t b, tensor_t y) override;
     
 protected:
     const bool owner_;
