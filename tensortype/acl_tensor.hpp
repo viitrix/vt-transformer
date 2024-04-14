@@ -24,6 +24,7 @@ struct ACLTensor : public TransformerComputing {
 
 private:
     void buildTensorWithShape(arm_compute::Tensor& target, const std::vector<size_t> newShape);
+    void buildTensorWithShape(arm_compute::Tensor& target, const std::vector<size_t> newShape, void *mem);
 
 public:
     // Interfaces from TransformerComputing
