@@ -82,6 +82,29 @@ void rotary_embed(T* in, float* cos_sin, int* pos, T* out, size_t batch, size_t 
     }
 }
 
+template <typename T>
+void silu_product(T* a, T* b,  T* out, size_t items);
+
+template <>
+void silu_product<float>(float* in_act, float* in,  float* out, size_t items) {
+    #pragma omp parallel for
+    for ( size_t i = 0; i < items; i++) {
+        float act = in_act[i];
+        float in_ = in[i];
+        out[i] = act / (1.f + expf(-act)) * in_;
+    }
+}
+
+template <>
+void silu_product<device_fp16_t>(device_fp16_t* in_act, device_fp16_t* in,  device_fp16_t* out, size_t items) {
+    #pragma omp parallel for
+    for ( size_t i = 0; i < items; i++) {
+        float act = float( in_act[i] );
+        float in_ = float( in[i] );
+        out[i] = act / (1.f + expf(-act)) * in_;
+    }
+}
+
 
 }}
 #endif
