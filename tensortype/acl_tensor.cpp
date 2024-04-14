@@ -10,6 +10,8 @@
 
 namespace vt { 
 
+using device_fp16_t = __fp16;
+
 inline arm_compute::TensorShape buildShape(const ShapeType& s) {
     auto vs = s.vec();
     if ( vs.size() == 1 ) {
@@ -63,7 +65,7 @@ ACLTensor<_DTYPE_>::ACLTensor(const ShapeType& shape) : owner_(true) {
         size_ = shape.numel() * sizeof(int);
         t_->allocator()->init( arm_compute::TensorInfo(ts, arm_compute::Format::S32));
     } else if ( _DTYPE_ == DataType::FP16 ) {
-        size_ =  shape.numel() * sizeof(local_fp16_t);
+        size_ =  shape.numel() * sizeof(device_fp16_t);
         t_->allocator()->init( arm_compute::TensorInfo(ts, arm_compute::Format::F16));
     } else {
         vt_panic("Can't be here!");
@@ -128,16 +130,16 @@ ComputingReturn ACLTensor<_DTYPE_>::io_dump(tensor_t self) {
         return OP_OK;
     }
     if ( _DTYPE_ == DataType::FP16 ) {
-        local_fp16_t* d = (local_fp16_t *)data();
+        device_fp16_t* d = (device_fp16_t *)data();
         std::cout << "First " << first8 << " : ";
         for(size_t i = 0; i < first8; i++) {
-            std::cout << fp16_to_fp32(d[i]) << " ";
+            std::cout << float(d[i]) << " ";
         }
         std::cout << std::endl;
-        d = (local_fp16_t *)data() + self->items() - first8;
+        d = (device_fp16_t *)data() + self->items() - first8;
         std::cout << "Last " << first8 << " : ";
         for(size_t i = 0; i < first8; i++) {
-            std::cout << fp16_to_fp32(d[i]) << " ";
+            std::cout << float(d[i]) << " ";
         }
         std::cout << std::endl;
 
@@ -155,7 +157,7 @@ std::variant<ComputingReturn, size_t> ACLTensor<_DTYPE_>::op_sizeof(tensor_t sel
         return (size_t) self->items() * sizeof(int);
     }
     if ( _DTYPE_ == DataType::FP16 ) {
-        return (size_t) self->items() * sizeof(local_fp16_t);
+        return (size_t) self->items() * sizeof(device_fp16_t);
     }
     return OP_TODO_ERROR;
 }
@@ -197,12 +199,12 @@ ComputingReturn ACLTensor<DT>::op_causal_mask(tensor_t self, tensor_t out) {
     int* mask  = (int *)data();
 
     float*          out32 = nullptr;
-    local_fp16_t*   out16 = nullptr;
+    device_fp16_t*   out16 = nullptr;
 
     if ( out->dtype() == DataType::Float ) {
         out32 = (float *)out->acl_float()->data();
     } else if ( out->dtype() == DataType::FP16 ) {
-        out16 = (local_fp16_t *)out->acl_fp16()->data();
+        out16 = (device_fp16_t *)out->acl_fp16()->data();
     } else {
         return OP_TODO_ERROR;
     }
@@ -219,9 +221,9 @@ ComputingReturn ACLTensor<DT>::op_causal_mask(tensor_t self, tensor_t out) {
             acl_kernels::fill_causal_mask<float>(m, o, minv, full_tokens, nt_end);
         }
         if ( out16 != nullptr ) {
-            local_fp16_t* o = &out16[ b * new_tokens * full_tokens + nt * full_tokens ];
-            local_fp16_t minv = (unsigned short)0xFC00U;
-            acl_kernels::fill_causal_mask<local_fp16_t>(m, o, minv, full_tokens, nt_end);
+            device_fp16_t* o = &out16[ b * new_tokens * full_tokens + nt * full_tokens ];
+            device_fp16_t minv = (device_fp16_t)0xFC00U;
+            acl_kernels::fill_causal_mask<device_fp16_t>(m, o, minv, full_tokens, nt_end);
         }
     }
 
@@ -270,8 +272,8 @@ ComputingReturn ACLTensor<_DTYPE_>::io_load(tensor_t self, const char* fileName)
         size_t ret = inf.read( (char *)data(), sizeof(int) * self->items() ).gcount();
         vt_assert(ret == sizeof(int) * self->items(), "file size dont't match tensor");
     } else if (_DTYPE_ == DataType::FP16) {
-        size_t ret = inf.read( (char *)data(), sizeof(local_fp16_t) * self->items() ).gcount();
-        vt_assert(ret == sizeof(local_fp16_t) * self->items(), "file size dont't match tensor");
+        size_t ret = inf.read( (char *)data(), sizeof(device_fp16_t) * self->items() ).gcount();
+        vt_assert(ret == sizeof(device_fp16_t) * self->items(), "file size dont't match tensor");
     } else if (_DTYPE_ == DataType::Q8 ) {
         size_t s = std::get<1>(self->op_sizeof(self));
         size_t ret = inf.read( (char *)data(), s).gcount();
@@ -303,8 +305,8 @@ ComputingReturn ACLTensor<DT>::op_fill(tensor_t self, float value) {
         return OP_OK;
     }
     if ( DT == DataType::FP16 ) {
-        local_fp16_t *dst = (local_fp16_t *)mem_;
-        local_fp16_t v = fp32_to_fp16(value);
+        device_fp16_t *dst = (device_fp16_t *)mem_;
+        device_fp16_t v = float(value);
         for (size_t i = 0; i < items; i++) {
             dst[i] = v;
         }
@@ -373,7 +375,7 @@ std::variant<ComputingReturn, tensor_t> ACLTensor<_DTYPE_>::op_view(tensor_t sel
     }
     if ( _DTYPE_ == DataType::FP16 ) {
         ShapeType newShape(newShape_);
-        local_fp16_t *newData = (local_fp16_t *)data() + offset;
+        device_fp16_t *newData = (device_fp16_t *)data() + offset;
         auto* newCpuTensor = new ACLTensor<DataType::FP16>(newShape, newData);
         return std::make_shared<TensorType>(newCpuTensor, newShape);
     }
@@ -392,7 +394,7 @@ std::variant<ComputingReturn, tensor_t> ACLTensor<_DT_>::op_view_as(tensor_t sel
     } else if ( _DT_ == DataType::Int ) {
         newData = (char *)data() + offset * sizeof(int);
     } else if ( _DT_ == DataType::FP16 ) {
-        newData = (char *)data() + offset * sizeof(local_fp16_t);
+        newData = (char *)data() + offset * sizeof(device_fp16_t);
     } else {
         return OP_TODO_ERROR;
     }
@@ -435,7 +437,7 @@ ComputingReturn ACLTensor<DT>::op_reshape(tensor_t self, size_t offset, const st
         mem_  = (char *)data() + offset * sizeof(int);
         t_->allocator()->init( arm_compute::TensorInfo(ts, arm_compute::Format::S32));
     } else if ( DT == DataType::FP16 ) {
-        mem_  = (char *)data() + offset * sizeof(local_fp16_t);
+        mem_  = (char *)data() + offset * sizeof(device_fp16_t);
         t_->allocator()->init( arm_compute::TensorInfo(ts, arm_compute::Format::F16));
     } else {
         vt_panic("Can't be here!");
@@ -513,6 +515,76 @@ ComputingReturn ACLTensor<DT>::op_linear(tensor_t self, tensor_t w, tensor_t bia
     }
     op.run();
     return OP_OK;
+}
+
+template <DataType _DTYPE_>
+ComputingReturn ACLTensor<_DTYPE_>::op_rmsnorm(tensor_t self, tensor_t scale, tensor_t norm2, tensor_t y, float eps) {
+    size_t batch = self->shape()[0];
+    size_t tokens = self->shape()[1];
+    size_t feature = self->shape()[2];
+
+    size_t num = batch * tokens;
+    if (   _DTYPE_ == DataType::Float) {
+        acl_kernels::rmsnorm<DataType::Float>(self->acl_float(), scale->acl_float(), 
+            norm2->acl_float(), y->acl_float(),
+            num, feature, eps);
+        return OP_OK;
+    }
+    if (   _DTYPE_ == DataType::FP16) {
+        acl_kernels::rmsnorm<DataType::FP16>(self->acl_fp16(), scale->acl_fp16(), 
+            norm2->acl_fp16(), y->acl_fp16(),
+            num, feature, eps);
+        return OP_OK;
+    }
+    return OP_TODO_ERROR;    
+}
+
+template <DataType DT>
+ComputingReturn ACLTensor<DT>::op_rotary_embed(tensor_t self, tensor_t cached, tensor_t pos_, tensor_t y) {
+    size_t batch = self->shape()[0];
+    size_t tokens = self->shape()[1];
+    size_t heads = self->shape()[2];
+    size_t hidden = self->shape()[3];
+
+    vt_assert(hidden == cached->shape()[1], "heads number must be same with cache");
+
+    int* pos = (int*) pos_->acl_int()->data();
+    if ( DT == DataType::Float ) {
+
+        float* in = (float *)data();
+        float* cos_sin = (float *)cached->acl_float()->data();
+        float* out = (float *)y->acl_float()->data();
+
+        acl_kernels::rotary_embed<float>(in, cos_sin, pos, out, batch, heads, tokens, hidden);
+
+        return OP_OK;
+    }
+    if ( DT == DataType::FP16 ) {
+        device_fp16_t* in = (device_fp16_t *)data();
+        device_fp16_t* out = (device_fp16_t *)y->acl_fp16()->data();
+        float* cos_sin = (float *)cached->acl_float()->data();
+
+        acl_kernels::rotary_embed<device_fp16_t>(in, cos_sin, pos, out, batch, heads, tokens, hidden);
+        return OP_OK;
+    }
+    return OP_TODO_ERROR;  
+}
+
+template <DataType DT>
+ComputingReturn ACLTensor<DT>::op_transpose_0213(tensor_t self, tensor_t y) {
+    arm_compute::NEPermute op;
+    const arm_compute::PermutationVector  perm(0U,2U,1U,3U);
+    if ( DT == DataType::Float ) {
+        op.configure(t_, y->acl_float()->t_,  perm);
+        op.run();
+        return OP_OK;   
+    }
+    if ( DT == DataType::FP16 ) {
+        op.configure(t_, y->acl_fp16()->t_,  perm);
+        op.run();
+        return OP_OK;
+    }
+    return OP_TODO_ERROR;  
 }
 
 tensor_t create_acl_float(std::vector<size_t>& shape_) {
