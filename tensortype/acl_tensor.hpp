@@ -56,6 +56,10 @@ public:
     ComputingReturn op_attn(tensor_t self, tensor_t value, tensor_t out) override;
     ComputingReturn op_silu_product(tensor_t self, tensor_t in, tensor_t dst) override;
 
+    std::variant<ComputingReturn, int> op_all_logits(tensor_t self, tensor_t mask,  tensor_t lm_head, tensor_t output) override;
+    std::variant<ComputingReturn, tensor_t> op_sampling_top1(tensor_t self) override;
+    std::variant<ComputingReturn, tensor_t> op_sampling_top3(tensor_t self, float temp) override;
+
 protected:
     const bool owner_;
     void* mem_;

@@ -777,6 +777,121 @@ ComputingReturn  ACLTensor<DT>::op_silu_product(tensor_t self, tensor_t in, tens
     return OP_TODO_ERROR;
 }
 
+template<DataType DT>
+std::variant<ComputingReturn,int> ACLTensor<DT>::op_all_logits(tensor_t self, tensor_t mask_,  tensor_t lm_head, tensor_t output) {
+    int batch = self->shape()[0];
+    int new_tokens = self->shape()[1];
+    size_t hidden_size = self->shape()[2];
+    int full_tokens = mask_->shape()[1];
+
+    size_t vocab_size = lm_head->shape()[0];
+
+    int* mask = (int *)mask_->host_int()->data();
+    int pred = 0;
+
+    float alpha = 1.0f;
+    float beta  = 0.0f;
+    arm_compute::NEGEMM op;
+    arm_compute::GEMMInfo info;
+    info.set_pretranspose_A(true);
+
+    for (int b = 0;  b < batch; b++) {
+        int* mk = &mask[b * full_tokens];
+        for ( int i = 0; i < new_tokens ; i++) {
+            int ii = full_tokens - new_tokens + i;
+            if ( mk[ii] != 2 ) {
+                continue;
+            }
+            int target = i;
+
+            if ( DT == DataType::Float ) {
+                void* dst = (float *)output->acl_float()->data() + pred * vocab_size;
+                void* src = (float *)data() + b * new_tokens * hidden_size + target * hidden_size;
+                void* w = (float *)lm_head->acl_float()->data();
+
+                arm_compute::Tensor B;
+                buildTensorWithShape(B, {1,  hidden_size}, src);
+                arm_compute::Tensor A;
+                lm_head->acl_float()->buildTensorWithShape(A, {vocab_size,  hidden_size}, w);
+                
+                arm_compute::Tensor D;
+                output->acl_float()->buildTensorWithShape(D, {1,  vocab_size}, dst);
+                op.configure(&A, &B, nullptr, &D, alpha, beta, info);
+                op.run();                
+            } else if ( DT == DataType::FP16 ) {
+                auto* dst = (device_fp16_t *)output->acl_fp16()->data() + pred * vocab_size;
+                auto* src = (device_fp16_t *)data() + b * new_tokens * hidden_size + target * hidden_size;
+                auto* w = (device_fp16_t *)lm_head->acl_fp16()->data();
+                
+                arm_compute::Tensor B;
+                arm_compute::Tensor A;
+                buildTensorWithShape(B, {1,  hidden_size}, src);
+                lm_head->acl_fp16()->buildTensorWithShape(A, {vocab_size,  hidden_size}, w);
+                
+                arm_compute::Tensor D;
+                output->acl_fp16()->buildTensorWithShape(D, {1,  vocab_size}, dst);
+                op.configure(&A, &B, nullptr, &D, alpha, beta, info);
+                op.run();  
+
+            } else {
+                return OP_TODO_ERROR;
+            }
+            pred ++;
+        }
+    }
+
+    return pred;
+}
+
+template<DataType DT>
+std::variant<ComputingReturn, tensor_t>  ACLTensor<DT>::op_sampling_top1(tensor_t self) {
+    if ( DT != DataType::Float && DT != DataType::FP16 ) {
+        return OP_INPUT_ERROR;
+    }
+
+    int batch = self->shape()[0];
+    int vocab_size = self->shape()[1];
+
+    std::vector<size_t> ret_shape{ (size_t)batch};
+    tensor_t ret = vt::create_host_int( ret_shape );
+    int* out = (int *)ret->device_data();
+
+    if ( DT == DataType::FP16 ) {
+        local_fp16_t* logits = (local_fp16_t *) self->device_data();
+        acl_kernels::easy_top1<local_fp16_t>(logits, out, batch, vocab_size);
+    } else {
+        float* logits = (float *) self->device_data();
+        acl_kernels::easy_top1<float>(logits, out, batch, vocab_size);
+    }
+    return ret;
+}
+
+template<DataType DT>
+std::variant<ComputingReturn, tensor_t>  ACLTensor<DT>::op_sampling_top3(tensor_t self, float temp) {
+    if ( DT != DataType::Float && DT != DataType::FP16 ) {
+        return OP_INPUT_ERROR;
+    }
+
+    int batch = self->shape()[0];
+    int vocab_size = self->shape()[1];
+
+    std::vector<size_t> ret_shape{ (size_t)batch};
+    tensor_t ret = vt::create_host_int( ret_shape );
+    int* out = (int *)ret->device_data();
+
+    std::uniform_real_distribution<> dist(0.0, 1.0);
+    float randx = dist( *ComputingContext::rng );
+
+    if ( DT == DataType::FP16 ) {
+        local_fp16_t* logits = (local_fp16_t *) self->device_data();
+        acl_kernels::easy_top3<local_fp16_t>(logits, out, batch, vocab_size, temp, randx);
+    } else {
+        float* logits = (float *) self->device_data();
+        acl_kernels::easy_top3<float>(logits, out, batch, vocab_size, temp, randx);
+    }
+    return ret;
+}
+
 tensor_t create_acl_float(std::vector<size_t>& shape_) {
     ShapeType shape(shape_);
     ACLTensor<DataType::Float>* tensor = new ACLTensor<DataType::Float>(shape);

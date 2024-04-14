@@ -105,6 +105,140 @@ void silu_product<device_fp16_t>(device_fp16_t* in_act, device_fp16_t* in,  devi
     }
 }
 
+template <typename T>
+void easy_top1(T* logits, int* out, size_t batch, size_t vocab_size);
+
+template <>
+void easy_top1<float>(float* logits, int* out, size_t batch, size_t vocab_size) {
+    #pragma omp parallel for
+    for (size_t b = 0; b < batch; b++) {
+        float* src = logits + b * vocab_size;
+
+        float max_v = std::numeric_limits<float>::min();
+        int max_i = -1;
+        for (int i = 0; i < (int)vocab_size; i++) {
+            if ( src[i] > max_v ) {
+                max_v = src[i];
+                max_i = i;
+            }
+        }
+        out[b] = max_i;
+    }
+}
+
+template <>
+void easy_top1<device_fp16_t>(device_fp16_t* logits, int* out, size_t batch, size_t vocab_size) {
+    #pragma omp parallel for
+    for (size_t b = 0; b < batch; b++) {
+        device_fp16_t* src = logits + b * vocab_size;
+
+        float max_v = std::numeric_limits<float>::min();
+        int max_i = -1;
+        for (int i = 0; i < (int)vocab_size; i++) {
+            float v = float( src[i] );
+            if ( v > max_v ) {
+                max_v = v;
+                max_i = i;
+            }
+        }
+        out[b] = max_i;
+    }
+}
+
+
+
+struct TopItem {
+    float v;
+    int i;
+    TopItem(int i_, float v_) : v(v_), i(i_) {};       
+};
+
+class Compare {
+public:
+    bool operator() (TopItem foo, TopItem bar) {
+        return foo.v > bar.v;
+    }
+};
+
+
+int do_sampling(std::priority_queue<TopItem, std::vector<TopItem>, Compare>& topk_, float temp, float randx) {
+    std::vector<TopItem> topk;
+    while ( topk_.size() > 0 ) {
+        topk.push_back( topk_.top() );
+        topk_.pop();
+    }
+    const int K = topk.size();
+
+    float sum = 1.0;
+    for(auto i = 0; i < K - 1; i++) {
+        topk[i].v = expf( (topk[i].v - topk[K-1].v) / temp );
+        sum = sum + topk[i].v;
+    }
+    topk[K-1].v = 0;
+    
+    float thres = 0.0;
+    for(auto i = 0; i < K; i++) {
+        thres += topk[i].v / sum;
+        if ( thres >= randx ) {
+            return topk[i].i;
+        }
+    }
+    return topk[K-1].i;
+}
+
+template <typename T>
+void easy_top3(T* logits, int* out, size_t batch, size_t vocab_size, float temp, float randx);
+
+template <>
+void easy_top3<float>(float* logits, int* out, size_t batch, size_t vocab_size, float temp, float randx) {
+
+    #pragma omp parallel for
+    for (size_t b = 0; b < batch; b++) {
+        float* src = logits + b * vocab_size;
+        
+        std::priority_queue<TopItem, std::vector<TopItem>, Compare> topk;
+        for (int i = 0; i < 3; i++) {
+            topk.push( {i, src[i]} );
+        }
+
+        for (int i = 3; i < (int)vocab_size; i++) {
+            float v = src[i];
+            if ( v >  topk.top().v ) {
+                topk.pop();
+                topk.push({i, v});
+            }
+        }
+
+        out[b] = do_sampling(topk, temp, randx);
+    }
+    
+}
+
+template <>
+void easy_top3<device_fp16_t>(device_fp16_t* logits, int* out, size_t batch, size_t vocab_size, float temp, float randx) {
+
+    #pragma omp parallel for
+    for (size_t b = 0; b < batch; b++) {
+        device_fp16_t* src = logits + b * vocab_size;
+        
+        std::priority_queue<TopItem, std::vector<TopItem>, Compare> topk;
+        for (int i = 0; i < 3; i++) {
+            topk.push( {i, float(src[i])} );
+        }
+
+        for (int i = 3; i < (int)vocab_size; i++) {
+            float v = float(src[i]);
+            if ( v >  topk.top().v ) {
+                topk.pop();
+                topk.push({i, v});
+            }
+        }
+
+        out[b] = do_sampling(topk, temp, randx);
+    }
+}
+
+
 
 }}
 #endif
