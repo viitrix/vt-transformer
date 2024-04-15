@@ -497,10 +497,10 @@ ComputingReturn ACLTensor<DT>::op_linear(tensor_t self, tensor_t w, tensor_t bia
 
     buildTensorWithShape(A, {num, inSize});
     if ( DT == DataType::Float ) {
-        w->acl_float()->buildTensorWithShape(B, {inSize, outSize});
+        w->acl_float()->buildTensorWithShape(B, {outSize, inSize});
         dst->acl_float()->buildTensorWithShape(D, {num, outSize});
     } else if ( DT == DataType::FP16 ) {
-        w->acl_fp16()->buildTensorWithShape(B, {inSize, outSize});        
+        w->acl_fp16()->buildTensorWithShape(B, {outSize, inSize});
         dst->acl_fp16()->buildTensorWithShape(D, {num, outSize});
     } else {
         return OP_TODO_ERROR;
@@ -615,13 +615,13 @@ ComputingReturn ACLTensor<_DTYPE_>::op_qk(tensor_t self, tensor_t key, tensor_t 
             float* C = (float *)(qk->acl_float()->data()) + i * TT;
 
             arm_compute::Tensor src0;
-            key->acl_float()->buildTensorWithShape(src0, {(size_t)ftokens, (size_t)hhidden}, B);
+            buildTensorWithShape(src0, {(size_t)ntokens, (size_t)hhidden}, A);
             arm_compute::Tensor src1;
-            buildTensorWithShape(src1, {(size_t)ntokens, (size_t)hhidden}, A);
+            key->acl_float()->buildTensorWithShape(src1, {(size_t)ftokens, (size_t)hhidden}, B);
             arm_compute::Tensor dst;
             qk->acl_float()->buildTensorWithShape(dst, {(size_t)ntokens, (size_t)ftokens}, C);
             
-            op.configure(&src1, &src0, nullptr, &dst, alpha, beta, info);
+            op.configure(&src0, &src1, nullptr, &dst, alpha, beta, info);
             op.run();
         }
         return OP_OK;
@@ -633,13 +633,14 @@ ComputingReturn ACLTensor<_DTYPE_>::op_qk(tensor_t self, tensor_t key, tensor_t 
             device_fp16_t* C = (device_fp16_t *)(qk->acl_fp16()->data()) + i * TT;
 
             arm_compute::Tensor src0;
-            key->acl_fp16()->buildTensorWithShape(src0, {(size_t)ftokens, (size_t)hhidden}, B);
+            buildTensorWithShape(src0, {(size_t)ntokens, (size_t)hhidden}, A);
             arm_compute::Tensor src1;
-            buildTensorWithShape(src1, {(size_t)ntokens, (size_t)hhidden}, A);
+            key->acl_fp16()->buildTensorWithShape(src1, {(size_t)ftokens, (size_t)hhidden}, B);
             arm_compute::Tensor dst;
             qk->acl_fp16()->buildTensorWithShape(dst, {(size_t)ntokens, (size_t)ftokens}, C);
             
-            op.configure(&sr
+            op.configure(&src0, &src1, nullptr, &dst, alpha, beta, info);
+            op.run();
         }
         return OP_OK;
     }
@@ -705,10 +706,10 @@ ComputingReturn  ACLTensor<_DTYPE_>::op_attn(tensor_t self, tensor_t value_, ten
             float* B = (float *)data() + i * TT;
             float* C = (float *)(out_->acl_float()->data()) + i * HnT;
 
-            arm_compute::Tensor src0;
-            value_->acl_float()->buildTensorWithShape(src0, {(size_t)ftokens, (size_t)hhidden}, A);
             arm_compute::Tensor src1;
-            buildTensorWithShape(src1, {(size_t)ntokens, (size_t)ftokens}, B);
+            value_->acl_float()->buildTensorWithShape(src1, {(size_t)ftokens, (size_t)hhidden}, A);
+            arm_compute::Tensor src0;
+            buildTensorWithShape(src0, {(size_t)ntokens, (size_t)ftokens}, B);
             arm_compute::Tensor dst;
             out_->acl_float()->buildTensorWithShape(dst, {(size_t)ntokens, (size_t)hhidden}, C);
 
