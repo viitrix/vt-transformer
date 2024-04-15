@@ -18,13 +18,13 @@ inline arm_compute::TensorShape buildShape(const ShapeType& s) {
         return arm_compute::TensorShape( {vs[0]} );
     }
     if ( vs.size() == 2 ) {
-        return arm_compute::TensorShape( {vs[0], 1, 1, vs[1]} );
+        return arm_compute::TensorShape( {vs[1], vs[0]} );
     }
     if ( vs.size() == 3 ) {
-        return arm_compute::TensorShape( {vs[0], 1, vs[1], vs[2]} );
+        return arm_compute::TensorShape( {vs[2], vs[1], vs[0]} );
     }
     if ( vs.size() == 4 ) {
-        return arm_compute::TensorShape( {vs[0], vs[1], vs[2], vs[3]} );
+        return arm_compute::TensorShape( {vs[3], vs[2], vs[1], vs[0]} );
     }
     return arm_compute::TensorShape();
 }
@@ -342,19 +342,11 @@ ComputingReturn ACLTensor<DT>::op_fill(tensor_t self, float value) {
 template<DataType DT>
 ComputingReturn ACLTensor<DT>::op_copy(tensor_t self, tensor_t from) {
     arm_compute::NECast op;
-    if ( DT == DataType::Float) {
-        op.configure(  from->acl_float()->t_, t_, arm_compute::ConvertPolicy::SATURATE);
-        op.run();
-        return OP_OK;
-    }
-    if ( DT == DataType::FP16) {
-        op.configure(  from->acl_fp16()->t_, t_, arm_compute::ConvertPolicy::SATURATE);
-        op.run();
-        return OP_OK;
-    }
-    if ( DT == DataType::Int) {
-        op.configure(  from->acl_int()->t_, t_,  arm_compute::ConvertPolicy::SATURATE);
-        op.run();
+    if ( from->is_host() ||  from->is_acl()) {
+        auto s = std::get<1>(self->op_sizeof(self));
+        void* x = from->device_data();
+        void* y = data();
+        memcpy(y, x, s);
         return OP_OK;
     }
     return OP_TODO_ERROR;
@@ -497,25 +489,18 @@ ComputingReturn ACLTensor<DT>::op_linear(tensor_t self, tensor_t w, tensor_t bia
 
     arm_compute::NEGEMM op;
     arm_compute::GEMMInfo info;
-    info.set_pretranspose_A(true);
+    info.set_pretranspose_B(true);
 
     arm_compute::Tensor A;
     arm_compute::Tensor B;
-    arm_compute::Tensor C;
     arm_compute::Tensor D;
 
-    buildTensorWithShape(B, {num, inSize});
+    buildTensorWithShape(A, {num, inSize});
     if ( DT == DataType::Float ) {
-        w->acl_float()->buildTensorWithShape(A, {inSize, outSize});
-        if ( bias != nullptr ) {
-            bias->acl_float()->buildTensorWithShape(C, {1, outSize});
-        }
+        w->acl_float()->buildTensorWithShape(B, {inSize, outSize});
         dst->acl_float()->buildTensorWithShape(D, {num, outSize});
     } else if ( DT == DataType::FP16 ) {
-        w->acl_fp16()->buildTensorWithShape(A, {inSize, outSize});
-        if ( bias != nullptr ) {
-            bias->acl_fp16()->buildTensorWithShape(C, {1, outSize});
-        }
+        w->acl_fp16()->buildTensorWithShape(B, {inSize, outSize});        
         dst->acl_fp16()->buildTensorWithShape(D, {num, outSize});
     } else {
         return OP_TODO_ERROR;
@@ -523,12 +508,12 @@ ComputingReturn ACLTensor<DT>::op_linear(tensor_t self, tensor_t w, tensor_t bia
 
     float alpha = 1.0f;
     float beta  = 0.0f;
-    if ( bias != nullptr ) {
-        op.configure(&A, &B, &C, &D, alpha, beta, info);
-    } else {
-        op.configure(&A, &B, nullptr, &D, alpha, beta, info);
-    }
+    op.configure(&A, &B, nullptr, &D, alpha, beta, info);    
     op.run();
+    
+    if ( bias != nullptr) {
+        dst->op_add(dst, bias, dst);
+    }
     return OP_OK;
 }
 
@@ -619,10 +604,10 @@ ComputingReturn ACLTensor<_DTYPE_>::op_qk(tensor_t self, tensor_t key, tensor_t 
     int HfT = hhidden * ftokens ;
     int TT = ftokens * ntokens;
 
-    arm_compute::GEMMInfo info;
-    info.set_pretranspose_A(true);
-
     arm_compute::NEGEMM op;
+    arm_compute::GEMMInfo info;
+    info.set_pretranspose_B(true);
+
     if ( _DTYPE_ == DataType::Float ) {
         for (int i = 0; i < batch * heads; i++) {
             float* A = (float *)data() + i * HnT;
@@ -635,8 +620,8 @@ ComputingReturn ACLTensor<_DTYPE_>::op_qk(tensor_t self, tensor_t key, tensor_t 
             buildTensorWithShape(src1, {(size_t)ntokens, (size_t)hhidden}, A);
             arm_compute::Tensor dst;
             qk->acl_float()->buildTensorWithShape(dst, {(size_t)ntokens, (size_t)ftokens}, C);
-
-            op.configure(&src0, &src1, nullptr, &dst, alpha, beta, info);
+            
+            op.configure(&src1, &src0, nullptr, &dst, alpha, beta, info);
             op.run();
         }
         return OP_OK;
@@ -653,9 +638,8 @@ ComputingReturn ACLTensor<_DTYPE_>::op_qk(tensor_t self, tensor_t key, tensor_t 
             buildTensorWithShape(src1, {(size_t)ntokens, (size_t)hhidden}, A);
             arm_compute::Tensor dst;
             qk->acl_fp16()->buildTensorWithShape(dst, {(size_t)ntokens, (size_t)ftokens}, C);
-
-            op.configure(&src0, &src1, nullptr, &dst, alpha, beta, info);
-            op.run();
+            
+            op.configure(&sr
         }
         return OP_OK;
     }

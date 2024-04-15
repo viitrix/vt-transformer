@@ -88,6 +88,16 @@ ComputingReturn HostTensor<_DTYPE_>::op_copy(tensor_t self, tensor_t src) {
     }
 #endif
 
+#ifdef _USING_DEVICE_ACL_
+    if ( src->is_acl() ) {
+        size_t s = std::get<1>( self->op_sizeof(self) );
+        void* x = src->device_data();
+        void* y = data();
+        memcpy(y, x, s);
+        return OP_OK;
+    }
+#endif
+
     vt_panic("Can't be here!");
     return OP_TODO_ERROR;
 }
