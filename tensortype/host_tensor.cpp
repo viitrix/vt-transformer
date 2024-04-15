@@ -99,7 +99,7 @@ ComputingReturn HostTensor<_DTYPE_>::op_embed(tensor_t self, tensor_t table, ten
     int* tokens = (int * )self->host_int()->data();
 
     std::string odev = output->device_name();
-    if(  ! ( odev == "dnnl" || odev == "acl" ) ) {
+    if(  ! ( odev == "dnnl" || odev == "acl" || odev == "host" ) ) {
         vt_panic("Can't do op_embed on output's device!");
     }
 
