@@ -146,6 +146,8 @@ void do_inference(vt::Enviroment* env, const char* dag_file) {
         env->stack().push_string("corex");
 #elif _USING_DEVICE_DNNL_
         env->stack().push_string("dnnl");
+#elif _USING_DEVICE_ACL_
+        env->stack().push_string("acl");
 #endif
         env->run(init_bin);
         delete init_bin;
@@ -208,6 +210,10 @@ int main(int argc, char* argv[] ) {
 #ifdef _USING_DEVICE_DNNL_
         vt::ComputingContext::boot_dnnl( 0 );
 #endif
+#ifdef _USING_DEVICE_ACL_
+        vt::ComputingContext::boot_acl( 0 );
+#endif
+
 
         vt::Enviroment* env = new vt::Enviroment();
         env->insert_native_word("app.mem", MemoryCounting::creator);

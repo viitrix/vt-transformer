@@ -144,6 +144,7 @@ struct ComputingContext {
     static std::mt19937* rng;
 
     static void boot_dnnl(int device);
+    static void boot_acl(int device);
     static void boot_cuda(int device);
     static void boot_corex(int device);
     static void boot_dcu(int device);

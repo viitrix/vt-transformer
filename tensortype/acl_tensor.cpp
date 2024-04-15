@@ -8,7 +8,7 @@
 #include "acl_kernels/impl.hpp"
 #include "host_tensor.hpp"
 
-namespace vt { 
+namespace vt {
 
 using device_fp16_t = __fp16;
 
@@ -29,7 +29,7 @@ inline arm_compute::TensorShape buildShape(const ShapeType& s) {
     return arm_compute::TensorShape();
 }
 
-template <DataType _DTYPE_> 
+template <DataType _DTYPE_>
 void ACLTensor<_DTYPE_>::buildTensorWithShape(arm_compute::Tensor& target, const std::vector<size_t> newShape) {
     auto ts = buildShape(newShape);
     if ( _DTYPE_ == DataType::Float ) {
@@ -41,11 +41,11 @@ void ACLTensor<_DTYPE_>::buildTensorWithShape(arm_compute::Tensor& target, const
     } else {
         vt_panic("Can't be here!");
     }
-    
-    target.allocator()->import_memory(mem_);    
+
+    target.allocator()->import_memory(mem_);
 }
 
-template <DataType _DTYPE_> 
+template <DataType _DTYPE_>
 void ACLTensor<_DTYPE_>::buildTensorWithShape(arm_compute::Tensor& target, const std::vector<size_t> newShape, void* mem) {
     auto ts = buildShape(newShape);
     if ( _DTYPE_ == DataType::Float ) {
@@ -57,11 +57,11 @@ void ACLTensor<_DTYPE_>::buildTensorWithShape(arm_compute::Tensor& target, const
     } else {
         vt_panic("Can't be here!");
     }
-    
+
     target.allocator()->import_memory(mem);
 }
 
-template <DataType _DTYPE_> 
+template <DataType _DTYPE_>
 ACLTensor<_DTYPE_>::~ACLTensor()  {
     if ( owner_ ) {
         MemoryContext::free(mem_, size_);
@@ -69,7 +69,7 @@ ACLTensor<_DTYPE_>::~ACLTensor()  {
     delete t_;
 }
 
-template <DataType _DTYPE_> 
+template <DataType _DTYPE_>
 ACLTensor<_DTYPE_>::ACLTensor(const ShapeType& shape) : owner_(true) {
     t_ = new arm_compute::Tensor();
     arm_compute::TensorShape ts = buildShape(shape);
@@ -90,7 +90,7 @@ ACLTensor<_DTYPE_>::ACLTensor(const ShapeType& shape) : owner_(true) {
     t_->allocator()->import_memory(mem_);
 }
 
-template <DataType _DTYPE_> 
+template <DataType _DTYPE_>
 ACLTensor<_DTYPE_>::ACLTensor(const ShapeType& shape,  void *mem) : owner_(false), mem_(mem) {
     t_ = new arm_compute::Tensor();
     arm_compute::TensorShape ts = buildShape(shape);
@@ -105,8 +105,7 @@ ACLTensor<_DTYPE_>::ACLTensor(const ShapeType& shape,  void *mem) : owner_(false
     } else {
         vt_panic("Can't be here!");
     }
-    
-    mem_ = MemoryContext::alloc(size_);
+
     t_->allocator()->import_memory(mem_);
 }
 
@@ -365,11 +364,11 @@ template<DataType DT>
 ComputingReturn ACLTensor<DT>::op_convert(tensor_t self, tensor_t from) {
     vt_assert( self->shape().dim() == 4, "convert support 4D tensor only!");
     if ( DT == DataType::FP16 && from->is_float() ) {
-        
+
         return OP_OK;
     }
     if ( DT == DataType::Float && from->is_fp16() ) {
-        
+
         return OP_OK;
     }
     return OP_TODO_ERROR;
@@ -448,7 +447,7 @@ ComputingReturn ACLTensor<DT>::op_reshape(tensor_t self, size_t offset, const st
     if ( DT == DataType::Float ) {
         mem_  = (char *)data() + offset * sizeof(float);
         t_->allocator()->init( arm_compute::TensorInfo(ts, arm_compute::Format::F32));
-        
+
     } else if ( DT == DataType::Int ) {
         mem_  = (char *)data() + offset * sizeof(int);
         t_->allocator()->init( arm_compute::TensorInfo(ts, arm_compute::Format::S32));
@@ -461,7 +460,7 @@ ComputingReturn ACLTensor<DT>::op_reshape(tensor_t self, size_t offset, const st
     }
 
     mem_ = MemoryContext::alloc(size_);
-    t_->allocator()->import_memory(mem_);    
+    t_->allocator()->import_memory(mem_);
     return OP_OK;
 }
 
@@ -495,7 +494,7 @@ ComputingReturn ACLTensor<DT>::op_linear(tensor_t self, tensor_t w, tensor_t bia
     size_t outSize = w->shape()[0];
 
     size_t num = batch * tokens;
-    
+
     arm_compute::NEGEMM op;
     arm_compute::GEMMInfo info;
     info.set_pretranspose_A(true);
@@ -521,7 +520,7 @@ ComputingReturn ACLTensor<DT>::op_linear(tensor_t self, tensor_t w, tensor_t bia
     } else {
         return OP_TODO_ERROR;
     }
-    
+
     float alpha = 1.0f;
     float beta  = 0.0f;
     if ( bias != nullptr ) {
@@ -541,18 +540,18 @@ ComputingReturn ACLTensor<_DTYPE_>::op_rmsnorm(tensor_t self, tensor_t scale, te
 
     size_t num = batch * tokens;
     if (   _DTYPE_ == DataType::Float) {
-        acl_kernels::rmsnorm<DataType::Float>(self->acl_float(), scale->acl_float(), 
+        acl_kernels::rmsnorm<DataType::Float>(self->acl_float(), scale->acl_float(),
             norm2->acl_float(), y->acl_float(),
             num, feature, eps);
         return OP_OK;
     }
     if (   _DTYPE_ == DataType::FP16) {
-        acl_kernels::rmsnorm<DataType::FP16>(self->acl_fp16(), scale->acl_fp16(), 
+        acl_kernels::rmsnorm<DataType::FP16>(self->acl_fp16(), scale->acl_fp16(),
             norm2->acl_fp16(), y->acl_fp16(),
             num, feature, eps);
         return OP_OK;
     }
-    return OP_TODO_ERROR;    
+    return OP_TODO_ERROR;
 }
 
 template <DataType DT>
@@ -583,7 +582,7 @@ ComputingReturn ACLTensor<DT>::op_rotary_embed(tensor_t self, tensor_t cached, t
         acl_kernels::rotary_embed<device_fp16_t>(in, cos_sin, pos, out, batch, heads, tokens, hidden);
         return OP_OK;
     }
-    return OP_TODO_ERROR;  
+    return OP_TODO_ERROR;
 }
 
 template <DataType DT>
@@ -593,14 +592,14 @@ ComputingReturn ACLTensor<DT>::op_transpose_0213(tensor_t self, tensor_t y) {
     if ( DT == DataType::Float ) {
         op.configure(t_, y->acl_float()->t_,  perm);
         op.run();
-        return OP_OK;   
+        return OP_OK;
     }
     if ( DT == DataType::FP16 ) {
         op.configure(t_, y->acl_fp16()->t_,  perm);
         op.run();
         return OP_OK;
     }
-    return OP_TODO_ERROR;  
+    return OP_TODO_ERROR;
 }
 
 template <DataType _DTYPE_>
@@ -623,20 +622,20 @@ ComputingReturn ACLTensor<_DTYPE_>::op_qk(tensor_t self, tensor_t key, tensor_t 
     arm_compute::GEMMInfo info;
     info.set_pretranspose_A(true);
 
-    arm_compute::NEGEMM op;    
+    arm_compute::NEGEMM op;
     if ( _DTYPE_ == DataType::Float ) {
         for (int i = 0; i < batch * heads; i++) {
             float* A = (float *)data() + i * HnT;
             float* B = (float *)(key->acl_float()->data()) + i * HfT;
             float* C = (float *)(qk->acl_float()->data()) + i * TT;
-            
+
             arm_compute::Tensor src0;
             key->acl_float()->buildTensorWithShape(src0, {(size_t)ftokens, (size_t)hhidden}, B);
             arm_compute::Tensor src1;
             buildTensorWithShape(src1, {(size_t)ntokens, (size_t)hhidden}, A);
             arm_compute::Tensor dst;
             qk->acl_float()->buildTensorWithShape(dst, {(size_t)ntokens, (size_t)ftokens}, C);
-            
+
             op.configure(&src0, &src1, nullptr, &dst, alpha, beta, info);
             op.run();
         }
@@ -647,20 +646,20 @@ ComputingReturn ACLTensor<_DTYPE_>::op_qk(tensor_t self, tensor_t key, tensor_t 
             device_fp16_t* A = (device_fp16_t *)data() + i * HnT;
             device_fp16_t* B = (device_fp16_t *)(key->acl_fp16()->data()) + i * HfT;
             device_fp16_t* C = (device_fp16_t *)(qk->acl_fp16()->data()) + i * TT;
-            
+
             arm_compute::Tensor src0;
             key->acl_fp16()->buildTensorWithShape(src0, {(size_t)ftokens, (size_t)hhidden}, B);
             arm_compute::Tensor src1;
             buildTensorWithShape(src1, {(size_t)ntokens, (size_t)hhidden}, A);
             arm_compute::Tensor dst;
             qk->acl_fp16()->buildTensorWithShape(dst, {(size_t)ntokens, (size_t)ftokens}, C);
-            
+
             op.configure(&src0, &src1, nullptr, &dst, alpha, beta, info);
             op.run();
         }
         return OP_OK;
     }
-    
+
     return OP_TODO_ERROR;
 }
 
@@ -681,7 +680,7 @@ ComputingReturn ACLTensor<_DTYPE_>::op_softmax(tensor_t self, tensor_t dst_) {
         arm_compute::Tensor src;
         buildTensorWithShape(src, {num, (size_t)ftokens});
         arm_compute::Tensor dst;
-        dst_->acl_float()->buildTensorWithShape(dst, {num, (size_t)ftokens});        
+        dst_->acl_float()->buildTensorWithShape(dst, {num, (size_t)ftokens});
         op.configure(&src, &dst);
         op.run();
         return OP_OK;
@@ -690,7 +689,7 @@ ComputingReturn ACLTensor<_DTYPE_>::op_softmax(tensor_t self, tensor_t dst_) {
         arm_compute::Tensor src;
         buildTensorWithShape(src, {num, (size_t)ftokens});
         arm_compute::Tensor dst;
-        dst_->acl_fp16()->buildTensorWithShape(dst, {num, (size_t)ftokens});        
+        dst_->acl_fp16()->buildTensorWithShape(dst, {num, (size_t)ftokens});
         op.configure(&src, &dst);
         op.run();
         return OP_OK;
@@ -721,14 +720,14 @@ ComputingReturn  ACLTensor<_DTYPE_>::op_attn(tensor_t self, tensor_t value_, ten
             float* A = (float *)(value_->acl_float()->data()) + i * HfT;
             float* B = (float *)data() + i * TT;
             float* C = (float *)(out_->acl_float()->data()) + i * HnT;
-            
+
             arm_compute::Tensor src0;
             value_->acl_float()->buildTensorWithShape(src0, {(size_t)ftokens, (size_t)hhidden}, A);
             arm_compute::Tensor src1;
             buildTensorWithShape(src1, {(size_t)ntokens, (size_t)ftokens}, B);
             arm_compute::Tensor dst;
             out_->acl_float()->buildTensorWithShape(dst, {(size_t)ntokens, (size_t)hhidden}, C);
-            
+
             op.configure(&src0, &src1, nullptr, &dst, alpha, beta);
             op.run();
         }
@@ -739,14 +738,14 @@ ComputingReturn  ACLTensor<_DTYPE_>::op_attn(tensor_t self, tensor_t value_, ten
             device_fp16_t* A = (device_fp16_t *)(value_->acl_fp16()->data()) + i * HfT;
             device_fp16_t* B = (device_fp16_t *)data() + i * TT;
             device_fp16_t* C = (device_fp16_t *)(out_->acl_fp16()->data()) + i * HnT;
-            
+
             arm_compute::Tensor src0;
             value_->acl_float()->buildTensorWithShape(src0, {(size_t)ftokens, (size_t)hhidden}, A);
             arm_compute::Tensor src1;
             buildTensorWithShape(src1, {(size_t)ntokens, (size_t)ftokens}, B);
             arm_compute::Tensor dst;
             out_->acl_float()->buildTensorWithShape(dst, {(size_t)ntokens, (size_t)hhidden}, C);
-            
+
             op.configure(&src0, &src1, nullptr, &dst, alpha, beta);
             op.run();
         }
@@ -813,25 +812,25 @@ std::variant<ComputingReturn,int> ACLTensor<DT>::op_all_logits(tensor_t self, te
                 buildTensorWithShape(B, {1,  hidden_size}, src);
                 arm_compute::Tensor A;
                 lm_head->acl_float()->buildTensorWithShape(A, {vocab_size,  hidden_size}, w);
-                
+
                 arm_compute::Tensor D;
                 output->acl_float()->buildTensorWithShape(D, {1,  vocab_size}, dst);
                 op.configure(&A, &B, nullptr, &D, alpha, beta, info);
-                op.run();                
+                op.run();
             } else if ( DT == DataType::FP16 ) {
                 auto* dst = (device_fp16_t *)output->acl_fp16()->data() + pred * vocab_size;
                 auto* src = (device_fp16_t *)data() + b * new_tokens * hidden_size + target * hidden_size;
                 auto* w = (device_fp16_t *)lm_head->acl_fp16()->data();
-                
+
                 arm_compute::Tensor B;
                 arm_compute::Tensor A;
                 buildTensorWithShape(B, {1,  hidden_size}, src);
                 lm_head->acl_fp16()->buildTensorWithShape(A, {vocab_size,  hidden_size}, w);
-                
+
                 arm_compute::Tensor D;
                 output->acl_fp16()->buildTensorWithShape(D, {1,  vocab_size}, dst);
                 op.configure(&A, &B, nullptr, &D, alpha, beta, info);
-                op.run();  
+                op.run();
 
             } else {
                 return OP_TODO_ERROR;
@@ -857,8 +856,8 @@ std::variant<ComputingReturn, tensor_t>  ACLTensor<DT>::op_sampling_top1(tensor_
     int* out = (int *)ret->device_data();
 
     if ( DT == DataType::FP16 ) {
-        local_fp16_t* logits = (local_fp16_t *) self->device_data();
-        acl_kernels::easy_top1<local_fp16_t>(logits, out, batch, vocab_size);
+        device_fp16_t* logits = (device_fp16_t *) self->device_data();
+        acl_kernels::easy_top1<device_fp16_t>(logits, out, batch, vocab_size);
     } else {
         float* logits = (float *) self->device_data();
         acl_kernels::easy_top1<float>(logits, out, batch, vocab_size);
@@ -883,8 +882,8 @@ std::variant<ComputingReturn, tensor_t>  ACLTensor<DT>::op_sampling_top3(tensor_
     float randx = dist( *ComputingContext::rng );
 
     if ( DT == DataType::FP16 ) {
-        local_fp16_t* logits = (local_fp16_t *) self->device_data();
-        acl_kernels::easy_top3<local_fp16_t>(logits, out, batch, vocab_size, temp, randx);
+        device_fp16_t* logits = (device_fp16_t *) self->device_data();
+        acl_kernels::easy_top3<device_fp16_t>(logits, out, batch, vocab_size, temp, randx);
     } else {
         float* logits = (float *) self->device_data();
         acl_kernels::easy_top3<float>(logits, out, batch, vocab_size, temp, randx);

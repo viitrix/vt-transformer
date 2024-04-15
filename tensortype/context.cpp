@@ -55,6 +55,10 @@ void ComputingContext::boot_dnnl(int cud) {
 #endif
 }
 
+void ComputingContext::boot_acl(int cud) {
+    boot_host();
+}
+
 void ComputingContext::boot_cuda(int cud) {
     boot_host();
 
