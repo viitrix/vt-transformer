@@ -508,7 +508,7 @@ ComputingReturn ACLTensor<DT>::op_linear(tensor_t self, tensor_t w, tensor_t bia
 
     float alpha = 1.0f;
     float beta  = 0.0f;
-    op.configure(&A, &B, nullptr, &D, alpha, beta, info);    
+    op.configure(&A, &B, nullptr, &D, alpha, beta, info);
     op.run();
     
     if ( bias != nullptr) {
@@ -777,7 +777,7 @@ std::variant<ComputingReturn,int> ACLTensor<DT>::op_all_logits(tensor_t self, te
     float beta  = 0.0f;
     arm_compute::NEGEMM op;
     arm_compute::GEMMInfo info;
-    info.set_pretranspose_A(true);
+    info.set_pretranspose_B(true);
 
     for (int b = 0;  b < batch; b++) {
         int* mk = &mask[b * full_tokens];
@@ -793,10 +793,10 @@ std::variant<ComputingReturn,int> ACLTensor<DT>::op_all_logits(tensor_t self, te
                 void* src = (float *)data() + b * new_tokens * hidden_size + target * hidden_size;
                 void* w = (float *)lm_head->acl_float()->data();
 
-                arm_compute::Tensor B;
-                buildTensorWithShape(B, {1,  hidden_size}, src);
                 arm_compute::Tensor A;
-                lm_head->acl_float()->buildTensorWithShape(A, {vocab_size,  hidden_size}, w);
+                arm_compute::Tensor B;
+                buildTensorWithShape(A, {1,  hidden_size}, src);
+                lm_head->acl_float()->buildTensorWithShape(B, {vocab_size,  hidden_size}, w);
 
                 arm_compute::Tensor D;
                 output->acl_float()->buildTensorWithShape(D, {1,  vocab_size}, dst);
@@ -807,9 +807,9 @@ std::variant<ComputingReturn,int> ACLTensor<DT>::op_all_logits(tensor_t self, te
                 auto* src = (device_fp16_t *)data() + b * new_tokens * hidden_size + target * hidden_size;
                 auto* w = (device_fp16_t *)lm_head->acl_fp16()->data();
 
-                arm_compute::Tensor B;
                 arm_compute::Tensor A;
-                buildTensorWithShape(B, {1,  hidden_size}, src);
+                arm_compute::Tensor B;
+                buildTensorWithShape(A, {1,  hidden_size}, src);
                 lm_head->acl_fp16()->buildTensorWithShape(A, {vocab_size,  hidden_size}, w);
 
                 arm_compute::Tensor D;
