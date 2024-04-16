@@ -31,7 +31,7 @@ void rmsnorm(ACLTensor<DT>* x, ACLTensor<DT>* scale, ACLTensor<DT>* norm2, ACLTe
     for (size_t i = 0; i < batch_size; i++) {
         float rms = 0.0;    
         if ( DT == DataType::Float) {    
-            for(size_t j = 0; j < hidden_dim; j++) {
+            for(size_t j = 0; j < hidden_dim; j++) {                
                 float v = ((float *)x->data())[i * hidden_dim + j];
                 rms = rms + v * v;  
             } 
@@ -39,7 +39,7 @@ void rmsnorm(ACLTensor<DT>* x, ACLTensor<DT>* scale, ACLTensor<DT>* norm2, ACLTe
         if ( DT == DataType::FP16) {    
             for(size_t j = 0; j < hidden_dim; j++) {
                 float v = float(((device_fp16_t *)x->data())[i * hidden_dim + j]);
-                rms = rms + v * v;  
+                rms = rms + v * v;
             } 
         }
   
@@ -54,7 +54,7 @@ void rmsnorm(ACLTensor<DT>* x, ACLTensor<DT>* scale, ACLTensor<DT>* norm2, ACLTe
         } 
         if ( DT == DataType::FP16) {    
             for(size_t j = 0; j < hidden_dim; j++) {
-                float v = fp16_to_fp32(((device_fp16_t *)x->data())[i * hidden_dim + j]);
+                float v = float(((device_fp16_t *)x->data())[i * hidden_dim + j]);
                 ((device_fp16_t *)y->data())[i * hidden_dim + j] = v * rms * float( ((device_fp16_t *)scale->data())[j]);
             }
         }

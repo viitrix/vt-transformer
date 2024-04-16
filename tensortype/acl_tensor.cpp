@@ -237,7 +237,7 @@ ComputingReturn ACLTensor<DT>::op_causal_mask(tensor_t self, tensor_t out) {
         }
         if ( out16 != nullptr ) {
             device_fp16_t* o = &out16[ b * new_tokens * full_tokens + nt * full_tokens ];
-            device_fp16_t minv = (device_fp16_t)0xFC00U;
+            device_fp16_t minv = (device_fp16_t)std::numeric_limits<float>::lowest();
             acl_kernels::fill_causal_mask<device_fp16_t>(m, o, minv, full_tokens, nt_end);
         }
     }
@@ -724,12 +724,12 @@ ComputingReturn  ACLTensor<_DTYPE_>::op_attn(tensor_t self, tensor_t value_, ten
             device_fp16_t* B = (device_fp16_t *)data() + i * TT;
             device_fp16_t* C = (device_fp16_t *)(out_->acl_fp16()->data()) + i * HnT;
 
-            arm_compute::Tensor src0;
-            value_->acl_float()->buildTensorWithShape(src0, {(size_t)ftokens, (size_t)hhidden}, A);
             arm_compute::Tensor src1;
-            buildTensorWithShape(src1, {(size_t)ntokens, (size_t)ftokens}, B);
+            value_->acl_fp16()->buildTensorWithShape(src1, {(size_t)ftokens, (size_t)hhidden}, A);
+            arm_compute::Tensor src0;
+            buildTensorWithShape(src0, {(size_t)ntokens, (size_t)ftokens}, B);
             arm_compute::Tensor dst;
-            out_->acl_float()->buildTensorWithShape(dst, {(size_t)ntokens, (size_t)hhidden}, C);
+            out_->acl_fp16()->buildTensorWithShape(dst, {(size_t)ntokens, (size_t)hhidden}, C);
 
             op.configure(&src0, &src1, nullptr, &dst, alpha, beta);
             op.run();
@@ -803,14 +803,14 @@ std::variant<ComputingReturn,int> ACLTensor<DT>::op_all_logits(tensor_t self, te
                 op.configure(&A, &B, nullptr, &D, alpha, beta, info);
                 op.run();
             } else if ( DT == DataType::FP16 ) {
-                auto* dst = (device_fp16_t *)output->acl_fp16()->data() + pred * vocab_size;
-                auto* src = (device_fp16_t *)data() + b * new_tokens * hidden_size + target * hidden_size;
-                auto* w = (device_fp16_t *)lm_head->acl_fp16()->data();
+                void* dst = (device_fp16_t *)output->acl_fp16()->data() + pred * vocab_size;
+                void* src = (device_fp16_t *)data() + b * new_tokens * hidden_size + target * hidden_size;
+                void* w = (device_fp16_t *)lm_head->acl_fp16()->data();
 
                 arm_compute::Tensor A;
                 arm_compute::Tensor B;
                 buildTensorWithShape(A, {1,  hidden_size}, src);
-                lm_head->acl_fp16()->buildTensorWithShape(A, {vocab_size,  hidden_size}, w);
+                lm_head->acl_fp16()->buildTensorWithShape(B, {vocab_size,  hidden_size}, w);
 
                 arm_compute::Tensor D;
                 output->acl_fp16()->buildTensorWithShape(D, {1,  vocab_size}, dst);
