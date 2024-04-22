@@ -182,6 +182,18 @@ namespace op {
 #else
                 vt_panic("Can't be here!");
 #endif
+            } else if ( device == "dnnl_gpu" ) {
+#ifdef _DNNL_GPU_
+                if ( dtype == vt::Float ) {
+                    t = vt::create_dnnl_float(shape, true);
+                } else if ( dtype == vt::FP16 ) {
+                    t = vt::create_dnnl_fp16(shape, true);
+                } else if ( dtype == vt::Int ) {
+                    t = vt::create_dnnl_int(shape, true);
+                }
+#else
+                vt_panic("Can't be here!");
+#endif
             } else if ( device == "host" ) {
                 if ( dtype == vt::Float ) {
                     t = vt::create_host_float(shape);

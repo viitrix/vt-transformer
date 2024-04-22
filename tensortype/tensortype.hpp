@@ -969,9 +969,9 @@ tensor_t create_acl_int(std::vector<size_t>& shape);
 #endif
 
 #ifdef _USING_DEVICE_DNNL_
-tensor_t create_dnnl_float(std::vector<size_t>& shape);
-tensor_t create_dnnl_fp16(std::vector<size_t>& shape);
-tensor_t create_dnnl_int(std::vector<size_t>& shape);
+tensor_t create_dnnl_float(std::vector<size_t>& shape, bool gpu = false);
+tensor_t create_dnnl_fp16(std::vector<size_t>& shape, bool gpu = false);
+tensor_t create_dnnl_int(std::vector<size_t>& shape, bool gpu = false);
 #endif
 
 

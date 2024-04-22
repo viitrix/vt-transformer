@@ -2,18 +2,21 @@
 
 CXX = g++
 
-FLAGS = -Wall -O3 -D_USING_DEVICE_DNNL_ 
+FLAGS = -Wall -O3 -D_USING_DEVICE_DNNL_ -D_DNNL_GPU_
 
 INC = -I../../install/include -I${DNNL_DIR}/include \
 
 LINK = -L../../install/lib \
 	   -L${DNNL_DIR}/lib \
-	   -ltensortype -ldnnl 
+	   -ltensortype -lgomp -lOpenCL -ldnnl
 
 all: repl 
 
 repl: repl.cpp
 	$(CXX) $(FLAGS) -o $@ $< $(INC) $(LINK)
+
+run: repl
+	LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${DNNL_DIR}/lib ./repl
 
 clean:
 	rm -f repl 

@@ -9,6 +9,10 @@ namespace vt {
 #ifdef _USING_DEVICE_DNNL_
 dnnl::engine* ComputingContext::dnnl_engine = nullptr;
 dnnl::stream* ComputingContext::dnnl_stream = nullptr;
+#ifdef _DNNL_GPU_
+dnnl::engine* ComputingContext::dnnl_gpu_engine = nullptr;
+dnnl::stream* ComputingContext::dnnl_gpu_stream = nullptr;
+#endif
 #endif
 
 #ifdef _USING_DEVICE_CUDA_
@@ -52,6 +56,12 @@ void ComputingContext::boot_dnnl(int cud) {
 #ifdef _USING_DEVICE_DNNL_
     dnnl_engine = new dnnl::engine(dnnl::engine::kind::cpu, 0);
     dnnl_stream = new dnnl::stream(*dnnl_engine);
+
+#ifdef _DNNL_GPU_
+    dnnl_gpu_engine = new dnnl::engine(dnnl::engine::kind::gpu, 0);
+    dnnl_gpu_stream = new dnnl::stream(*dnnl_gpu_engine, dnnl::stream::flags::in_order);
+#endif
+
 #endif
 }
 
@@ -122,6 +132,12 @@ void ComputingContext::shutdown() {
         delete dnnl_stream;
         delete dnnl_engine;
     }
+#ifdef _DNNL_GPU_
+    if ( dnnl_gpu_stream != nullptr ) {
+        delete dnnl_gpu_stream;
+        delete dnnl_gpu_engine;
+    }
+#endif
 #endif
 
 #ifdef _USING_DEVICE_CUDA_

@@ -24,6 +24,9 @@ void binary_float(tensor_t a, tensor_t b, tensor_t c, dnnl::algorithm op ) {
     if ( a->shape().dim() == 3) {
         tag = dnnl::memory::format_tag::abc;
     }
+    if ( a->shape().dim() == 2) {
+        tag = dnnl::memory::format_tag::ab;
+    }
 
     auto amem_desc = a->dnnl_float()->build_memory_desc( a->shape().vec(),  tag);
     auto bmem_desc = b->dnnl_float()->build_memory_desc( b->shape().vec(),  tag);
@@ -33,7 +36,7 @@ void binary_float(tensor_t a, tensor_t b, tensor_t c, dnnl::algorithm op ) {
     auto bmem = b->dnnl_float()->build_memory(bmem_desc);
     auto cmem = c->dnnl_float()->build_memory(cmem_desc);
 
-    auto binary_pd = dnnl::binary::primitive_desc(*ComputingContext::dnnl_engine, op, amem_desc, bmem_desc, cmem_desc);
+    auto binary_pd = dnnl::binary::primitive_desc(*ComputingContext::dnnl_gpu_engine, op, amem_desc, bmem_desc, cmem_desc);
     auto binary_prim = dnnl::binary(binary_pd);
 
     std::unordered_map<int, dnnl::memory> binary_args;
@@ -41,7 +44,7 @@ void binary_float(tensor_t a, tensor_t b, tensor_t c, dnnl::algorithm op ) {
     binary_args[DNNL_ARG_SRC_1] = bmem;
     binary_args[DNNL_ARG_DST] = cmem;
 
-    binary_prim.execute(*ComputingContext::dnnl_stream, binary_args);
+    binary_prim.execute(*ComputingContext::dnnl_gpu_stream, binary_args);
 }
 
 void binary_fp16(tensor_t a, tensor_t b, tensor_t c, dnnl::algorithm op ) {

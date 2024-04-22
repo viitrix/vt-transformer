@@ -112,6 +112,10 @@ struct ComputingContext {
 #ifdef _USING_DEVICE_DNNL_
     static dnnl::engine*    dnnl_engine;
     static dnnl::stream*    dnnl_stream;
+#ifdef _DNNL_GPU_   
+    static dnnl::engine*    dnnl_gpu_engine;
+    static dnnl::stream*    dnnl_gpu_stream;
+#endif
 #endif
 
 #ifdef _USING_DEVICE_CUDA_

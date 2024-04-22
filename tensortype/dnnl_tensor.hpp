@@ -1,44 +1,21 @@
 #ifndef _DNNL_IMPL_HPP_
 #define _DNNL_IMPL_HPP_
 
+
+
 #include "vt.hpp"
 #include "context.hpp"
 #include "computing.hpp"
 #include "tensortype.hpp"
 
+
 namespace vt {
 
 template <DataType _DTYPE_>
 struct DNNLTensor : public TransformerComputing {
-    virtual ~DNNLTensor() {
-        if ( owner_ ) {
-            MemoryContext::free(mem_, size_);
-        }
-    }
-    DNNLTensor(const ShapeType& shape) : owner_(true) {
-        if ( _DTYPE_ == DataType::Float ) {
-            size_ = shape.numel() * sizeof(float);
-        } else if ( _DTYPE_ == DataType::Int ) {
-            size_ = shape.numel() * sizeof(int);
-        } else if ( _DTYPE_ == DataType::FP16 ) {
-            size_ =  shape.numel() * sizeof(local_fp16_t);
-        } else {
-            vt_panic("Can't be here!");
-        }
-
-        mem_ = MemoryContext::alloc(size_);
-    }
-    DNNLTensor(const ShapeType& shape,  void *mem) : owner_(false), mem_(mem) {
-        if ( _DTYPE_ == DataType::Float ) {
-            size_ = shape.numel() * sizeof(float);
-        } else if ( _DTYPE_ == DataType::Int ) {
-            size_ = shape.numel() * sizeof(int);
-        } else if ( _DTYPE_ == DataType::FP16 ) {
-            size_ =  shape.numel() * sizeof(local_fp16_t);
-        } else {
-            vt_panic("Can't be here!");
-        }
-    }
+    virtual ~DNNLTensor();
+    DNNLTensor(const ShapeType& shape, bool isGPU = false);
+    DNNLTensor(const ShapeType& shape,  void *mem, bool isGPU = false);
     void* data() {
         return mem_;
     }
@@ -58,26 +35,8 @@ struct DNNLTensor : public TransformerComputing {
         vt_panic("Can't be here!");
         return dnnl::memory::desc();
     }
-    dnnl::memory::desc build_memory_desc(const std::vector<size_t>& shape, dnnl::memory::format_tag tag) {
-        dnnl::memory::dims dims;
-        for(int i = 0; i < (int)shape.size(); i++) {
-            dims.push_back(shape[i]);
-        }
-        if ( _DTYPE_ == DataType::Float ) {
-            return dnnl::memory::desc(dims,  dnnl::memory::data_type::f32, tag);
-        }
-        if ( _DTYPE_ == DataType::FP16 ) {
-            return dnnl::memory::desc(dims,  dnnl::memory::data_type::f16, tag);
-        }
-
-        vt_panic("Can't be here!");
-        return dnnl::memory::desc();
-    }
-
-    dnnl::memory build_memory(const dnnl::memory::desc& desc) {
-        vt_assert( desc.get_size() == size_ , "dnnl memory's data must have same size with desc");
-        return dnnl::memory(desc, *ComputingContext::dnnl_engine, mem_);
-    }
+    dnnl::memory::desc build_memory_desc(const std::vector<size_t>& shape, dnnl::memory::format_tag tag);
+    dnnl::memory build_memory(const dnnl::memory::desc& desc);
 
 public:
     // Interfaces from TransformerComputing
@@ -122,6 +81,7 @@ public:
 
 protected:
     const bool owner_;
+    const bool gpu_;
     void* mem_;
     size_t size_;
 
