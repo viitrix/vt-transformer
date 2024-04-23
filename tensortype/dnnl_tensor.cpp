@@ -3,8 +3,10 @@
 #endif
 
 #include "dnnl_tensor.hpp"
-#include "dnnl_kernels/impl.hpp"
 #include "host_tensor.hpp"
+
+#include "dnnl_kernels/impl.hpp"
+#include "dnnl_kernels/cl_kernels.hpp"
 
 namespace vt {
 
@@ -27,6 +29,7 @@ DNNLTensor<_DTYPE_>::~DNNLTensor() {
 
 template <DataType _DTYPE_>
 DNNLTensor<_DTYPE_>::DNNLTensor(const ShapeType& shape, bool isGPU) : owner_(true), gpu_(isGPU) {
+
     if ( _DTYPE_ == DataType::Float ) {
         size_ = shape.numel() * sizeof(float);
     } else if ( _DTYPE_ == DataType::Int ) {
@@ -38,9 +41,15 @@ DNNLTensor<_DTYPE_>::DNNLTensor(const ShapeType& shape, bool isGPU) : owner_(tru
     }
 
 #ifdef _DNNL_GPU_
+    if ( vt::dnnl_kernels::cl_kernels::programe_ == nullptr) {
+        vt::dnnl_kernels::cl_kernels::init();
+    }
+
     if ( isGPU ) {
+        int err;
         auto ctx = dnnl::ocl_interop::get_context( *ComputingContext::dnnl_gpu_engine);
-        mem_ = clCreateBuffer(ctx, CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR, size_, nullptr, nullptr);
+        mem_ = clCreateBuffer(ctx, CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR, size_, nullptr, &err);
+        OPENCL_CHECK(err);
         return;
     }
 #endif
@@ -449,7 +458,7 @@ ComputingReturn DNNLTensor<DT>::op_causal_mask(tensor_t self, tensor_t out) {
 
 #ifdef _DNNL_GPU_
     if ( is_gpu() ) {
-        
+
         return OP_OK;
     }
 #endif

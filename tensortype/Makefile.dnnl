@@ -7,7 +7,7 @@ INC = -I. -I../install/include -I${DNNL_DIR}/include
 all: libtensortype.a
 
 
-libtensortype.a: context.o tensortype.o host_tensor.o dnnl_tensor.o dag.o nn_operators.o nn_kvcache.o
+libtensortype.a: context.o tensortype.o host_tensor.o  dag.o nn_operators.o nn_kvcache.o dnnl_tensor.o ocl_kernels.o
 	ar rcs $@ $? 
 
 context.o: context.hpp context.cpp
@@ -21,6 +21,9 @@ host_tensor.o: computing.hpp tensortype.hpp host_tensor.hpp host_tensor.cpp
 
 dnnl_tensor.o: computing.hpp tensortype.hpp host_tensor.hpp dnnl_tensor.hpp dnnl_kernels/impl.hpp dnnl_tensor.cpp
 	$(CXX) $(FLAGS) -c -o $@ $(INC) dnnl_tensor.cpp
+
+ocl_kernels.o: dnnl_kernels/cl_kernels.hpp dnnl_kernels/cl_kernels.cpp dnnl_kernels/code.cl
+	$(CXX) $(FLAGS) -c -o $@ $(INC) dnnl_kernels/cl_kernels.cpp
 
 dag.o: tensortype.hpp dag.hpp dag.cpp
 	$(CXX) $(FLAGS) -c -o $@ $(INC) dag.cpp
