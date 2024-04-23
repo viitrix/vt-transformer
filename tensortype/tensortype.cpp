@@ -720,6 +720,58 @@ TransformerComputing* TensorType::impl() {
     return nullptr;
 }
 
+const char* TensorType::device_name() {
+    if ( (impl_index() <= ImplType::HOST_PQ) && (impl_index() >= ImplType::HOST_FLOAT) ) {
+        return "host";
+    }
+#ifdef _USING_DEVICE_CUDA_
+    if ( (impl_index() <= ImplType::CUDA_PQ) && (impl_index() >= ImplType::CUDA_FLOAT) ) {
+        return "cuda";
+    }
+#endif
+
+#ifdef _USING_DEVICE_DCU_
+    if ( (impl_index() <= ImplType::DCU_PQ) && (impl_index() >= ImplType::DCU_FLOAT) ) {
+        return "dcu";
+    }
+#endif
+
+#ifdef _USING_DEVICE_COREX_
+    if ( (impl_index() <= ImplType::CX_PQ) && (impl_index() >= ImplType::CX_FLOAT) ) {
+        return "corex";
+    }
+#endif
+
+#ifdef _USING_DEVICE_ACL_
+    if ( (impl_index() <= ImplType::ACL_INT) && (impl_index() >= ImplType::ACL_FLOAT) ) {
+        return "acl";
+    }
+#endif
+
+#ifdef _USING_DEVICE_DNNL_
+    if ( (impl_index() <= ImplType::DNNL_INT) && (impl_index() >= ImplType::DNNL_FLOAT) ) {
+        if ( impl_index() == ImplType::DNNL_INT ) {
+            if (dnnl_int()->is_gpu()) {
+                return "dnnl_ocl";
+            }
+        }
+        if ( impl_index() == ImplType::DNNL_FP16 ) {
+            if (dnnl_fp16()->is_gpu()) {
+                return "dnnl_ocl";
+            }
+        }
+        if ( impl_index() == ImplType::DNNL_FLOAT ) {
+            if (dnnl_float()->is_gpu()) {
+                return "dnnl_ocl";
+            }
+        }
+        return "dnnl";
+    }
+#endif
+    vt_panic("Can't be here!");
+    return "";
+}
+
 void* TensorType::device_data() {
     return device_data( impl_index() );
 }

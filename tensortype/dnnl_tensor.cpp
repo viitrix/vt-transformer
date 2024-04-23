@@ -14,12 +14,14 @@ using dt = dnnl::memory::data_type;
 template <DataType _DTYPE_>
 DNNLTensor<_DTYPE_>::~DNNLTensor() {
     if ( owner_ ) {
+#ifdef _DNNL_GPU_
         if ( gpu_ == true) {
-            auto ctx = dnnl::ocl_interop::get_context( *ComputingContext::dnnl_gpu_engine);
-            //omp_target_alloc_shared(ctx, mem_);
-        } else {
-            MemoryContext::free(mem_, size_);
+            cl_mem mem = (cl_mem)mem_;
+            clReleaseMemObject(mem);
+            return;
         }
+#endif
+        MemoryContext::free(mem_, size_);
     }
 }
 
@@ -34,20 +36,19 @@ DNNLTensor<_DTYPE_>::DNNLTensor(const ShapeType& shape, bool isGPU) : owner_(tru
     } else {
         vt_panic("Can't be here!");
     }
-    if ( isGPU ) {
+
 #ifdef _DNNL_GPU_
+    if ( isGPU ) {
         auto ctx = dnnl::ocl_interop::get_context( *ComputingContext::dnnl_gpu_engine);
-        //mem_ = clSVMAlloc(ctx, CL_MEM_READ_WRITE, size_);
-#else
-        vt_panic("Can't be here!");
-#endif
-    } else {
-        mem_ = MemoryContext::alloc(size_);
+        mem_ = clCreateBuffer(ctx, CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR, size_, nullptr, nullptr);
+        return;
     }
+#endif
+    mem_ = MemoryContext::alloc(size_);
 }
 
 template <DataType _DTYPE_>
-DNNLTensor<_DTYPE_>::DNNLTensor(const ShapeType& shape,  void *mem, bool isGPU) : owner_(false), gpu_(false) , mem_(mem) {
+DNNLTensor<_DTYPE_>::DNNLTensor(const ShapeType& shape,  void *mem, bool isGPU) : owner_(false), gpu_(isGPU) , mem_(mem) {
     if ( _DTYPE_ == DataType::Float ) {
         size_ = shape.numel() * sizeof(float);
     } else if ( _DTYPE_ == DataType::Int ) {
@@ -57,6 +58,23 @@ DNNLTensor<_DTYPE_>::DNNLTensor(const ShapeType& shape,  void *mem, bool isGPU) 
     } else {
         vt_panic("Can't be here!");
     }
+}
+
+template <DataType _DTYPE_>
+dnnl::memory::desc DNNLTensor<_DTYPE_>::build_memory_desc(const std::vector<size_t>& shape, DataType dt, dnnl::memory::format_tag tag) {
+    dnnl::memory::dims dims;
+    for(int i = 0; i < (int)shape.size(); i++) {
+        dims.push_back(shape[i]);
+    }
+    if ( dt == DataType::Float ) {
+        return dnnl::memory::desc(dims,  dnnl::memory::data_type::f32, tag);
+    }
+    if ( dt == DataType::FP16 ) {
+        return dnnl::memory::desc(dims,  dnnl::memory::data_type::f16, tag);
+    }
+
+    vt_panic("Can't be here!");
+    return dnnl::memory::desc();
 }
 
 template <DataType _DTYPE_>
@@ -83,13 +101,8 @@ dnnl::memory DNNLTensor<_DTYPE_>::build_memory(const dnnl::memory::desc& desc) {
         return dnnl::memory(desc, *ComputingContext::dnnl_engine, mem_);
     } else {
 #ifdef _DNNL_GPU_
-        std::cout << " ################## " << __LINE__ << std::endl;
-        auto m =  dnnl::ocl_interop::make_memory(desc, *ComputingContext::dnnl_gpu_engine, dnnl::ocl_interop::memory_kind::usm, mem_);
-        std::cout << " ################## " << __LINE__ << std::endl;
+        auto m =  dnnl::memory(desc, *ComputingContext::dnnl_gpu_engine, (cl_mem)mem_);
         return m;
-#else
-        vt_panic("Can't be here!");
-        return dnnl::memory::desc();
 #endif 
     }
 }
@@ -97,8 +110,62 @@ dnnl::memory DNNLTensor<_DTYPE_>::build_memory(const dnnl::memory::desc& desc) {
 template <DataType _DTYPE_>
 ComputingReturn DNNLTensor<_DTYPE_>::io_dump(tensor_t self) {
     size_t first8 = std::min(self->shape().vec().back(), (size_t)8);
+
+    #ifdef _DNNL_GPU_
+    if ( is_gpu()) {
+        auto queue = dnnl::ocl_interop::get_command_queue(*ComputingContext::dnnl_gpu_stream);
+        int ret = 0;
+        void* target = clEnqueueMapBuffer(queue, (cl_mem)mem_,  CL_TRUE, CL_MAP_READ , 0, size_, 0, nullptr, nullptr, &ret);
+        OPENCL_CHECK(ret);
+        if ( _DTYPE_ == DataType::Float ) {            
+            float* d = (float *)target; 
+            std::cout << "First " << first8 << " : ";
+            for(size_t i = 0; i < first8; i++) {
+                std::cout << d[i] << " ";
+            }
+            std::cout << std::endl;
+            d = (float *)target + self->items() - first8;
+            std::cout << "Last " << first8 << " : ";
+            for(size_t i = 0; i < first8; i++) {
+                std::cout << d[i] << " ";
+            }
+            std::cout << std::endl;
+        } else if ( _DTYPE_ == DataType::Int ) {
+            int* d = (int *)target;
+            std::cout << "First " << first8 << " : ";
+            for(size_t i = 0; i < first8; i++) {
+                std::cout << d[i] << " ";
+            }
+            std::cout << std::endl;
+            d = (int *)target + self->items() - first8;
+            std::cout << "Last " << first8 << " : ";
+            for(size_t i = 0; i < first8; i++) {
+                std::cout << d[i] << " ";
+            }
+            std::cout << std::endl;
+        } else if ( _DTYPE_ == DataType::FP16 ) {
+            local_fp16_t* d = (local_fp16_t *)target;
+            std::cout << "First " << first8 << " : ";
+            for(size_t i = 0; i < first8; i++) {
+                std::cout << fp16_to_fp32(d[i]) << " ";
+            }
+            std::cout << std::endl;
+            d = (local_fp16_t *)target + self->items() - first8;
+            std::cout << "Last " << first8 << " : ";
+            for(size_t i = 0; i < first8; i++) {
+                std::cout << fp16_to_fp32(d[i]) << " ";
+            }
+            std::cout << std::endl;
+        } else {
+            return OP_TODO_ERROR;
+        }
+        clEnqueueUnmapMemObject(queue, (cl_mem)mem_, target, 0, nullptr,  nullptr);
+        return OP_OK;
+    }
+#endif
+
     if ( _DTYPE_ == DataType::Float ) {
-        float* d = (float *)data();
+        float* d = (float *)data();    
         std::cout << "First " << first8 << " : ";
         for(size_t i = 0; i < first8; i++) {
             std::cout << d[i] << " ";
@@ -219,6 +286,37 @@ ComputingReturn DNNLTensor<_DTYPE_>::io_load(tensor_t self, const char* fileName
 template<DataType DT>
 ComputingReturn DNNLTensor<DT>::op_fill(tensor_t self, float value) {
     size_t items = self->items();
+#ifdef _DNNL_GPU_
+    if ( is_gpu()) {
+        auto queue = dnnl::ocl_interop::get_command_queue(*ComputingContext::dnnl_gpu_stream);
+        int ret = 0;
+        void*  target = clEnqueueMapBuffer(queue, (cl_mem)mem_,  CL_TRUE, CL_MAP_WRITE , 0, size_, 0, nullptr, nullptr, &ret);
+        if ( DT == DataType::Float ) {            
+            OPENCL_CHECK(ret);
+            float *dst = (float *)target;
+            for (size_t i = 0; i < items; i++) {
+                dst[i] = value;
+            }
+        } else if ( DT == DataType::Int ) {
+            int *dst = (int *)target;
+            int v = value;
+            for (size_t i = 0; i < items/2; i++) {
+                dst[i] = v;
+            }
+        } else if ( DT == DataType::FP16 ) {
+            local_fp16_t *dst = (local_fp16_t *)target;
+            local_fp16_t v = fp32_to_fp16(value);
+            for (size_t i = 0; i < items; i++) {
+                dst[i] = v;
+            }
+        } else {
+            return OP_TODO_ERROR;
+        }
+        clEnqueueUnmapMemObject(queue, (cl_mem)mem_, target, 0, nullptr,  nullptr);
+        return OP_OK;
+    }
+#endif
+
     if ( DT == DataType::Float ) {
         float *dst = (float *)mem_;
         for (size_t i = 0; i < items; i++) {
@@ -904,18 +1002,33 @@ ComputingReturn DNNLTensor<_DTYPE_>::op_conv2d(tensor_t self, tensor_t weight, t
 }
 
 tensor_t create_dnnl_float(std::vector<size_t>& shape_, bool gpu) {
+#ifndef _DNNL_GPU_
+    if ( gpu ) {
+        vt_panic("Can't be here");
+    }
+#endif
     ShapeType shape(shape_);
     DNNLTensor<DataType::Float>* tensor = new DNNLTensor<DataType::Float>(shape, gpu);
     return std::make_shared<TensorType>(tensor, shape);
 }
 
 tensor_t create_dnnl_fp16(std::vector<size_t>& shape_, bool gpu) {
+#ifndef _DNNL_GPU_
+    if ( gpu ) {
+        vt_panic("Can't be here");
+    }
+#endif
     ShapeType shape(shape_);
     DNNLTensor<DataType::FP16>* tensor = new DNNLTensor<DataType::FP16>(shape, gpu);
     return std::make_shared<TensorType>(tensor, shape);
 }
 
 tensor_t create_dnnl_int(std::vector<size_t>& shape_, bool gpu) {
+#ifndef _DNNL_GPU_
+    if ( gpu ) {
+        vt_panic("Can't be here");
+    }
+#endif
     ShapeType shape(shape_);
     DNNLTensor<DataType::Int>* tensor = new DNNLTensor<DataType::Int>(shape, gpu);
     return std::make_shared<TensorType>(tensor, shape);

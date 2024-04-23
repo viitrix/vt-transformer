@@ -465,6 +465,7 @@ public:
 #endif
 
     // help functions
+    const char* device_name() ;
     std::string to_string() {
         std::stringstream ss;
         ss << device_name() << ":" <<  DataType_name( dtype() ) ;
@@ -478,44 +479,7 @@ public:
         ss << "]";
         return ss.str();
     }
-
-    const char* device_name() {
-        if ( (impl_index() <= ImplType::HOST_PQ) && (impl_index() >= ImplType::HOST_FLOAT) ) {
-            return "host";
-        }
-#ifdef _USING_DEVICE_CUDA_
-        if ( (impl_index() <= ImplType::CUDA_PQ) && (impl_index() >= ImplType::CUDA_FLOAT) ) {
-            return "cuda";
-        }
-#endif
-
-#ifdef _USING_DEVICE_DCU_
-        if ( (impl_index() <= ImplType::DCU_PQ) && (impl_index() >= ImplType::DCU_FLOAT) ) {
-            return "dcu";
-        }
-#endif
-
-#ifdef _USING_DEVICE_COREX_
-        if ( (impl_index() <= ImplType::CX_PQ) && (impl_index() >= ImplType::CX_FLOAT) ) {
-            return "corex";
-        }
-#endif
-
-#ifdef _USING_DEVICE_ACL_
-        if ( (impl_index() <= ImplType::ACL_INT) && (impl_index() >= ImplType::ACL_FLOAT) ) {
-            return "acl";
-        }
-#endif
-
-#ifdef _USING_DEVICE_DNNL_
-        if ( (impl_index() <= ImplType::DNNL_INT) && (impl_index() >= ImplType::DNNL_FLOAT) ) {
-            return "dnnl";
-        }
-#endif
-        vt_panic("Can't be here!");
-        return "";
-    }
-
+    
     bool is_host() const {
         auto ii = impl_index();
         if ( (ii >= ImplType::HOST_FLOAT) && (ii <= ImplType::HOST_PQ) ) {

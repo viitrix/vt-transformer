@@ -101,6 +101,12 @@
         if (s_ != CUBLAS_STATUS_SUCCESS) COMPLAIN_ERROR_AND_EXIT(#f, s_); \
     } while (0)
 
+#define OPENCL_CHECK(f) \
+    do { \
+        cl_int  s_ = f; \
+        if (s_ != CL_SUCCESS) COMPLAIN_ERROR_AND_EXIT(#f, s_); \
+    } while (0)
+
 namespace vt {
 
 #ifdef _USING_DEVICE_CUDA_

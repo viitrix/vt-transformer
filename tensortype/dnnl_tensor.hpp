@@ -1,13 +1,10 @@
 #ifndef _DNNL_IMPL_HPP_
 #define _DNNL_IMPL_HPP_
 
-
-
 #include "vt.hpp"
 #include "context.hpp"
 #include "computing.hpp"
 #include "tensortype.hpp"
-
 
 namespace vt {
 
@@ -19,22 +16,11 @@ struct DNNLTensor : public TransformerComputing {
     void* data() {
         return mem_;
     }
-
-    dnnl::memory::desc build_memory_desc(const std::vector<size_t>& shape, DataType dt, dnnl::memory::format_tag tag) {
-        dnnl::memory::dims dims;
-        for(int i = 0; i < (int)shape.size(); i++) {
-            dims.push_back(shape[i]);
-        }
-        if ( dt == DataType::Float ) {
-            return dnnl::memory::desc(dims,  dnnl::memory::data_type::f32, tag);
-        }
-        if ( dt == DataType::FP16 ) {
-            return dnnl::memory::desc(dims,  dnnl::memory::data_type::f16, tag);
-        }
-
-        vt_panic("Can't be here!");
-        return dnnl::memory::desc();
+    bool is_gpu() {
+        return gpu_;
     }
+
+    dnnl::memory::desc build_memory_desc(const std::vector<size_t>& shape, DataType dt, dnnl::memory::format_tag tag);
     dnnl::memory::desc build_memory_desc(const std::vector<size_t>& shape, dnnl::memory::format_tag tag);
     dnnl::memory build_memory(const dnnl::memory::desc& desc);
 
