@@ -2,7 +2,7 @@
 
 CXX = g++
 
-FLAGS = -Wall -O3 -D_USING_DEVICE_DNNL_ -D_DNNL_GPU_
+FLAGS = -Wall -O3 -fopenmp -D_USING_DEVICE_DNNL_ -D_DNNL_GPU_
 
 INC = -I../../install/include -I${DNNL_DIR}/include \
 

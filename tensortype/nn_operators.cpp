@@ -182,7 +182,7 @@ namespace op {
 #else
                 vt_panic("Can't be here!");
 #endif
-            } else if ( device == "dnnl_gpu" ) {
+            } else if ( device == "dnnl_ocl" ) {
 #ifdef _DNNL_GPU_
                 if ( dtype == vt::Float ) {
                     t = vt::create_dnnl_float(shape, true);

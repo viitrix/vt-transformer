@@ -1,13 +1,13 @@
 .PHONY: all
 
-FLAGS = -Wall -fopenmp -O3 -D_USING_DEVICE_DNNL_=1 
+FLAGS = -Wall -fopenmp -O3 -D_USING_DEVICE_DNNL_ -D_DNNL_GPU_
 INC = -I../../install/include -I${DNNL_DIR}/include 
 
 LINK = -L../../install/lib \
 	   -L${DNNL_DIR}/lib \
 	   -L/usr/lib/x86_64-linux-gnu \
 	   -ltokenizer_combo -ltokenizers_c \
-	   -ltensortype -ldnnl
+	   -ltensortype -lgomp -lOpenCL -ldnnl
 
 all: chat
 

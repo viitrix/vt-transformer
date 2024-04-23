@@ -111,7 +111,7 @@ template <DataType _DTYPE_>
 ComputingReturn DNNLTensor<_DTYPE_>::io_dump(tensor_t self) {
     size_t first8 = std::min(self->shape().vec().back(), (size_t)8);
 
-    #ifdef _DNNL_GPU_
+#ifdef _DNNL_GPU_
     if ( is_gpu()) {
         auto queue = dnnl::ocl_interop::get_command_queue(*ComputingContext::dnnl_gpu_stream);
         int ret = 0;
@@ -231,6 +231,19 @@ std::variant<ComputingReturn, size_t> DNNLTensor<_DTYPE_>::op_sizeof(tensor_t se
 
 template <DataType _DTYPE_>
 ComputingReturn DNNLTensor<_DTYPE_>::op_zero(tensor_t self) {
+
+#ifndef _DNNL_GPU_
+    if ( is_gpu() ) {
+        auto queue = dnnl::ocl_interop::get_command_queue(*ComputingContext::dnnl_gpu_stream);
+        int ret = 0;
+        void* target = clEnqueueMapBuffer(queue, (cl_mem)mem_,  CL_TRUE, CL_MAP_WRITE , 0, size_, 0, nullptr, nullptr, &ret);
+        OPENCL_CHECK(ret);
+        memset(target, 0, size_);
+        clEnqueueUnmapMemObject(queue, (cl_mem)mem_, target, 0, nullptr,  nullptr);
+        return OP_OK;
+    }
+#endif
+
     memset(mem_, 0, size_);
     return OP_OK;
 }
@@ -239,6 +252,24 @@ template <DataType _DTYPE_>
 ComputingReturn DNNLTensor<_DTYPE_>::io_save(tensor_t self, const char* fileName) {
     std::ofstream wf(fileName, std::ios::out | std::ios::binary);
 
+
+#ifdef _DNNL_GPU_
+    if ( is_gpu() ) {
+        auto queue = dnnl::ocl_interop::get_command_queue(*ComputingContext::dnnl_gpu_stream);
+        int ret = 0;
+        void* target = clEnqueueMapBuffer(queue, (cl_mem)mem_,  CL_TRUE, CL_MAP_READ , 0, size_, 0, nullptr, nullptr, &ret);
+        OPENCL_CHECK(ret);
+        const char* d = (const char *)target;
+        size_t len = std::get<1>(self->op_sizeof(self));
+        wf.write(d, len);
+        wf.close();
+
+        clEnqueueUnmapMemObject(queue, (cl_mem)mem_, target, 0, nullptr,  nullptr);
+        return OP_TODO_ERROR;
+    }
+#endif
+
+    
     const char* d = (const char *)data();
     size_t len = std::get<1>(self->op_sizeof(self));
     wf.write(d, len);
@@ -248,11 +279,42 @@ ComputingReturn DNNLTensor<_DTYPE_>::io_save(tensor_t self, const char* fileName
 
 template <DataType _DTYPE_>
 ComputingReturn DNNLTensor<_DTYPE_>::io_load(tensor_t self, const char* fileName) {
+
     std::ifstream inf(fileName, std::ios::binary);
     if ( ! inf.is_open() ) {
         std::cout << "Can't open " << fileName << std::endl;
         vt_panic("Can't open file");
     }
+
+#ifdef _DNNL_GPU_
+    if ( is_gpu() ) {
+        auto queue = dnnl::ocl_interop::get_command_queue(*ComputingContext::dnnl_gpu_stream);
+        int ret = 0;
+        void* target = clEnqueueMapBuffer(queue, (cl_mem)mem_,  CL_TRUE, CL_MAP_WRITE , 0, size_, 0, nullptr, nullptr, &ret);
+        OPENCL_CHECK(ret);
+ 
+        if (_DTYPE_ == DataType::Float) {
+            size_t ret = inf.read( (char *)target, sizeof(float) * self->items() ).gcount();
+            vt_assert(ret == sizeof(float) * self->items(), "file size dont't match tensor");
+        } else  if (_DTYPE_ == DataType::Int) {
+            size_t ret = inf.read( (char *)target, sizeof(int) * self->items() ).gcount();
+            vt_assert(ret == sizeof(int) * self->items(), "file size dont't match tensor");
+        } else if (_DTYPE_ == DataType::FP16) {
+            size_t ret = inf.read( (char *)target, sizeof(local_fp16_t) * self->items() ).gcount();
+            vt_assert(ret == sizeof(local_fp16_t) * self->items(), "file size dont't match tensor");
+        } else {
+            clEnqueueUnmapMemObject(queue, (cl_mem)mem_, target, 0, nullptr,  nullptr);
+            vt_panic("DataType don't support");
+            return OP_TODO_ERROR;
+        }
+
+        clEnqueueUnmapMemObject(queue, (cl_mem)mem_, target, 0, nullptr,  nullptr);
+        
+        inf.close();
+        return OP_OK;
+    }
+#endif
+
 
     if (_DTYPE_ == DataType::Float) {
         size_t ret = inf.read( (char *)data(), sizeof(float) * self->items() ).gcount();
@@ -263,18 +325,6 @@ ComputingReturn DNNLTensor<_DTYPE_>::io_load(tensor_t self, const char* fileName
     } else if (_DTYPE_ == DataType::FP16) {
         size_t ret = inf.read( (char *)data(), sizeof(local_fp16_t) * self->items() ).gcount();
         vt_assert(ret == sizeof(local_fp16_t) * self->items(), "file size dont't match tensor");
-    } else if (_DTYPE_ == DataType::Q8 ) {
-        size_t s = std::get<1>(self->op_sizeof(self));
-        size_t ret = inf.read( (char *)data(), s).gcount();
-        vt_assert(ret == s, "file size dont't match tensor");
-    } else if (_DTYPE_ == DataType::Q4 ) {
-        size_t s = std::get<1>(self->op_sizeof(self));
-        size_t ret = inf.read( (char *)data(), s).gcount();
-        vt_assert(ret == s, "file size dont't match tensor");
-    } else if (_DTYPE_ == DataType::PQ ) {
-        size_t s = std::get<1>(self->op_sizeof(self));
-        size_t ret = inf.read( (char *)mem_, s).gcount();
-        vt_assert(ret == s, "file size dont't match tensor");
     } else {
         vt_panic("DataType don't support");
     }
@@ -348,8 +398,32 @@ template<DataType DT>
 ComputingReturn DNNLTensor<DT>::op_alibi(tensor_t self) {
     int heads = self->shape()[1];
     int tokens = self->shape()[3];
-
     auto s = std::get<1>(self->op_sizeof(self));
+
+#ifdef _DNNL_GPU_
+    if ( is_gpu() ) {
+        auto queue = dnnl::ocl_interop::get_command_queue(*ComputingContext::dnnl_gpu_stream);
+        int ret = 0;
+        void* target = clEnqueueMapBuffer(queue, (cl_mem)mem_,  CL_TRUE, CL_MAP_WRITE , 0, size_, 0, nullptr, nullptr, &ret);
+        OPENCL_CHECK(ret);
+
+        if ( DT == DataType::Float ) {
+            std::vector<float> buffer;
+            vt::fill_alibi<float>(buffer, heads, tokens);
+            memcpy( target, buffer.data(), s);
+            clEnqueueUnmapMemObject(queue, (cl_mem)mem_, target, 0, nullptr,  nullptr);
+            return OP_OK;
+        } else {
+            std::vector<local_fp16_t> buffer;
+            vt::fill_alibi<local_fp16_t>(buffer, heads, tokens);
+            memcpy( target, buffer.data(), s);
+            clEnqueueUnmapMemObject(queue, (cl_mem)mem_, target, 0, nullptr,  nullptr);
+            return OP_OK;
+        } 
+        return OP_TODO_ERROR;
+    }
+#endif
+
     if ( DT == DataType::Float ) {
         std::vector<float> buffer;
         vt::fill_alibi<float>(buffer, heads, tokens);
@@ -371,8 +445,14 @@ ComputingReturn DNNLTensor<DT>::op_causal_mask(tensor_t self, tensor_t out) {
     int batch = self->shape()[0];
     int full_tokens = self->shape()[1];
     int new_tokens = out->shape()[2];
-
     int* mask  = (int *)data();
+
+#ifdef _DNNL_GPU_
+    if ( is_gpu() ) {
+        
+        return OP_OK;
+    }
+#endif
 
     float*          out32 = nullptr;
     local_fp16_t*   out16 = nullptr;

@@ -27,6 +27,9 @@ void binary_float(tensor_t a, tensor_t b, tensor_t c, dnnl::algorithm op ) {
     if ( a->shape().dim() == 2) {
         tag = dnnl::memory::format_tag::ab;
     }
+    if ( a->shape().dim() == 1) {
+        tag = dnnl::memory::format_tag::a;
+    }
 
     auto amem_desc = a->dnnl_float()->build_memory_desc( a->shape().vec(),  tag);
     auto bmem_desc = b->dnnl_float()->build_memory_desc( b->shape().vec(),  tag);
@@ -59,6 +62,13 @@ void binary_fp16(tensor_t a, tensor_t b, tensor_t c, dnnl::algorithm op ) {
     if ( a->shape().dim() == 3) {
         tag = dnnl::memory::format_tag::abc;
     }
+    if ( a->shape().dim() == 2) {
+        tag = dnnl::memory::format_tag::ab;
+    }
+    if ( a->shape().dim() == 1) {
+        tag = dnnl::memory::format_tag::a;
+    }
+
     auto amem_desc = a->dnnl_fp16()->build_memory_desc( a->shape().vec(),  tag);
     auto bmem_desc = b->dnnl_fp16()->build_memory_desc( b->shape().vec(),  tag);
     auto cmem_desc = c->dnnl_fp16()->build_memory_desc( c->shape().vec(),  tag);
