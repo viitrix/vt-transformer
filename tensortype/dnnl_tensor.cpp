@@ -454,18 +454,58 @@ ComputingReturn DNNLTensor<DT>::op_causal_mask(tensor_t self, tensor_t out) {
     int batch = self->shape()[0];
     int full_tokens = self->shape()[1];
     int new_tokens = out->shape()[2];
-    int* mask  = (int *)data();
+   
 
 #ifdef _DNNL_GPU_
     if ( is_gpu() ) {
+        auto queue = dnnl::ocl_interop::get_command_queue(*ComputingContext::dnnl_gpu_stream);
+        int ret = 0;
+        int* mask = (int *)clEnqueueMapBuffer(queue, (cl_mem)mem_,  CL_TRUE, CL_MAP_READ , 0, size_, 0, nullptr, nullptr, &ret);
+        OPENCL_CHECK(ret);
 
+        if ( out->dtype() == DataType::Float ) {
+            float* out32 = (float *)clEnqueueMapBuffer(queue, (cl_mem)out->dnnl_float()->mem_,  CL_TRUE, CL_MAP_WRITE , 0, size_, 0, nullptr, nullptr, &ret);
+            OPENCL_CHECK(ret);
+
+            for (int e = 0; e < batch * new_tokens; e++) {
+                int b = e / new_tokens;
+                int nt = e % new_tokens;
+                int nt_end = full_tokens - new_tokens + nt;
+
+                int* m = &mask[ b * full_tokens ];
+                float* o = &out32[ b * new_tokens * full_tokens + nt * full_tokens ];
+                float minv = std::numeric_limits<float>::lowest();
+                dnnl_kernels::fill_causal_mask<float>(m, o, minv, full_tokens, nt_end);
+            }
+            clEnqueueUnmapMemObject(queue, (cl_mem)out->dnnl_float()->mem_, out32, 0, nullptr,  nullptr);
+        } else if ( out->dtype() == DataType::FP16 ) {
+            local_fp16_t* out16 = (local_fp16_t *)clEnqueueMapBuffer(queue, (cl_mem)out->dnnl_fp16()->mem_,  CL_TRUE, CL_MAP_WRITE , 0, size_, 0, nullptr, nullptr, &ret);
+            OPENCL_CHECK(ret);
+
+            for (int e = 0; e < batch * new_tokens; e++) {
+                int b = e / new_tokens;
+                int nt = e % new_tokens;
+                int nt_end = full_tokens - new_tokens + nt;
+
+                int* m = &mask[ b * full_tokens ];
+                local_fp16_t* o = &out16[ b * new_tokens * full_tokens + nt * full_tokens ];
+                local_fp16_t minv = (unsigned short)0xFC00U;
+                dnnl_kernels::fill_causal_mask<local_fp16_t>(m, o, minv, full_tokens, nt_end);
+            }
+            clEnqueueUnmapMemObject(queue, (cl_mem)out->dnnl_fp16()->mem_, out16, 0, nullptr,  nullptr);
+        } else {
+            clEnqueueUnmapMemObject(queue, (cl_mem)mem_, mask, 0, nullptr,  nullptr);
+            return OP_TODO_ERROR;
+        }
+
+        clEnqueueUnmapMemObject(queue, (cl_mem)mem_, mask, 0, nullptr,  nullptr);
         return OP_OK;
     }
 #endif
 
+    int* mask  = (int *)data();
     float*          out32 = nullptr;
     local_fp16_t*   out16 = nullptr;
-
     if ( out->dtype() == DataType::Float ) {
         out32 = (float *)out->dnnl_float()->data();
     } else if ( out->dtype() == DataType::FP16 ) {
@@ -497,6 +537,30 @@ ComputingReturn DNNLTensor<DT>::op_causal_mask(tensor_t self, tensor_t out) {
 
 template<DataType DT>
 ComputingReturn DNNLTensor<DT>::op_rotary_cache(tensor_t self, float base) {
+
+#ifdef _DNNL_GPU_
+    if ( is_gpu() ) {
+        if ( DT != DataType::Float ) {
+            return OP_OUTPUT_ERROR;
+        }
+        
+        auto queue = dnnl::ocl_interop::get_command_queue(*ComputingContext::dnnl_gpu_stream);
+        int ret = 0;
+        void* target = (int *)clEnqueueMapBuffer(queue, (cl_mem)mem_,  CL_TRUE, CL_MAP_READ , 0, size_, 0, nullptr, nullptr, &ret);
+        OPENCL_CHECK(ret);
+
+        int len = self->shape()[0];
+        int dims = self->shape()[1];
+
+        std::vector<float> cos_sin;
+        vt::fill_rotary_cache(cos_sin, len, dims, base);
+
+        memcpy( target, cos_sin.data(), self->items() * sizeof(float));
+        clEnqueueUnmapMemObject(queue, (cl_mem)mem_, target, 0, nullptr,  nullptr);
+        return OP_OK;
+    }
+#endif
+
     if ( DT == DataType::Float ) {
         // building inv_freq
         int len = self->shape()[0];
@@ -513,6 +577,34 @@ ComputingReturn DNNLTensor<DT>::op_rotary_cache(tensor_t self, float base) {
 
 template<DataType DT>
 ComputingReturn DNNLTensor<DT>::op_copy(tensor_t self, tensor_t from) {
+#ifdef _DNNL_GPU_
+    if ( is_gpu() ) {
+        auto queue = dnnl::ocl_interop::get_command_queue(*ComputingContext::dnnl_gpu_stream);
+        if ( from->is_host() ) {
+            clEnqueueWriteBuffer(queue, (cl_mem)mem_, CL_TRUE, 0, size_, from->device_data(), 0, nullptr, nullptr);
+        } else if ( from->is_dnnl() && from->is_shared() ) {
+            clEnqueueWriteBuffer(queue, (cl_mem)mem_, CL_TRUE, 0, size_, from->device_data(), 0, nullptr, nullptr);
+        } else if (from->is_dnnl()) {
+            clEnqueueCopyBuffer(queue, (cl_mem)from->device_data(), (cl_mem)mem_, 0, 0, size_, 0, nullptr, nullptr);
+        } else {
+            return OP_TODO_ERROR;
+        }
+        return OP_OK;
+    } else {
+        if ( from->is_host() ) {
+            memcpy(data(), from->device_data(), size_);
+        } else if ( from->is_dnnl() && from->is_shared() ) {
+            memcpy(data(), from->device_data(), size_);
+        } else if (from->is_dnnl()) {
+            auto queue = dnnl::ocl_interop::get_command_queue(*ComputingContext::dnnl_gpu_stream);
+            clEnqueueReadBuffer(queue, (cl_mem)from->device_data(), CL_TRUE, 0, size_, data(), 0, nullptr, nullptr);
+        } else {
+            return OP_TODO_ERROR;
+        }
+        return OP_OK;
+    }
+#endif
+    
     auto s = std::get<1>(self->op_sizeof(self));
     if ( from->is_host() || from->is_dnnl() ) {        
         void* x = from->device_data();

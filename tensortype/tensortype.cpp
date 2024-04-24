@@ -916,5 +916,54 @@ void* TensorType::device_data(size_t index) {
     return nullptr;
 }
 
+bool TensorType::is_shared() {
+    int index = impl_index();
+    if ( is_host() ) {
+        return true;
+    }
+
+#ifdef _USING_DEVICE_CUDA_
+    if ( is_cuda() ) {
+        return false;
+    }
+#endif
+
+#ifdef _USING_DEVICE_DCU_
+    if ( is_dcu() ) {
+        return false;
+    }
+#endif
+
+#ifdef _USING_DEVICE_COREX_
+    if ( is_corex() ){
+        return false;
+    }
+#endif
+
+#ifdef _USING_DEVICE_ACL_
+    if ( is_acl() ) {
+        return true;
+    }
+#endif
+
+#ifdef _USING_DEVICE_DNNL_
+    if ( index == ImplType::DNNL_FLOAT ) {
+        dnnl_float_t* tensor = std::get<DNNL_FLOAT>(impl_);
+        return !tensor->is_gpu();
+    }
+    if ( index == ImplType::DNNL_INT ) {
+        dnnl_int_t* tensor = std::get<DNNL_INT>(impl_);
+        return !tensor->is_gpu();
+    }
+    if ( index == ImplType::DNNL_FP16 ) {
+        dnnl_fp16_t* tensor = std::get<DNNL_FP16>(impl_);
+        return !tensor->is_gpu();
+    }
+#endif
+
+    vt_panic("Can't be here!");
+    return false;
+}
+
 }
 

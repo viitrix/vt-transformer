@@ -736,6 +736,7 @@ public:
     TransformerComputing* impl();
     void* device_data();
     void* device_data(size_t index);
+    bool  is_shared();
 
 public:
     std::variant<ComputingReturn, size_t> op_sizeof(tensor_t self) override;
