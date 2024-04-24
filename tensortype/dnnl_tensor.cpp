@@ -617,24 +617,46 @@ ComputingReturn DNNLTensor<DT>::op_copy(tensor_t self, tensor_t from) {
 
 template<DataType DT>
 ComputingReturn DNNLTensor<DT>::op_convert(tensor_t self, tensor_t from) {
-    vt_assert( self->shape().dim() == 4, "convert support 4D tensor only!");
+    auto tag = dnnl::memory::format_tag::abcd;
+    if ( self->shape().dim() == 3) {
+        tag = dnnl::memory::format_tag::abc;
+    }
+    if ( self->shape().dim() == 2) {
+        tag = dnnl::memory::format_tag::ab;
+    }
+    if ( self->shape().dim() == 1) {
+        tag = dnnl::memory::format_tag::a;
+    }
+
     if ( DT == DataType::FP16 && from->is_float() ) {
-        auto dst_desc = build_memory_desc(self->shape().vec(), tag::abcd);
-        auto src_desc = from->dnnl_float()->build_memory_desc(from->shape().vec(), DataType::Float, tag::abcd);
+        auto dst_desc = build_memory_desc(self->shape().vec(), tag);
+        auto src_desc = from->dnnl_float()->build_memory_desc(from->shape().vec(), DataType::Float, tag);
         auto dst_mem = build_memory(dst_desc);
         auto src_mem = from->dnnl_float()->build_memory(src_desc);
         auto prim = dnnl::reorder(src_mem, dst_mem);
 
+#ifdef _DNNL_GPU_
+        if ( is_gpu() ) {
+            prim.execute( *ComputingContext::dnnl_gpu_stream , src_mem, dst_mem);
+            return OP_OK;
+        }
+#endif
         prim.execute( *ComputingContext::dnnl_stream , src_mem, dst_mem);
         return OP_OK;
     }
     if ( DT == DataType::Float && from->is_fp16() ) {
-        auto dst_desc = build_memory_desc(self->shape().vec(), tag::abcd);
-        auto src_desc = from->dnnl_fp16()->build_memory_desc(from->shape().vec(), DataType::FP16, tag::abcd);
+        auto dst_desc = build_memory_desc(self->shape().vec(), tag);
+        auto src_desc = from->dnnl_fp16()->build_memory_desc(from->shape().vec(), DataType::FP16, tag);
         auto dst_mem = build_memory(dst_desc);
         auto src_mem = from->dnnl_fp16()->build_memory(src_desc);
         auto prim = dnnl::reorder(src_mem, dst_mem);
 
+#ifdef _DNNL_GPU_
+        if ( is_gpu() ) {
+            prim.execute( *ComputingContext::dnnl_gpu_stream , src_mem, dst_mem);
+            return OP_OK;
+        }
+#endif
         prim.execute( *ComputingContext::dnnl_stream , src_mem, dst_mem);
         return OP_OK;
     }
@@ -644,6 +666,40 @@ ComputingReturn DNNLTensor<DT>::op_convert(tensor_t self, tensor_t from) {
 
 template <DataType _DTYPE_>
 std::variant<ComputingReturn, tensor_t> DNNLTensor<_DTYPE_>::op_view(tensor_t self, size_t offset, const std::vector<size_t>& newShape_) {
+    
+#ifdef _DNNL_GPU_
+    if ( is_gpu() ) {
+        ShapeType newShape(newShape_);
+        cl_buffer_region region;
+        int ret;
+        if ( _DTYPE_ == DataType::Float ) {
+            region.origin = offset * sizeof(float);
+            region.size = newShape.numel() * sizeof(float);
+            cl_mem newData = clCreateSubBuffer( (cl_mem)mem_, CL_MEM_READ_WRITE, CL_BUFFER_CREATE_TYPE_REGION, &region, &ret);
+            OPENCL_CHECK(ret);
+            auto* newCpuTensor = new DNNLTensor<DataType::Float>(newShape, newData);
+            return std::make_shared<TensorType>(newCpuTensor, newShape);
+        }
+        if ( _DTYPE_ == DataType::Int ) {
+            region.origin = offset * sizeof(int);
+            region.size = newShape.numel() * sizeof(int);
+            cl_mem newData = clCreateSubBuffer( (cl_mem)mem_, CL_MEM_READ_WRITE, CL_BUFFER_CREATE_TYPE_REGION, &region, &ret);
+            OPENCL_CHECK(ret);
+            auto* newCpuTensor = new DNNLTensor<DataType::Int>(newShape, newData);
+            return std::make_shared<TensorType>(newCpuTensor, newShape);
+        }
+        if ( _DTYPE_ == DataType::FP16 ) {
+            region.origin = offset * sizeof(local_fp16_t);
+            region.size = newShape.numel() * sizeof(local_fp16_t);
+            cl_mem newData = clCreateSubBuffer( (cl_mem)mem_, CL_MEM_READ_WRITE, CL_BUFFER_CREATE_TYPE_REGION, &region, &ret);
+            OPENCL_CHECK(ret);
+            auto* newCpuTensor = new DNNLTensor<DataType::FP16>(newShape, newData);
+            return std::make_shared<TensorType>(newCpuTensor, newShape);
+        }
+        return OP_TODO_ERROR;
+    }
+#endif  
+    
     if ( _DTYPE_ == DataType::Float ) {
         ShapeType newShape(newShape_);
         float *newData = (float *)data() + offset;
@@ -670,7 +726,36 @@ std::variant<ComputingReturn, tensor_t> DNNLTensor<_DT_>::op_view_as(tensor_t se
     DataType DT = DataType_from(dtype);
 
     ShapeType newShape(newShape_);
-
+#ifdef _DNNL_GPU_
+    if ( is_gpu() ) {
+        ShapeType newShape(newShape_);
+        cl_buffer_region region;
+        int ret;
+        if ( _DT_ == DataType::Float ) {
+            region.origin = offset * sizeof(float);
+        } else if ( _DT_ == DataType::Int ) {
+            region.origin = offset * sizeof(int);
+        } else if ( _DT_ == DataType::FP16 ) {
+            region.origin = offset * sizeof(local_fp16_t);
+        } else {
+            return OP_TODO_ERROR;
+        }
+        if ( DT == DataType::Float ) {
+            region.size = newShape.numel() * sizeof(float);
+        } else if ( DT == DataType::Int ) {
+            region.size = newShape.numel() * sizeof(int);
+        } else if ( DT == DataType::FP16 ) {
+            region.size = newShape.numel() * sizeof(local_fp16_t);
+        } else {
+            return OP_TODO_ERROR;
+        }
+        
+        cl_mem newData = clCreateSubBuffer( (cl_mem)mem_, CL_MEM_READ_WRITE, CL_BUFFER_CREATE_TYPE_REGION, &region, &ret);
+        OPENCL_CHECK(ret);
+        auto* newCpuTensor = new DNNLTensor<DataType::Int>(newShape, newData);
+        return std::make_shared<TensorType>(newCpuTensor, newShape);
+    }
+#endif
     void *newData = nullptr;
     if ( _DT_ == DataType::Float ) {
         newData = (char *)data() + offset * sizeof(float);
@@ -703,10 +788,33 @@ ComputingReturn DNNLTensor<DT>::op_reshape(tensor_t self, size_t offset, const s
     if ( owner_ == true ) {
         return OP_INPUT_ERROR;
     }
-
     if ( newShape.numel() + offset > self->items()  ) {
         return OP_INPUT_ERROR;
     }
+
+#ifdef _DNNL_GPU_
+    if ( is_gpu() ) {
+        ShapeType newShape(newShape_);
+        cl_buffer_region region;
+        int ret;
+        if ( DT == DataType::Float ) {
+            region.origin = offset * sizeof(float);
+            region.size = newShape.numel() * sizeof(float);
+        } else if ( DT == DataType::Int ) {
+            region.origin = offset * sizeof(int);
+            region.size = newShape.numel() * sizeof(int);
+        } else if ( DT == DataType::FP16 ) {
+            region.origin = offset * sizeof(local_fp16_t);
+            region.size = newShape.numel() * sizeof(local_fp16_t);
+        } else {
+            return OP_TODO_ERROR;
+        }
+
+        cl_mem newData = clCreateSubBuffer( (cl_mem)mem_, CL_MEM_READ_WRITE, CL_BUFFER_CREATE_TYPE_REGION, &region, &ret);
+        mem_ = newData;
+        OPENCL_CHECK(ret);
+    }
+#endif
 
     if ( DT == DataType::Float ) {
         mem_  = (char *)data() + offset * sizeof(float);
