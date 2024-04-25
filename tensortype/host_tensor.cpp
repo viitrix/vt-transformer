@@ -80,6 +80,14 @@ ComputingReturn HostTensor<_DTYPE_>::op_copy(tensor_t self, tensor_t src) {
 
 #ifdef _USING_DEVICE_DNNL_
     if ( src->is_dnnl() ) {
+#ifdef _DNNL_GPU_
+        if ( ! src->is_shared() ) {
+            auto queue = dnnl::ocl_interop::get_command_queue(*ComputingContext::dnnl_gpu_stream);
+            size_t size = std::get<1>( self->op_sizeof(self) );
+            clEnqueueReadBuffer(queue, (cl_mem)src->device_data(), CL_TRUE, 0, size, data(), 0, nullptr, nullptr);
+            return OP_OK;
+        }
+#endif
         size_t s = std::get<1>( self->op_sizeof(self) );
         void* x = src->device_data();
         void* y = data();

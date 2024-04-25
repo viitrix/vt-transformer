@@ -3,6 +3,9 @@
 
 #ifdef _USING_DEVICE_DNNL_
 #include <dnnl.hpp>
+#ifdef _DNNL_GPU_
+#include <dnnl_ocl.hpp>
+#endif
 #endif
 
 #ifdef _USING_DEVICE_CUDA_

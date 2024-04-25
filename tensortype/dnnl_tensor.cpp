@@ -1,7 +1,3 @@
-#ifdef _DNNL_GPU_
-#include <dnnl_ocl.hpp>
-#endif
-
 #include "dnnl_tensor.hpp"
 #include "host_tensor.hpp"
 
@@ -456,7 +452,6 @@ ComputingReturn DNNLTensor<DT>::op_causal_mask(tensor_t self, tensor_t out) {
     int batch = self->shape()[0];
     int full_tokens = self->shape()[1];
     int new_tokens = out->shape()[2];
-
 
 #ifdef _DNNL_GPU_
     if ( is_gpu() ) {
