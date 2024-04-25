@@ -679,7 +679,7 @@ std::variant<ComputingReturn, tensor_t> DNNLTensor<_DTYPE_>::op_view(tensor_t se
             region.size = newShape.numel() * sizeof(float);
             cl_mem newData = clCreateSubBuffer( (cl_mem)mem_, CL_MEM_READ_WRITE, CL_BUFFER_CREATE_TYPE_REGION, &region, &ret);
             OPENCL_CHECK(ret);
-            auto* newCpuTensor = new DNNLTensor<DataType::Float>(newShape, newData);
+            auto* newCpuTensor = new DNNLTensor<DataType::Float>(newShape, newData, true);
             return std::make_shared<TensorType>(newCpuTensor, newShape);
         }
         if ( _DTYPE_ == DataType::Int ) {
@@ -687,7 +687,7 @@ std::variant<ComputingReturn, tensor_t> DNNLTensor<_DTYPE_>::op_view(tensor_t se
             region.size = newShape.numel() * sizeof(int);
             cl_mem newData = clCreateSubBuffer( (cl_mem)mem_, CL_MEM_READ_WRITE, CL_BUFFER_CREATE_TYPE_REGION, &region, &ret);
             OPENCL_CHECK(ret);
-            auto* newCpuTensor = new DNNLTensor<DataType::Int>(newShape, newData);
+            auto* newCpuTensor = new DNNLTensor<DataType::Int>(newShape, newData, true);
             return std::make_shared<TensorType>(newCpuTensor, newShape);
         }
         if ( _DTYPE_ == DataType::FP16 ) {
@@ -695,7 +695,7 @@ std::variant<ComputingReturn, tensor_t> DNNLTensor<_DTYPE_>::op_view(tensor_t se
             region.size = newShape.numel() * sizeof(local_fp16_t);
             cl_mem newData = clCreateSubBuffer( (cl_mem)mem_, CL_MEM_READ_WRITE, CL_BUFFER_CREATE_TYPE_REGION, &region, &ret);
             OPENCL_CHECK(ret);
-            auto* newCpuTensor = new DNNLTensor<DataType::FP16>(newShape, newData);
+            auto* newCpuTensor = new DNNLTensor<DataType::FP16>(newShape, newData, true);
             return std::make_shared<TensorType>(newCpuTensor, newShape);
         }
         return OP_TODO_ERROR;
@@ -754,7 +754,7 @@ std::variant<ComputingReturn, tensor_t> DNNLTensor<_DT_>::op_view_as(tensor_t se
 
         cl_mem newData = clCreateSubBuffer( (cl_mem)mem_, CL_MEM_READ_WRITE, CL_BUFFER_CREATE_TYPE_REGION, &region, &ret);
         OPENCL_CHECK(ret);
-        auto* newCpuTensor = new DNNLTensor<DataType::Int>(newShape, newData);
+        auto* newCpuTensor = new DNNLTensor<DataType::Int>(newShape, newData, true);
         return std::make_shared<TensorType>(newCpuTensor, newShape);
     }
 #endif
