@@ -112,10 +112,7 @@ dnnl::memory DNNLTensor<_DTYPE_>::build_memory(const dnnl::memory::desc& desc) {
 #ifdef _DNNL_GPU_
         auto m =  dnnl::memory(desc, *ComputingContext::dnnl_gpu_engine, (cl_mem)mem_);
         return m;
-#else
-        vt_panic("Can't be here!");
-        return dnnl::memory();
-#endif
+#endif 
     }
 }
 
@@ -129,8 +126,8 @@ ComputingReturn DNNLTensor<_DTYPE_>::io_dump(tensor_t self) {
         int ret = 0;
         void* target = clEnqueueMapBuffer(queue, (cl_mem)mem_,  CL_TRUE, CL_MAP_READ , 0, size_, 0, nullptr, nullptr, &ret);
         OPENCL_CHECK(ret);
-        if ( _DTYPE_ == DataType::Float ) {
-            float* d = (float *)target;
+        if ( _DTYPE_ == DataType::Float ) {            
+            float* d = (float *)target; 
             std::cout << "First " << first8 << " : ";
             for(size_t i = 0; i < first8; i++) {
                 std::cout << d[i] << " ";
@@ -177,7 +174,7 @@ ComputingReturn DNNLTensor<_DTYPE_>::io_dump(tensor_t self) {
 #endif
 
     if ( _DTYPE_ == DataType::Float ) {
-        float* d = (float *)data();
+        float* d = (float *)data();    
         std::cout << "First " << first8 << " : ";
         for(size_t i = 0; i < first8; i++) {
             std::cout << d[i] << " ";
@@ -244,7 +241,7 @@ std::variant<ComputingReturn, size_t> DNNLTensor<_DTYPE_>::op_sizeof(tensor_t se
 template <DataType _DTYPE_>
 ComputingReturn DNNLTensor<_DTYPE_>::op_zero(tensor_t self) {
 
-#ifdef _DNNL_GPU_
+#ifndef _DNNL_GPU_
     if ( is_gpu() ) {
         auto queue = dnnl::ocl_interop::get_command_queue(*ComputingContext::dnnl_gpu_stream);
         int ret = 0;
@@ -281,7 +278,7 @@ ComputingReturn DNNLTensor<_DTYPE_>::io_save(tensor_t self, const char* fileName
     }
 #endif
 
-
+    
     const char* d = (const char *)data();
     size_t len = std::get<1>(self->op_sizeof(self));
     wf.write(d, len);
@@ -304,7 +301,7 @@ ComputingReturn DNNLTensor<_DTYPE_>::io_load(tensor_t self, const char* fileName
         int ret = 0;
         void* target = clEnqueueMapBuffer(queue, (cl_mem)mem_,  CL_TRUE, CL_MAP_WRITE , 0, size_, 0, nullptr, nullptr, &ret);
         OPENCL_CHECK(ret);
-
+ 
         if (_DTYPE_ == DataType::Float) {
             size_t ret = inf.read( (char *)target, sizeof(float) * self->items() ).gcount();
             vt_assert(ret == sizeof(float) * self->items(), "file size dont't match tensor");
@@ -321,7 +318,7 @@ ComputingReturn DNNLTensor<_DTYPE_>::io_load(tensor_t self, const char* fileName
         }
 
         clEnqueueUnmapMemObject(queue, (cl_mem)mem_, target, 0, nullptr,  nullptr);
-
+        
         inf.close();
         return OP_OK;
     }
@@ -353,7 +350,7 @@ ComputingReturn DNNLTensor<DT>::op_fill(tensor_t self, float value) {
         auto queue = dnnl::ocl_interop::get_command_queue(*ComputingContext::dnnl_gpu_stream);
         int ret = 0;
         void*  target = clEnqueueMapBuffer(queue, (cl_mem)mem_,  CL_TRUE, CL_MAP_WRITE , 0, size_, 0, nullptr, nullptr, &ret);
-        if ( DT == DataType::Float ) {
+        if ( DT == DataType::Float ) {            
             OPENCL_CHECK(ret);
             float *dst = (float *)target;
             for (size_t i = 0; i < items; i++) {
@@ -431,7 +428,7 @@ ComputingReturn DNNLTensor<DT>::op_alibi(tensor_t self) {
             memcpy( target, buffer.data(), s);
             clEnqueueUnmapMemObject(queue, (cl_mem)mem_, target, 0, nullptr,  nullptr);
             return OP_OK;
-        }
+        } 
         return OP_TODO_ERROR;
     }
 #endif
@@ -457,7 +454,7 @@ ComputingReturn DNNLTensor<DT>::op_causal_mask(tensor_t self, tensor_t out) {
     int batch = self->shape()[0];
     int full_tokens = self->shape()[1];
     int new_tokens = out->shape()[2];
-
+   
 
 #ifdef _DNNL_GPU_
     if ( is_gpu() ) {
@@ -546,7 +543,7 @@ ComputingReturn DNNLTensor<DT>::op_rotary_cache(tensor_t self, float base) {
         if ( DT != DataType::Float ) {
             return OP_OUTPUT_ERROR;
         }
-
+        
         auto queue = dnnl::ocl_interop::get_command_queue(*ComputingContext::dnnl_gpu_stream);
         int ret = 0;
         void* target = (int *)clEnqueueMapBuffer(queue, (cl_mem)mem_,  CL_TRUE, CL_MAP_READ , 0, size_, 0, nullptr, nullptr, &ret);
@@ -607,9 +604,9 @@ ComputingReturn DNNLTensor<DT>::op_copy(tensor_t self, tensor_t from) {
         return OP_OK;
     }
 #endif
-
+    
     auto s = std::get<1>(self->op_sizeof(self));
-    if ( from->is_host() || from->is_dnnl() ) {
+    if ( from->is_host() || from->is_dnnl() ) {        
         void* x = from->device_data();
         void* y = data();
         memcpy(y, x, s);
@@ -669,7 +666,7 @@ ComputingReturn DNNLTensor<DT>::op_convert(tensor_t self, tensor_t from) {
 
 template <DataType _DTYPE_>
 std::variant<ComputingReturn, tensor_t> DNNLTensor<_DTYPE_>::op_view(tensor_t self, size_t offset, const std::vector<size_t>& newShape_) {
-
+    
 #ifdef _DNNL_GPU_
     if ( is_gpu() ) {
         ShapeType newShape(newShape_);
@@ -701,8 +698,8 @@ std::variant<ComputingReturn, tensor_t> DNNLTensor<_DTYPE_>::op_view(tensor_t se
         }
         return OP_TODO_ERROR;
     }
-#endif
-
+#endif  
+    
     if ( _DTYPE_ == DataType::Float ) {
         ShapeType newShape(newShape_);
         float *newData = (float *)data() + offset;
@@ -752,7 +749,7 @@ std::variant<ComputingReturn, tensor_t> DNNLTensor<_DT_>::op_view_as(tensor_t se
         } else {
             return OP_TODO_ERROR;
         }
-
+        
         cl_mem newData = clCreateSubBuffer( (cl_mem)mem_, CL_MEM_READ_WRITE, CL_BUFFER_CREATE_TYPE_REGION, &region, &ret);
         OPENCL_CHECK(ret);
         auto* newCpuTensor = new DNNLTensor<DataType::Int>(newShape, newData);
@@ -839,12 +836,12 @@ ComputingReturn DNNLTensor<DT>::op_reshape(tensor_t self, size_t offset, const s
 template<DataType DT>
 ComputingReturn DNNLTensor<DT>::op_scale(tensor_t self, float scale) {
     if (   DT == DataType::Float) {
-        dnnl_kernels::eltwise<DNNLTensor<DataType::Float>>(self->dnnl_float(), self->dnnl_float(), self->items(),
+        dnnl_kernels::eltwise<DNNLTensor<DataType::Float>>(self->dnnl_float(), self->dnnl_float(), self->items(), 
             dnnl::algorithm::eltwise_linear, scale, 0.0);
         return OP_OK;
     }
     if (   DT == DataType::FP16) {
-        dnnl_kernels::eltwise<DNNLTensor<DataType::FP16>>(self->dnnl_fp16(),  self->dnnl_fp16(), self->items(),
+        dnnl_kernels::eltwise<DNNLTensor<DataType::FP16>>(self->dnnl_fp16(),  self->dnnl_fp16(), self->items(), 
             dnnl::algorithm::eltwise_linear, scale, 0.0);
         return OP_OK;
     }
@@ -887,12 +884,12 @@ ComputingReturn DNNLTensor<DT>::op_linear(tensor_t self, tensor_t w, tensor_t bi
 
     size_t num = batch * tokens;
     if (   DT == DataType::Float) {
-        dnnl_kernels::linear<DNNLTensor<DataType::Float>>(self->dnnl_float(), w->dnnl_float(),
+        dnnl_kernels::linear<DNNLTensor<DataType::Float>>(self->dnnl_float(), w->dnnl_float(), 
             bias == nullptr? nullptr : bias->dnnl_float(), dst->dnnl_float(), num, outSize, inSize);
         return OP_OK;
     }
     if (   DT == DataType::FP16) {
-        dnnl_kernels::linear<DNNLTensor<DataType::FP16>>(self->dnnl_fp16(), w->dnnl_fp16(),
+        dnnl_kernels::linear<DNNLTensor<DataType::FP16>>(self->dnnl_fp16(), w->dnnl_fp16(), 
             bias == nullptr? nullptr : bias->dnnl_fp16(), dst->dnnl_fp16(), num, outSize, inSize);
         return OP_OK;
     }
@@ -905,10 +902,10 @@ ComputingReturn DNNLTensor<_DTYPE_>::op_layernorm(tensor_t self, tensor_t mean, 
     size_t batch = self->shape()[0];
     size_t tokens = self->shape()[1];
     size_t feature = self->shape()[2];
-
+    
     vt_assert(mean == nullptr, "Current's impl don't need mean and var!");
     vt_assert(var == nullptr, "Current's impl don't need mean and var!");
-
+    
     size_t num = batch * tokens;
     if (   _DTYPE_ == DataType::Float) {
         dnnl_kernels::layernrom<DNNLTensor<DataType::Float>>(self->dnnl_float(), scale->dnnl_float(), bias->dnnl_float(), y->dnnl_float(),
@@ -931,18 +928,18 @@ ComputingReturn DNNLTensor<_DTYPE_>::op_rmsnorm(tensor_t self, tensor_t scale, t
 
     size_t num = batch * tokens;
     if (   _DTYPE_ == DataType::Float) {
-        dnnl_kernels::rmsnorm<DataType::Float>(self->dnnl_float(), scale->dnnl_float(),
+        dnnl_kernels::rmsnorm<DataType::Float>(self->dnnl_float(), scale->dnnl_float(), 
             norm2->dnnl_float(), y->dnnl_float(),
             num, feature, eps);
         return OP_OK;
     }
     if (   _DTYPE_ == DataType::FP16) {
-        dnnl_kernels::rmsnorm<DataType::FP16>(self->dnnl_fp16(), scale->dnnl_fp16(),
+        dnnl_kernels::rmsnorm<DataType::FP16>(self->dnnl_fp16(), scale->dnnl_fp16(), 
             norm2->dnnl_fp16(), y->dnnl_fp16(),
             num, feature, eps);
         return OP_OK;
     }
-    return OP_TODO_ERROR;
+    return OP_TODO_ERROR;    
 }
 
 template <DataType DT>
@@ -973,7 +970,7 @@ ComputingReturn DNNLTensor<DT>::op_rotary_embed(tensor_t self, tensor_t cached, 
         dnnl_kernels::rotary_embed<local_fp16_t>(in, cos_sin, pos, out, batch, heads, tokens, hidden);
         return OP_OK;
     }
-    return OP_TODO_ERROR;
+    return OP_TODO_ERROR;  
 }
 
 template <DataType DT>
@@ -996,12 +993,12 @@ ComputingReturn DNNLTensor<DT>::op_transpose_0213(tensor_t self, tensor_t y) {
         dnnl_kernels::transpose_0213<local_fp16_t>(in, out, batch, heads, tokens, hidden);
         return OP_OK;
     }
-    return OP_TODO_ERROR;
+    return OP_TODO_ERROR;  
 }
 
 template <DataType _DTYPE_>
 ComputingReturn DNNLTensor<_DTYPE_>::op_qk(tensor_t self, tensor_t key, tensor_t qk) {
-#if 0
+#if 1
     auto shape_ = self->shape().vec();
 
     int batch = shape_[0];
@@ -1140,7 +1137,7 @@ ComputingReturn DNNLTensor<_DTYPE_>::op_silu_product(tensor_t self, tensor_t in,
         return OP_OK;
     }
 
-    return OP_TODO_ERROR;
+    return OP_TODO_ERROR;    
 }
 
 template<DataType DT>
@@ -1163,6 +1160,11 @@ std::variant<ComputingReturn,int> DNNLTensor<DT>::op_all_logits(tensor_t self, t
     auto w_md = dnnl::memory::desc({1, hidden_size, vocab_size}, ddt, dnnl::memory::format_tag::acb);
     auto dst_md = dnnl::memory::desc({1, 1, vocab_size}, ddt, dnnl::memory::format_tag::abc);
 
+#ifdef _DNNL_GPU_
+    int ret;
+    cl_buffer_region region;   
+#endif
+
     for (int b = 0;  b < batch; b++) {
         int* mk = &mask[b * full_tokens];
         for ( int i = 0; i < new_tokens ; i++) {
@@ -1173,17 +1175,58 @@ std::variant<ComputingReturn,int> DNNLTensor<DT>::op_all_logits(tensor_t self, t
             int target = i;
 
             if ( DT == DataType::Float ) {
-                float* dst = (float *)output->dnnl_float()->data() + pred * vocab_size;
-                float* src = (float *)data() + b * new_tokens * hidden_size + target * hidden_size;
-                float* w = (float *)lm_head->dnnl_float()->data();
+#ifdef _DNNL_GPU_
+                if (is_gpu()) {
+                    region.origin = (b * new_tokens * hidden_size + target * hidden_size) * sizeof(float);
+                    region.size = hidden_size;
+                    cl_mem srcbuf = clCreateSubBuffer( (cl_mem)mem_, CL_MEM_READ_WRITE, CL_BUFFER_CREATE_TYPE_REGION, &region, &ret);
+                    OPENCL_CHECK(ret);
+                    region.origin = (pred * vocab_size) * sizeof(float);
+                    region.size = vocab_size;
+                    cl_mem dstbuf = clCreateSubBuffer( (cl_mem)output->dnnl_float()->mem_, CL_MEM_READ_WRITE, CL_BUFFER_CREATE_TYPE_REGION, &region, &ret);
+                    OPENCL_CHECK(ret);
+                    
+                    cl_mem wbuf = (cl_mem)lm_head->dnnl_float()->mem_;
+                    dnnl_kernels::simple_gpu_gemm(srcbuf, wbuf, dstbuf, src_md, w_md, dst_md);
 
-                dnnl_kernels::simple_gemm(src, w, dst, src_md, w_md, dst_md);
+                    clReleaseMemObject(srcbuf);
+                    clReleaseMemObject(dstbuf);
+                    
+                } else  
+#endif
+                {
+                    float* dst = (float *)output->dnnl_float()->data() + pred * vocab_size;
+                    float* src = (float *)data() + b * new_tokens * hidden_size + target * hidden_size;
+                    float* w = (float *)lm_head->dnnl_float()->data();
+                    dnnl_kernels::simple_gemm(src, w, dst, src_md, w_md, dst_md);
+                }
 
             } else if ( DT == DataType::FP16 ) {
-                auto* dst = (local_fp16_t *)output->dnnl_fp16()->data() + pred * vocab_size;
-                auto* src = (local_fp16_t *)data() + b * new_tokens * hidden_size + target * hidden_size;
-                auto* w = (local_fp16_t *)lm_head->dnnl_fp16()->data();
-                dnnl_kernels::simple_gemm(src, w, dst, src_md, w_md, dst_md);
+
+#ifdef _DNNL_GPU_
+                if ( is_gpu() ) {
+                    region.origin = (b * new_tokens * hidden_size + target * hidden_size) * sizeof(local_fp16_t);
+                    region.size = hidden_size;
+                    cl_mem srcbuf = clCreateSubBuffer( (cl_mem)mem_, CL_MEM_READ_WRITE, CL_BUFFER_CREATE_TYPE_REGION, &region, &ret);
+                    OPENCL_CHECK(ret);
+                    region.origin = (pred * vocab_size) * sizeof(local_fp16_t);
+                    region.size = vocab_size;
+                    cl_mem dstbuf = clCreateSubBuffer( (cl_mem)output->dnnl_float()->mem_, CL_MEM_READ_WRITE, CL_BUFFER_CREATE_TYPE_REGION, &region, &ret);
+                    OPENCL_CHECK(ret);
+                    
+                    cl_mem wbuf = (cl_mem)lm_head->dnnl_float()->mem_;
+                    dnnl_kernels::simple_gpu_gemm(srcbuf, wbuf, dstbuf, src_md, w_md, dst_md);
+
+                    clReleaseMemObject(srcbuf);
+                    clReleaseMemObject(dstbuf);
+                } else 
+#endif
+                {
+                    auto* dst = (local_fp16_t *)output->dnnl_fp16()->data() + pred * vocab_size;
+                    auto* src = (local_fp16_t *)data() + b * new_tokens * hidden_size + target * hidden_size;
+                    auto* w = (local_fp16_t *)lm_head->dnnl_fp16()->data();
+                    dnnl_kernels::simple_gemm(src, w, dst, src_md, w_md, dst_md);
+                }
             } else {
                 return OP_TODO_ERROR;
             }
