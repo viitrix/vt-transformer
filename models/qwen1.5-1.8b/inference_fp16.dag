@@ -280,9 +280,10 @@
 %def layer_forward
     $L !
     "cache_man" @  "_position" @ nn.ezkv_position  $pos !
-    "xinput" @ io.dump ^
     "xinput" @ "ln_1.weight" @ "norm2" @ "xa" @ "RMS_EPS" @ op.rmsnorm
- 
+    
+    "xa" @ io.dump ^
+
     ;; attention
     {
         ;; get key for new tokens, combing cached tokens, position embedding

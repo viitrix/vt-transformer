@@ -231,8 +231,8 @@ void layernrom(T* x, T* scale, T* bias, T* y, size_t batch_size, size_t hidden_d
     lnorm_prim.execute(*ComputingContext::dnnl_stream, lnorm_args);
 }
 
-template <DataType DT>
-void rmsnorm(DNNLTensor<DT>* x, DNNLTensor<DT>* scale, DNNLTensor<DT>* norm2, DNNLTensor<DT>* y, size_t batch_size, size_t hidden_dim, float eps) {
+template <typename T, DataType DT>
+void rmsnorm(T* x, T* scale,  T* y, size_t batch_size, size_t hidden_dim, float eps) {
     if ( DT != DataType::Float &&  DT != DataType::FP16) {
         vt_panic("DNNL rmsnor only support float and fp16!");
     }
@@ -242,13 +242,13 @@ void rmsnorm(DNNLTensor<DT>* x, DNNLTensor<DT>* scale, DNNLTensor<DT>* norm2, DN
         float rms = 0.0;
         if ( DT == DataType::Float) {
             for(size_t j = 0; j < hidden_dim; j++) {
-                float v = ((float *)x->data())[i * hidden_dim + j];
+                float v = x[i * hidden_dim + j];
                 rms = rms + v * v;
             }
         }
         if ( DT == DataType::FP16) {
             for(size_t j = 0; j < hidden_dim; j++) {
-                float v = fp16_to_fp32(((local_fp16_t *)x->data())[i * hidden_dim + j]);
+                float v = fp16_to_fp32(x[i * hidden_dim + j]);
                 rms = rms + v * v;
             }
         }
@@ -258,14 +258,14 @@ void rmsnorm(DNNLTensor<DT>* x, DNNLTensor<DT>* scale, DNNLTensor<DT>* norm2, DN
 
         if ( DT == DataType::Float) {
             for(size_t j = 0; j < hidden_dim; j++) {
-                float v = ((float *)x->data())[i * hidden_dim + j];
-                ((float *)y->data())[i * hidden_dim + j] = v * rms * ( ((float *)scale->data())[j]);
+                float v = x[i * hidden_dim + j];
+                y[i * hidden_dim + j] = v * rms * scale[j];
             }
         }
         if ( DT == DataType::FP16) {
             for(size_t j = 0; j < hidden_dim; j++) {
-                float v = fp16_to_fp32(((local_fp16_t *)x->data())[i * hidden_dim + j]);
-                ((local_fp16_t *)y->data())[i * hidden_dim + j] = fp32_to_fp16( v * rms * fp16_to_fp32( ((local_fp16_t *)scale->data())[j]) );
+                float v = fp16_to_fp32(x[i * hidden_dim + j]);
+                y[i * hidden_dim + j] = fp32_to_fp16( v * rms * fp16_to_fp32(scale[j]) );
             }
         }
     }

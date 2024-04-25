@@ -922,18 +922,47 @@ ComputingReturn DNNLTensor<_DTYPE_>::op_rmsnorm(tensor_t self, tensor_t scale, t
     size_t batch = self->shape()[0];
     size_t tokens = self->shape()[1];
     size_t feature = self->shape()[2];
-
     size_t num = batch * tokens;
+
+#ifdef _DNNL_GPU_
+    if ( is_gpu() ) {
+        auto queue = dnnl::ocl_interop::get_command_queue(*ComputingContext::dnnl_gpu_stream);
+        int ret = 0;
+        void* src = clEnqueueMapBuffer(queue, (cl_mem)mem_,  CL_TRUE, CL_MAP_READ , 0, size_, 0, nullptr, nullptr, &ret);
+        OPENCL_CHECK(ret);
+
+        void* dst = clEnqueueMapBuffer(queue, (cl_mem)y->device_data(),  CL_TRUE, CL_MAP_WRITE , 0, size_, 0, nullptr, nullptr, &ret);
+        OPENCL_CHECK(ret);
+
+        void* s = clEnqueueMapBuffer(queue, (cl_mem)scale->device_data(),  CL_TRUE, CL_MAP_WRITE , 0, size_, 0, nullptr, nullptr, &ret);
+        OPENCL_CHECK(ret);
+
+        ComputingReturn result = OP_TODO_ERROR;
+        if (   _DTYPE_ == DataType::Float) {
+            dnnl_kernels::rmsnorm<float, DataType::Float>((float *)src, (float *)s, (float *)dst, num, feature, eps);
+            result = OP_OK;
+        }
+        if (   _DTYPE_ == DataType::FP16) { 
+            dnnl_kernels::rmsnorm<local_fp16_t, DataType::FP16>((local_fp16_t *)src, (local_fp16_t *)s, (local_fp16_t *)dst, num, feature, eps);
+            result = OP_OK;
+        }
+
+        clEnqueueUnmapMemObject(queue, (cl_mem)mem_, src, 0, nullptr,  nullptr);
+        clEnqueueUnmapMemObject(queue, (cl_mem)y->device_data(), dst, 0, nullptr,  nullptr);
+        clEnqueueUnmapMemObject(queue, (cl_mem)scale->device_data(), s, 0, nullptr,  nullptr);  
+        return result;
+    }
+ #endif  
+
+    void* src = data();
+    void* dst = y->device_data();
+    void* s = scale->device_data();
     if (   _DTYPE_ == DataType::Float) {
-        dnnl_kernels::rmsnorm<DataType::Float>(self->dnnl_float(), scale->dnnl_float(),
-            norm2->dnnl_float(), y->dnnl_float(),
-            num, feature, eps);
+        dnnl_kernels::rmsnorm<float, DataType::Float>((float *)src, (float *)s, (float *)dst, num, feature, eps);
         return OP_OK;
     }
     if (   _DTYPE_ == DataType::FP16) {
-        dnnl_kernels::rmsnorm<DataType::FP16>(self->dnnl_fp16(), scale->dnnl_fp16(),
-            norm2->dnnl_fp16(), y->dnnl_fp16(),
-            num, feature, eps);
+        dnnl_kernels::rmsnorm<local_fp16_t, DataType::FP16>((local_fp16_t *)src, (local_fp16_t *)s, (local_fp16_t *)dst, num, feature, eps);
         return OP_OK;
     }
     return OP_TODO_ERROR;
