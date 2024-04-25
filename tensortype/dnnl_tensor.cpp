@@ -998,7 +998,7 @@ ComputingReturn DNNLTensor<DT>::op_transpose_0213(tensor_t self, tensor_t y) {
 
 template <DataType _DTYPE_>
 ComputingReturn DNNLTensor<_DTYPE_>::op_qk(tensor_t self, tensor_t key, tensor_t qk) {
-#if 0
+#if 1
     auto shape_ = self->shape().vec();
 
     int batch = shape_[0];
@@ -1160,6 +1160,11 @@ std::variant<ComputingReturn,int> DNNLTensor<DT>::op_all_logits(tensor_t self, t
     auto w_md = dnnl::memory::desc({1, hidden_size, vocab_size}, ddt, dnnl::memory::format_tag::acb);
     auto dst_md = dnnl::memory::desc({1, 1, vocab_size}, ddt, dnnl::memory::format_tag::abc);
 
+#ifdef _DNNL_GPU_
+    int ret;
+    cl_buffer_region region;   
+#endif
+
     for (int b = 0;  b < batch; b++) {
         int* mk = &mask[b * full_tokens];
         for ( int i = 0; i < new_tokens ; i++) {
@@ -1170,17 +1175,58 @@ std::variant<ComputingReturn,int> DNNLTensor<DT>::op_all_logits(tensor_t self, t
             int target = i;
 
             if ( DT == DataType::Float ) {
-                float* dst = (float *)output->dnnl_float()->data() + pred * vocab_size;
-                float* src = (float *)data() + b * new_tokens * hidden_size + target * hidden_size;
-                float* w = (float *)lm_head->dnnl_float()->data();
-                
-                dnnl_kernels::simple_gemm(src, w, dst, src_md, w_md, dst_md);
-                
+#ifdef _DNNL_GPU_
+                if (is_gpu()) {
+                    region.origin = (b * new_tokens * hidden_size + target * hidden_size) * sizeof(float);
+                    region.size = hidden_size;
+                    cl_mem srcbuf = clCreateSubBuffer( (cl_mem)mem_, CL_MEM_READ_WRITE, CL_BUFFER_CREATE_TYPE_REGION, &region, &ret);
+                    OPENCL_CHECK(ret);
+                    region.origin = (pred * vocab_size) * sizeof(float);
+                    region.size = vocab_size;
+                    cl_mem dstbuf = clCreateSubBuffer( (cl_mem)output->dnnl_float()->mem_, CL_MEM_READ_WRITE, CL_BUFFER_CREATE_TYPE_REGION, &region, &ret);
+                    OPENCL_CHECK(ret);
+                    
+                    cl_mem wbuf = (cl_mem)lm_head->dnnl_float()->mem_;
+                    dnnl_kernels::simple_gpu_gemm(srcbuf, wbuf, dstbuf, src_md, w_md, dst_md);
+
+                    clReleaseMemObject(srcbuf);
+                    clReleaseMemObject(dstbuf);
+                    
+                } else  
+#endif
+                {
+                    float* dst = (float *)output->dnnl_float()->data() + pred * vocab_size;
+                    float* src = (float *)data() + b * new_tokens * hidden_size + target * hidden_size;
+                    float* w = (float *)lm_head->dnnl_float()->data();
+                    dnnl_kernels::simple_gemm(src, w, dst, src_md, w_md, dst_md);
+                }
+
             } else if ( DT == DataType::FP16 ) {
-                auto* dst = (local_fp16_t *)output->dnnl_fp16()->data() + pred * vocab_size;
-                auto* src = (local_fp16_t *)data() + b * new_tokens * hidden_size + target * hidden_size;
-                auto* w = (local_fp16_t *)lm_head->dnnl_fp16()->data();
-                dnnl_kernels::simple_gemm(src, w, dst, src_md, w_md, dst_md);
+
+#ifdef _DNNL_GPU_
+                if ( is_gpu() ) {
+                    region.origin = (b * new_tokens * hidden_size + target * hidden_size) * sizeof(local_fp16_t);
+                    region.size = hidden_size;
+                    cl_mem srcbuf = clCreateSubBuffer( (cl_mem)mem_, CL_MEM_READ_WRITE, CL_BUFFER_CREATE_TYPE_REGION, &region, &ret);
+                    OPENCL_CHECK(ret);
+                    region.origin = (pred * vocab_size) * sizeof(local_fp16_t);
+                    region.size = vocab_size;
+                    cl_mem dstbuf = clCreateSubBuffer( (cl_mem)output->dnnl_float()->mem_, CL_MEM_READ_WRITE, CL_BUFFER_CREATE_TYPE_REGION, &region, &ret);
+                    OPENCL_CHECK(ret);
+                    
+                    cl_mem wbuf = (cl_mem)lm_head->dnnl_float()->mem_;
+                    dnnl_kernels::simple_gpu_gemm(srcbuf, wbuf, dstbuf, src_md, w_md, dst_md);
+
+                    clReleaseMemObject(srcbuf);
+                    clReleaseMemObject(dstbuf);
+                } else 
+#endif
+                {
+                    auto* dst = (local_fp16_t *)output->dnnl_fp16()->data() + pred * vocab_size;
+                    auto* src = (local_fp16_t *)data() + b * new_tokens * hidden_size + target * hidden_size;
+                    auto* w = (local_fp16_t *)lm_head->dnnl_fp16()->data();
+                    dnnl_kernels::simple_gemm(src, w, dst, src_md, w_md, dst_md);
+                }
             } else {
                 return OP_TODO_ERROR;
             }
