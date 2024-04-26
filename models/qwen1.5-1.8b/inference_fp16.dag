@@ -189,41 +189,40 @@
     64 app.align
     
     ;; xa, xb, xquery/key/value, xll, x4a, x4b, all_logits
-    dup dup dup
+    dup
     "_var_" @ swap $batch @ $tokens @ "HIDDEN_SIZE" @ 3 op.view "xa" !
-    "_var_" @ swap $batch @ $tokens @ "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "ya" !
-    "_var_" @ swap $batch @ "HEADS_NUM" @ $tokens @ "HEAD_HIDDEN" @ 4 op.view "za" !
     $batch @ $tokens @ "HIDDEN_SIZE" @  * * +
-   
-    dup dup dup
-    "_var_" @ swap $batch @ $tokens @ "HIDDEN_SIZE" @ 3 op.view "xb" !
-    "_var_" @ swap $batch @ $tokens @ "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "yb" !
-    "_var_" @ swap $batch @ "HEADS_NUM" @ $tokens @ "HEAD_HIDDEN" @ 4 op.view "zb" !
-    $batch @ $tokens @ "HIDDEN_SIZE" @  * * +
+    "xa" @ 0 $batch @ $tokens @ "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "ya" !
+    "xa" @ 0 $batch @ "HEADS_NUM" @ $tokens @ "HEAD_HIDDEN" @ 4 op.view "za" !
 
+    dup
+    "_var_" @ swap $batch @ $tokens @ "HIDDEN_SIZE" @ 3 op.view "xb" !
+    $batch @ $tokens @ "HIDDEN_SIZE" @  * * +
+    "xb" @ 0 $batch @ $tokens @ "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "yb" !
+    "xb" @ 0 $batch @ "HEADS_NUM" @ $tokens @ "HEAD_HIDDEN" @ 4 op.view "zb" !
+    
     dup 
     {
-        dup dup dup
+        dup
         "_var_" @ swap $batch @ $tokens @ "HIDDEN_SIZE" @ 3 op.view "xc" !
-        "_var_" @ swap $batch @ $tokens @ "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "yc" !
-        "_var_" @ swap $batch @ "HEADS_NUM" @ $tokens @ "HEAD_HIDDEN" @ 4 op.view "zc" !
         $batch @ $tokens @ "HIDDEN_SIZE" @  * * +
-        
-        dup dup dup
+        "xc" @ 0 $batch @ $tokens @ "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "yc" !
+        "xc" @ 0 $batch @ "HEADS_NUM" @ $tokens @ "HEAD_HIDDEN" @ 4 op.view "zc" !
+      
+        dup
         "_var_" @ swap $batch @ $full_tokens @ "HIDDEN_SIZE" @ 3 op.view "xfa" !
-        "_var_" @ swap $batch @ $full_tokens @ "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "yfa" !
-        "_var_" @ swap $batch @ "HEADS_NUM" @ $full_tokens @ "HEAD_HIDDEN" @ 4 op.view "zfa" !
         $batch @ $full_tokens @ "HIDDEN_SIZE" @  * * +
+        "xfa" @ 0 $batch @ $full_tokens @ "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "yfa" !
+        "xfa" @ 0 $batch @ "HEADS_NUM" @ $full_tokens @ "HEAD_HIDDEN" @ 4 op.view "zfa" !
 
-        dup dup dup
+        dup
         "_var_" @ swap $batch @ $full_tokens @ "HIDDEN_SIZE" @ 3 op.view "xfb" !
-        "_var_" @ swap $batch @ $full_tokens @ "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "yfb" !
-        "_var_" @ swap $batch @ "HEADS_NUM" @ $full_tokens @ "HEAD_HIDDEN" @ 4 op.view "zfb" !
         $batch @ $full_tokens @ "HIDDEN_SIZE" @  * * +
+        "xfb" @ 0 $batch @ $full_tokens @ "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "yfb" !
+        "xfb" @ 0 $batch @ "HEADS_NUM" @ $full_tokens @ "HEAD_HIDDEN" @ 4 op.view "zfb" !
 
         "_var_" @ swap $batch @ "HEADS_NUM" @ $tokens @ $full_tokens @ 4 op.view "xll" !
     }  
-    
     dup
     {
    
@@ -254,12 +253,12 @@
         $batch !!
         $tokens !!
     }
-  
+   
     ;; fetch KV cache
     "cache_man" @  "ids~" @  "mask~" @  "_ids" @ "_mask" @ nn.ezkv_match  
     "mask" !        
     "ids"  !
-    
+       
     ;; write cached mask & ids back to cpu
     {
         "_maks~" @ 0 "mask" @ op.get_shape op.view "mask~" !
@@ -281,16 +280,13 @@
     $L !
     "cache_man" @  "_position" @ nn.ezkv_position  $pos !
     "xinput" @ "ln_1.weight" @ "norm2" @ "xa" @ "RMS_EPS" @ op.rmsnorm
-    
+  
     ;; attention
     {
         ;; get key for new tokens, combing cached tokens, position embedding
         "xa" @ "attn.key.weight" @ "attn.key.bias" @ "xb" @ op.linear
         "yb" @ "rotary_cache" @ $pos @ "yc" @  op.rotary_embed
         "cache_man" @ "_kcache_" @ "xc" @ "xfb" @ $L @ nn.ezkv_update
-        
-        "xfb" @ io.dump ^
-
         "yfb" @ "zfa" @ op.transpose_0213
        
         ;; get query@key
@@ -300,6 +296,9 @@
         
         ;; query@key + apply causal_mask + softmax
         "zc" @  "zfa" @  "xll" @ op.querykey
+            
+        "xll" @ io.dump ^
+
         "xll" @ "causal_mask" @ "xll" @ op.add
         "xll" @ "xll" @ op.softmax
      
@@ -368,7 +367,7 @@
         "ids~" @ "wte.weight" @ "xinput~" @ op.embed
         "xinput" @ "xinput~" @ op.copy
     }
-    
+
     %for 0 23
         "L%%."   sync_layer_clone %% layer_forward 
     %endf
