@@ -24,6 +24,14 @@ struct DNNLTensor : public TransformerComputing {
     dnnl::memory::desc build_memory_desc(const std::vector<size_t>& shape, dnnl::memory::format_tag tag);
     dnnl::memory build_memory(const dnnl::memory::desc& desc);
 
+#ifdef _DNNL_GPU_
+    void setup_from(void* from, size_t offset) {
+        vt_assert( from_ == nullptr, "Can't setup from_ twice!");
+        from_ = from;
+        offset_ = offset;
+    }
+#endif
+
 public:
     // Interfaces from TransformerComputing
     ComputingReturn io_dump(tensor_t self) override;
@@ -70,6 +78,11 @@ protected:
     const bool gpu_;
     void* mem_;
     size_t size_;
+
+#ifdef _DNNL_GPU_
+    void* from_;
+    size_t offset_;
+#endif
 
     friend struct DNNLTensor<DataType::Float>;
     friend struct DNNLTensor<DataType::Int>;
