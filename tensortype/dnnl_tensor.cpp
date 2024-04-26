@@ -116,7 +116,7 @@ dnnl::memory DNNLTensor<_DTYPE_>::build_memory(const dnnl::memory::desc& desc) {
 
 template <DataType _DTYPE_>
 ComputingReturn DNNLTensor<_DTYPE_>::io_dump(tensor_t self) {
-    size_t first8 = std::min(self->shape().vec().back(), (size_t)8);
+    size_t first8 = std::min( self->items() , (size_t)8);
 
 #ifdef _DNNL_GPU_
     if ( is_gpu()) {
@@ -543,7 +543,7 @@ ComputingReturn DNNLTensor<DT>::op_rotary_cache(tensor_t self, float base) {
 
         auto queue = dnnl::ocl_interop::get_command_queue(*ComputingContext::dnnl_gpu_stream);
         int ret = 0;
-        void* target = (int *)clEnqueueMapBuffer(queue, (cl_mem)mem_,  CL_TRUE, CL_MAP_READ , 0, size_, 0, nullptr, nullptr, &ret);
+        void* target = (int *)clEnqueueMapBuffer(queue, (cl_mem)mem_,  CL_TRUE, CL_MAP_WRITE , 0, size_, 0, nullptr, nullptr, &ret);
         OPENCL_CHECK(ret);
 
         int len = self->shape()[0];
@@ -934,7 +934,7 @@ ComputingReturn DNNLTensor<_DTYPE_>::op_rmsnorm(tensor_t self, tensor_t scale, t
         void* dst = clEnqueueMapBuffer(queue, (cl_mem)y->device_data(),  CL_TRUE, CL_MAP_WRITE , 0, size_, 0, nullptr, nullptr, &ret);
         OPENCL_CHECK(ret);
 
-        void* s = clEnqueueMapBuffer(queue, (cl_mem)scale->device_data(),  CL_TRUE, CL_MAP_WRITE , 0, size_, 0, nullptr, nullptr, &ret);
+        void* s = clEnqueueMapBuffer(queue, (cl_mem)scale->device_data(),  CL_TRUE, CL_MAP_READ , 0, feature, 0, nullptr, nullptr, &ret);
         OPENCL_CHECK(ret);
 
         ComputingReturn result = OP_TODO_ERROR;
@@ -977,23 +977,53 @@ ComputingReturn DNNLTensor<DT>::op_rotary_embed(tensor_t self, tensor_t cached, 
 
     vt_assert(hidden == cached->shape()[1], "heads number must be same with cache");
 
-    int* pos = (int*) pos_->dnnl_int()->data();
+    void* in = data();
+    void* cos_sin = cached->device_data();
+    void* out = y->device_data();
+    void* pos = (int*) pos_->device_data();
+
+#ifdef _DNNL_GPU_
+    if ( is_gpu() ) {
+        auto queue = dnnl::ocl_interop::get_command_queue(*ComputingContext::dnnl_gpu_stream);
+        int ret = 0;
+        in = clEnqueueMapBuffer(queue, (cl_mem)mem_,  CL_TRUE, CL_MAP_READ , 0, size_, 0, nullptr, nullptr, &ret);
+        OPENCL_CHECK(ret);
+
+        size_t tab_size = std::get<1>(cached->op_sizeof(cached));
+        cos_sin = clEnqueueMapBuffer(queue, (cl_mem)cached->device_data(),  CL_TRUE, CL_MAP_READ , 0, tab_size, 0, nullptr, nullptr, &ret);
+        OPENCL_CHECK(ret);
+
+        size_t pos_size = std::get<1>(pos_->op_sizeof(pos_));
+        pos = clEnqueueMapBuffer(queue, (cl_mem)pos_->device_data(),  CL_TRUE, CL_MAP_WRITE , 0, pos_size, 0, nullptr, nullptr, &ret);
+        OPENCL_CHECK(ret);
+
+        out = clEnqueueMapBuffer(queue, (cl_mem)y->device_data(),  CL_TRUE, CL_MAP_WRITE , 0, size_, 0, nullptr, nullptr, &ret);
+        OPENCL_CHECK(ret);
+
+        ComputingReturn result = OP_TODO_ERROR;
+        if (   DT == DataType::Float) {
+             dnnl_kernels::rotary_embed<float>((float *)in, (float *)cos_sin, (int *)pos, (float *)out, batch, heads, tokens, hidden);
+            result = OP_OK;
+        }
+        if (   DT == DataType::FP16) { 
+            dnnl_kernels::rotary_embed<local_fp16_t>((local_fp16_t *)in, (float *)cos_sin, (int *)pos, (local_fp16_t *)out, batch, heads, tokens, hidden);
+            result = OP_OK;
+        }
+
+        clEnqueueUnmapMemObject(queue, (cl_mem)mem_, in, 0, nullptr,  nullptr);
+        clEnqueueUnmapMemObject(queue, (cl_mem)cached->device_data(), cos_sin, 0, nullptr,  nullptr);
+        clEnqueueUnmapMemObject(queue, (cl_mem)pos_->device_data(), pos, 0, nullptr,  nullptr);
+        clEnqueueUnmapMemObject(queue, (cl_mem)y->device_data(), out, 0, nullptr,  nullptr);  
+        return result;
+    }
+ #endif  
+
     if ( DT == DataType::Float ) {
-
-        float* in = (float *)data();
-        float* cos_sin = (float *)cached->dnnl_float()->data();
-        float* out = (float *)y->dnnl_float()->data();
-
-        dnnl_kernels::rotary_embed<float>(in, cos_sin, pos, out, batch, heads, tokens, hidden);
-
+        dnnl_kernels::rotary_embed<float>((float *)in, (float *)cos_sin, (int *)pos, (float *)out, batch, heads, tokens, hidden);
         return OP_OK;
     }
     if ( DT == DataType::FP16 ) {
-        local_fp16_t* in = (local_fp16_t *)data();
-        local_fp16_t* out = (local_fp16_t *)y->dnnl_fp16()->data();
-        float* cos_sin = (float *)cached->dnnl_float()->data();
-
-        dnnl_kernels::rotary_embed<local_fp16_t>(in, cos_sin, pos, out, batch, heads, tokens, hidden);
+        dnnl_kernels::rotary_embed<local_fp16_t>((local_fp16_t *)in, (float *)cos_sin, (int *)pos, (local_fp16_t *)out, batch, heads, tokens, hidden);
         return OP_OK;
     }
     return OP_TODO_ERROR;

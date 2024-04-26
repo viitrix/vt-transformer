@@ -282,14 +282,15 @@
     "cache_man" @  "_position" @ nn.ezkv_position  $pos !
     "xinput" @ "ln_1.weight" @ "norm2" @ "xa" @ "RMS_EPS" @ op.rmsnorm
     
-    "xa" @ io.dump ^
-
     ;; attention
     {
         ;; get key for new tokens, combing cached tokens, position embedding
         "xa" @ "attn.key.weight" @ "attn.key.bias" @ "xb" @ op.linear
         "yb" @ "rotary_cache" @ $pos @ "yc" @  op.rotary_embed
         "cache_man" @ "_kcache_" @ "xc" @ "xfb" @ $L @ nn.ezkv_update
+        
+        "xfb" @ io.dump ^
+
         "yfb" @ "zfa" @ op.transpose_0213
        
         ;; get query@key
