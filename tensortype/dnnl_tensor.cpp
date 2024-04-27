@@ -65,8 +65,10 @@ DNNLTensor<_DTYPE_>::DNNLTensor(const ShapeType& shape,  void *mem, bool isGPU) 
     } else {
         vt_panic("Can't be here!");
     }
+#ifdef _DNNL_GPU_
     from_ = nullptr;
     offset_ = 0;
+#endif
 }
 
 template <DataType _DTYPE_>
@@ -464,7 +466,7 @@ ComputingReturn DNNLTensor<DT>::op_causal_mask(tensor_t self, tensor_t out) {
         int* mask = (int *)clEnqueueMapBuffer(queue, (cl_mem)mem_,  CL_TRUE, CL_MAP_READ , 0, size_, 0, nullptr, nullptr, &ret);
         OPENCL_CHECK(ret);
 
-        if ( out->dtype() == DataType::Float ) {            
+        if ( out->dtype() == DataType::Float ) {
             float* out32 = (float *)clEnqueueMapBuffer(queue, (cl_mem)out->dnnl_float()->mem_,  CL_TRUE, CL_MAP_WRITE , 0, size_, 0, nullptr, nullptr, &ret);
             OPENCL_CHECK(ret);
 
@@ -754,7 +756,7 @@ std::variant<ComputingReturn, tensor_t> DNNLTensor<_DT_>::op_view_as(tensor_t se
             return OP_TODO_ERROR;
         }
 
-        region.origin = region.origin + offset_; 
+        region.origin = region.origin + offset_;
         cl_mem newData = clCreateSubBuffer( (cl_mem)from_, CL_MEM_READ_WRITE, CL_BUFFER_CREATE_TYPE_REGION, &region, &ret);
         OPENCL_CHECK(ret);
 
@@ -965,17 +967,17 @@ ComputingReturn DNNLTensor<_DTYPE_>::op_rmsnorm(tensor_t self, tensor_t scale, t
             dnnl_kernels::rmsnorm<float, DataType::Float>((float *)src, (float *)s, (float *)dst, num, feature, eps);
             result = OP_OK;
         }
-        if (   _DTYPE_ == DataType::FP16) { 
+        if (   _DTYPE_ == DataType::FP16) {
             dnnl_kernels::rmsnorm<local_fp16_t, DataType::FP16>((local_fp16_t *)src, (local_fp16_t *)s, (local_fp16_t *)dst, num, feature, eps);
             result = OP_OK;
         }
 
         clEnqueueUnmapMemObject(queue, (cl_mem)mem_, src, 0, nullptr,  nullptr);
         clEnqueueUnmapMemObject(queue, (cl_mem)y->device_data(), dst, 0, nullptr,  nullptr);
-        clEnqueueUnmapMemObject(queue, (cl_mem)scale->device_data(), s, 0, nullptr,  nullptr);  
+        clEnqueueUnmapMemObject(queue, (cl_mem)scale->device_data(), s, 0, nullptr,  nullptr);
         return result;
     }
- #endif  
+ #endif
 
     void* src = data();
     void* dst = y->device_data();
@@ -1028,7 +1030,7 @@ ComputingReturn DNNLTensor<DT>::op_rotary_embed(tensor_t self, tensor_t cached, 
              dnnl_kernels::rotary_embed<float>((float *)in, (float *)cos_sin, (int *)pos, (float *)out, batch, heads, tokens, hidden);
             result = OP_OK;
         }
-        if (   DT == DataType::FP16) { 
+        if (   DT == DataType::FP16) {
             dnnl_kernels::rotary_embed<local_fp16_t>((local_fp16_t *)in, (float *)cos_sin, (int *)pos, (local_fp16_t *)out, batch, heads, tokens, hidden);
             result = OP_OK;
         }
@@ -1036,10 +1038,10 @@ ComputingReturn DNNLTensor<DT>::op_rotary_embed(tensor_t self, tensor_t cached, 
         clEnqueueUnmapMemObject(queue, (cl_mem)mem_, in, 0, nullptr,  nullptr);
         clEnqueueUnmapMemObject(queue, (cl_mem)cached->device_data(), cos_sin, 0, nullptr,  nullptr);
         clEnqueueUnmapMemObject(queue, (cl_mem)pos_->device_data(), pos, 0, nullptr,  nullptr);
-        clEnqueueUnmapMemObject(queue, (cl_mem)y->device_data(), out, 0, nullptr,  nullptr);  
+        clEnqueueUnmapMemObject(queue, (cl_mem)y->device_data(), out, 0, nullptr,  nullptr);
         return result;
     }
- #endif  
+ #endif
 
     if ( DT == DataType::Float ) {
         dnnl_kernels::rotary_embed<float>((float *)in, (float *)cos_sin, (int *)pos, (float *)out, batch, heads, tokens, hidden);
@@ -1074,16 +1076,16 @@ ComputingReturn DNNLTensor<DT>::op_transpose_0213(tensor_t self, tensor_t y) {
             dnnl_kernels::transpose_0213<float>((float *)in, (float *)out, batch, heads, tokens, hidden);
             result = OP_OK;
         }
-        if (   DT == DataType::FP16) { 
+        if (   DT == DataType::FP16) {
             dnnl_kernels::transpose_0213<local_fp16_t>((local_fp16_t *)in, (local_fp16_t *)out, batch, heads, tokens, hidden);
             result = OP_OK;
         }
 
         clEnqueueUnmapMemObject(queue, (cl_mem)mem_, in, 0, nullptr,  nullptr);
-        clEnqueueUnmapMemObject(queue, (cl_mem)y->device_data(), out, 0, nullptr,  nullptr);  
+        clEnqueueUnmapMemObject(queue, (cl_mem)y->device_data(), out, 0, nullptr,  nullptr);
         return result;
     }
- #endif 
+ #endif
 
     if ( DT == DataType::Float ) {
         float* in = (float *)data();
