@@ -147,7 +147,7 @@ void do_inference(vt::Enviroment* env, const char* dag_file) {
 #elif _USING_DEVICE_DNNL_
 
 #ifdef _DNNL_GPU_
-        env->stack().push_string("dnnl_ocl");
+        env->stack().push_string("dnnl");
 #else
         env->stack().push_string("dnnl");
 #endif

@@ -25,6 +25,7 @@ struct DNNLTensor : public TransformerComputing {
     dnnl::memory build_memory(const dnnl::memory::desc& desc);
 
 #ifdef _DNNL_GPU_
+    void* sub_buffer(size_t offset, size_t size);
     void setup_from(void* from, size_t offset) {
         vt_assert( from_ == nullptr, "Can't setup from_ twice!");
         from_ = from;
