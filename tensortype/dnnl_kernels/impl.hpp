@@ -401,17 +401,24 @@ void attn(T* xll, T* value, T* out, size_t batch, size_t newTokens, size_t fullT
     auto v_md = value->build_memory_desc( {batch, fullTokens, hidden}, dnnl::memory::format_tag::abc);
     auto o_md = out->build_memory_desc( {batch, newTokens, hidden}, dnnl::memory::format_tag::abc);
 
-    dnnl::matmul::primitive_desc matmul_pd;
-
-    matmul_pd = dnnl::matmul::primitive_desc(*ComputingContext::dnnl_engine, xll_md, v_md, o_md);
-
-    auto matmul_prim = dnnl::matmul(matmul_pd);
-
     std::unordered_map<int, dnnl::memory> matmul_args;
     matmul_args[DNNL_ARG_SRC] = xll->build_memory(xll_md);
     matmul_args[DNNL_ARG_WEIGHTS] = value->build_memory(v_md);
     matmul_args[DNNL_ARG_DST] = out->build_memory(o_md);
 
+#ifdef _DNNL_GPU_
+    if ( xll->is_gpu() ) {
+        dnnl::matmul::primitive_desc matmul_pd;
+        matmul_pd = dnnl::matmul::primitive_desc(*ComputingContext::dnnl_gpu_engine, xll_md, v_md, o_md);
+        auto matmul_prim = dnnl::matmul(matmul_pd);
+        matmul_prim.execute(*ComputingContext::dnnl_gpu_stream, matmul_args);
+        return;
+    }
+#endif
+
+    dnnl::matmul::primitive_desc matmul_pd;
+    matmul_pd = dnnl::matmul::primitive_desc(*ComputingContext::dnnl_engine, xll_md, v_md, o_md);
+    auto matmul_prim = dnnl::matmul(matmul_pd);
     matmul_prim.execute(*ComputingContext::dnnl_stream, matmul_args);
 }
 

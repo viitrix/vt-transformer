@@ -1227,6 +1227,39 @@ template <DataType _DTYPE_>
 ComputingReturn DNNLTensor<_DTYPE_>::op_silu_product(tensor_t self, tensor_t in, tensor_t dst) {
     size_t total = self->items();
 
+#ifdef _DNNL_GPU_
+    if ( is_gpu() ) {
+        auto queue = dnnl::ocl_interop::get_command_queue(*ComputingContext::dnnl_gpu_stream);
+        int ret = 0;
+        void* a = clEnqueueMapBuffer(queue, (cl_mem)mem_,  CL_TRUE, CL_MAP_READ , 0, size_, 0, nullptr, nullptr, &ret);
+        OPENCL_CHECK(ret);
+
+        void* b = clEnqueueMapBuffer(queue, (cl_mem)in->device_data(),  CL_TRUE, CL_MAP_READ | CL_MAP_WRITE  , 0, size_, 0, nullptr, nullptr, &ret);
+        OPENCL_CHECK(ret);
+
+        void* out = b;
+        if ( dst->device_data() != in->device_data() ) {
+            out = clEnqueueMapBuffer(queue, (cl_mem)dst->device_data(),  CL_TRUE, CL_MAP_WRITE , 0, size_, 0, nullptr, nullptr, &ret);
+            OPENCL_CHECK(ret);
+        }
+
+        ComputingReturn result = OP_TODO_ERROR;
+        if (   _DTYPE_ == DataType::Float) {
+            dnnl_kernels::silu_product<float>((float *)a, (float *)b, (float *)out, total);
+            result = OP_OK;
+        }
+        if (   _DTYPE_ == DataType::FP16) {
+             dnnl_kernels::silu_product<local_fp16_t>((local_fp16_t *)a, (local_fp16_t *)b, (local_fp16_t *)out, total);
+            result = OP_OK;
+        }
+
+        clEnqueueUnmapMemObject(queue, (cl_mem)mem_, a, 0, nullptr,  nullptr);
+        clEnqueueUnmapMemObject(queue, (cl_mem)in->device_data(), a, 0, nullptr,  nullptr);
+        clEnqueueUnmapMemObject(queue, (cl_mem)dst->device_data(), out, 0, nullptr,  nullptr);
+        return result;
+    }
+ #endif
+
     if ( _DTYPE_ == DataType::Float ) {
         float* a = (float *)data();
         float* b = (float *)in->dnnl_float()->data();
