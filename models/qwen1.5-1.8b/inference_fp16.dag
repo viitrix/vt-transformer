@@ -280,15 +280,20 @@
     $L !
     "cache_man" @  "_position" @ nn.ezkv_position  $pos !
     "xinput" @ "ln_1.weight" @ "norm2" @ "xa" @ "RMS_EPS" @ op.rmsnorm
-  
+    
+
     ;; attention
     {
         ;; get key for new tokens, combing cached tokens, position embedding
         "xa" @ "attn.key.weight" @ "attn.key.bias" @ "xb" @ op.linear
         "yb" @ "rotary_cache" @ $pos @ "yc" @  op.rotary_embed
         "cache_man" @ "_kcache_" @ "xc" @ "xfb" @ $L @ nn.ezkv_update
+       
         "yfb" @ "zfa" @ op.transpose_0213
        
+        "zfa" @ io.dump
+        "zfa" @ 128 [128] op.view io.dump ^
+            
         ;; get query@key
         "xa" @ "attn.query.weight" @ "attn.query.bias" @ "xc" @ op.linear
         "yc" @ "rotary_cache" @ $pos @ "yb" @  op.rotary_embed
@@ -296,9 +301,6 @@
         
         ;; query@key + apply causal_mask + softmax
         "zc" @  "zfa" @  "xll" @ op.querykey
-            
-        "xll" @ io.dump ^
-
         "xll" @ "causal_mask" @ "xll" @ op.add
         "xll" @ "xll" @ op.softmax
      

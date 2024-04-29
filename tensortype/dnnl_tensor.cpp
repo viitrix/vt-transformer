@@ -2,7 +2,10 @@
 #include "host_tensor.hpp"
 
 #include "dnnl_kernels/impl.hpp"
+
+#ifndef _DNNL_GPU_
 #include "dnnl_kernels/cl_kernels.hpp"
+#endif
 
 namespace vt {
 

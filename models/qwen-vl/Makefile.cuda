@@ -1,6 +1,6 @@
 .PHONY: all
 
-FLAGS = -Wall -O3 -D_USING_DEVICE_CUDA_ -D_USING_DEVICE_DNNL_ 
+FLAGS = -Wall -O3 -fopenmp -D_USING_DEVICE_CUDA_ -D_USING_DEVICE_DNNL_ 
 INC = -I../../install/include \
 	  -I${DNNL_DIR}/include \
 	  -I${CUDA_DIR}/include \
