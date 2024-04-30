@@ -28,5 +28,6 @@ struct ImageLoader {
 Tokenizer* build_tokenizer_qwen(const char* file_name, bool is_visual=false);
 ImageLoader* build_imageloader_qwen(const char* file_name);
 
+Tokenizer* build_tokenizer_llama3(const char* file_name);
 }
 #endif
