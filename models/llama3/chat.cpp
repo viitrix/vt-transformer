@@ -14,15 +14,38 @@ const size_t MEM_CTX_SIZE = 16 * 1024 * 1024 * 1024l;
 
 struct ChatApplication {
     ChatApplication() {
-        tokenizer_ = vt::build_tokenizer_qwen("./llama3.tiktoken");
+        tokenizer_ = vt::build_tokenizer_llama3("./llama3.tiktoken");
     }
     ~ChatApplication() {
         delete tokenizer_;
     }
 
+    void write_all(const void* buf, size_t nbyte) {
+        vt_assert( vt::CollectiveContext::pipe_write(1, buf, nbyte) > 0, "write_all error");
+    }
+
+    void wait_all_ready() {
+        int dummy = -1;
+        vt::CollectiveContext::pipe_read(&dummy, sizeof(int));
+        vt_assert(dummy == 1, "wait_all_ready error");
+    }
+
+    const size_t max_input = 512;
+    const size_t max_output = 512;
+
+    //
+    // messages = [{
+    //          "role": "user", "content": "你是一名Java老师，请出一道关于Java异常的编程练习题"
+    //     },]
+    //
+    //     talk = tokenizer.apply_chat_template( messages, tokenize=False, add_generation_prompt=True);
+    //
+    // '<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\nYou are a helpful assistant.<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n你是一名Java老师，请出一道关于Java异常的编程练习题<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n'
+    //
     void run() {
+        const char* begin_text = "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\nYou are a helpful assistant.<|eot_id|>";
         std::list<std::string>  history;
-        history.push_back("<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n");
+        history.push_back(begin_text);
 
         std::string text;
         while( readline(">> ", text) ) {
@@ -31,14 +54,20 @@ struct ChatApplication {
             }
             if ( text == "!" ) {
                 history.clear();
-                history.push_back("<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n");
+                history.push_back(begin_text);
                 continue;
             }
 
-            std::string new_user =  "<|im_start|>user\n" + text + "<|im_end|>\n";
+            std::string new_user =  "<|start_header_id|>user|end_header_id|>\n\n" + text + "<|eot_id|>";
             history.push_back(new_user);
-            history.push_back("<|im_start|>assistant\n");
+            history.push_back("<|start_header_id|>assistant<|end_header_id|>\n\n");
             std::vector<int> input_tokens = build_from_history(history);
+
+            for(int i = 0; i < (int)input_tokens.size(); i++) {
+                std::cout << input_tokens[i] << " ";
+            }
+            std::cout << std::endl;
+
 
             std::vector<int> id;
             std::vector<int> mask;
@@ -83,7 +112,7 @@ struct ChatApplication {
             std::cout << (next == tokenizer_->token_eos()) << " eos ending ===== " << std::endl;
             //std::cout << talk << std::endl;
 
-            talk = talk + "<|im_end|>\n";
+            talk = talk + "<|eot_id|>\n";
             history.push_back(talk);
         }
 
