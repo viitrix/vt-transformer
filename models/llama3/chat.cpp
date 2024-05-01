@@ -43,6 +43,8 @@ struct ChatApplication {
     // '<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\nYou are a helpful assistant.<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n你是一名Java老师，请出一道关于Java异常的编程练习题<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n'
     //
     void run() {
+        wait_all_ready();
+
         const char* begin_text = "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\nYou are a helpful assistant.<|eot_id|>";
         std::list<std::string>  history;
         history.push_back(begin_text);
@@ -145,16 +147,107 @@ private:
     vt::Tokenizer* tokenizer_;
 };
 
+void do_inference(vt::Enviroment* env, const char* dag_file) {
+    const char* init_cmd = "gpu_init";
+    const char* main_cmd = "gpu_main";
+    {
+        std::string all_code = vt::fileToString(dag_file);
+
+        vt::DaG* init_bin = env->build(all_code);
+#ifdef _USING_DEVICE_CUDA_
+        env->stack().push_string("cuda");
+#elif _USING_DEVICE_DCU_
+        env->stack().push_string("dcu");
+#elif _USING_DEVICE_COREX_
+        env->stack().push_string("corex");
+#elif _USING_DEVICE_DNNL_
+
+#ifdef _DNNL_GPU_
+        env->stack().push_string("dnnl");
+#else
+        env->stack().push_string("dnnl");
+#endif
+
+#elif _USING_DEVICE_ACL_
+        env->stack().push_string("acl");
+#endif
+        env->run(init_bin);
+        delete init_bin;
+    }
+    env->execute(init_cmd);
+
+    int ok = 1;
+    vt_assert( vt::CollectiveContext::pipe_write(0, &ok, sizeof(int)) > 0, "pipe_write error");
+
+    vt::DaG* target_cmd = env->build(main_cmd);
+
+    for (;;) {
+        int batches = -1;
+        int id = -1;
+        vt::CollectiveContext::pipe_read(&batches, sizeof(int));;
+        if ( batches <= 0) {
+            break;
+        }
+
+        vt::CollectiveContext::pipe_read(&id, sizeof(int));;
+        vt_assert(id > 0, "tokens can't must more than zero!");
+
+        env->stack().push_number(batches);
+        env->stack().push_number(id);
+        env->run(target_cmd);
+    }
+
+    delete target_cmd;
+}
+
+
+
 int main(int argc, char* argv[] ) {
+    if ( argc < 2 ) {
+        std::cout << "usage: ./chat [dag_file] " << std::endl;
+        return -1;
+    }
+    const char* dag_file = argv[1];
     vt::CollectiveContext::boot_pipe(1);
 
     if ( vt::CollectiveContext::pipe_rank == 0) {
         ChatApplication* app = new ChatApplication();
         app->run();
         delete app;
-    } else if ( vt::CollectiveContext::pipe_rank == 1) {
 
+        // wait for all child processes finished
+        {
+            int status = 0;
+            while ( wait(&status) != -1) {
+            }
+        }
+    } else if ( vt::CollectiveContext::pipe_rank == 1) {
+        vt::MemoryContext::boot( MEM_CTX_SIZE );
+#ifdef _USING_DEVICE_CUDA_
+        vt::ComputingContext::boot_cuda( 0 );
+#endif
+#ifdef _USING_DEVICE_COREX_
+        vt::ComputingContext::boot_corex( 0 );
+#endif
+#ifdef _USING_DEVICE_DNNL_
+        vt::ComputingContext::boot_dnnl( 0 );
+#endif
+#ifdef _USING_DEVICE_ACL_
+        vt::ComputingContext::boot_acl( 0 );
+#endif
+
+
+        vt::Enviroment* env = new vt::Enviroment();
+        env->insert_native_word("app.mem", MemoryCounting::creator);
+        env->insert_native_word("app.align", MemoryAlign::creator);
+
+        do_inference(env, dag_file);
+
+        delete env;
+        vt::ComputingContext::shutdown();
+        vt::MemoryContext::shutdown();
     }
     vt::CollectiveContext::shutdown();
 }
+
 
