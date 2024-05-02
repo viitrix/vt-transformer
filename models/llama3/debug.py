@@ -12,7 +12,7 @@ model_id = "shenzhi-wang/Llama3-8B-Chinese-Chat"
 
 tokenizer = AutoTokenizer.from_pretrained("./")
 model = AutoModelForCausalLM.from_pretrained(
-    "./", torch_dtype="auto", device_map="auto"
+    "./", torch_dtype=torch.float16, device_map="auto"
 )
 
 messages = [

@@ -24,8 +24,8 @@
     "MAX_BATCH" @ "MAX_CONTEXT" @ app.mem 1 $DEVICE @ "fp16" op.create  "_var_"  !
     
     ;; kv cached memroy
-    32 "MAX_BATCH" @ "MAX_CONTEXT" @ 16 + "HIDDEN_SIZE" @ 4 $DEVICE @  "fp16" op.create dup "_kcache_"  !
-    32 "MAX_BATCH" @ "MAX_CONTEXT" @ 16 + "HIDDEN_SIZE" @ 4 $DEVICE @  "fp16" op.create dup "_vcache_"  !
+    32 "MAX_BATCH" @ "MAX_CONTEXT" @ 16 + "KV_PROJ" @ 4 $DEVICE @  "fp16" op.create dup "_kcache_"  !
+    32 "MAX_BATCH" @ "MAX_CONTEXT" @ 16 + "KV_PROJ" @ 4 $DEVICE @  "fp16" op.create dup "_vcache_"  !
     nn.ezkv_init "cache_man" !
 
     "MAX_CONTEXT" @ "MAX_BATCH" @ * dup dup dup 
@@ -35,12 +35,10 @@
     1 $DEVICE @  "int"  op.create  "_mask"     !
     "MAX_CONTEXT" @ 1 $DEVICE @  "int" op.create "_position" !
    
-    /*
     10000 "HEAD_HIDDEN" @ 2 3 $DEVICE @  "float" op.create dup 
-    "ROTARY_BASE" @ op.rotary_cache 
+    "ROPE_THETA" @ op.rotary_cache 
     "rotary_cache" !
-    */
-
+    
     $DEVICE !!
 %end
 
@@ -180,13 +178,16 @@
     ;; xa, xb, xquery/key/value, xll, x4a, x4b, all_logits
     dup
     "_var_" @ swap $batch @ $tokens @ "HIDDEN_SIZE" @ 3 op.view "xa" !
-    $batch @ $tokens @ "HIDDEN_SIZE" @  * * +
+    "xa" @ 0 $batch @ $tokens @ "KV_PROJ" @ 3  op.view "xa_kv" !
+    "xa" @ 0 $batch @ $tokens @ "KV_HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "ya_kv" !
     "xa" @ 0 $batch @ $tokens @ "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "ya" !
     "xa" @ 0 $batch @ "HEADS_NUM" @ $tokens @ "HEAD_HIDDEN" @ 4 op.view "za" !
 
     dup
     "_var_" @ swap $batch @ $tokens @ "HIDDEN_SIZE" @ 3 op.view "xb" !
     $batch @ $tokens @ "HIDDEN_SIZE" @  * * +
+    "xb" @ 0 $batch @ $tokens @ "KV_PROJ" @ 3 op.view "xb_kv" !
+    "xb" @ 0 $batch @ $tokens @ "KV_HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "yb_kv" !
     "xb" @ 0 $batch @ $tokens @ "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "yb" !
     "xb" @ 0 $batch @ "HEADS_NUM" @ $tokens @ "HEAD_HIDDEN" @ 4 op.view "zb" !
     
@@ -195,18 +196,24 @@
         dup
         "_var_" @ swap $batch @ $tokens @ "HIDDEN_SIZE" @ 3 op.view "xc" !
         $batch @ $tokens @ "HIDDEN_SIZE" @  * * +
+        "xc" @ 0 $batch @ $tokens @ "KV_PROJ" @ 3  op.view "xc_kv" !
+        "xc" @ 0 $batch @ $tokens @ "KV_HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "yc_kv" !
         "xc" @ 0 $batch @ $tokens @ "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "yc" !
         "xc" @ 0 $batch @ "HEADS_NUM" @ $tokens @ "HEAD_HIDDEN" @ 4 op.view "zc" !
       
         dup
         "_var_" @ swap $batch @ $full_tokens @ "HIDDEN_SIZE" @ 3 op.view "xfa" !
         $batch @ $full_tokens @ "HIDDEN_SIZE" @  * * +
+        "xfa" @ 0 $batch @ $full_tokens @ "KV_PROJ" @ 3 op.view "xfa_kv" !
+        "xfa" @ 0 $batch @ $full_tokens @ "KV_HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "yfa_kv" !
         "xfa" @ 0 $batch @ $full_tokens @ "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "yfa" !
         "xfa" @ 0 $batch @ "HEADS_NUM" @ $full_tokens @ "HEAD_HIDDEN" @ 4 op.view "zfa" !
 
         dup
         "_var_" @ swap $batch @ $full_tokens @ "HIDDEN_SIZE" @ 3 op.view "xfb" !
         $batch @ $full_tokens @ "HIDDEN_SIZE" @  * * +
+        "xfb" @ 0 $batch @ $full_tokens @ "KV_PROJ" @ 3 op.view "xfb_kv" !
+        "xfb" @ 0 $batch @ $full_tokens @ "KV_HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "yfb_kv" !
         "xfb" @ 0 $batch @ $full_tokens @ "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "yfb" !
         "xfb" @ 0 $batch @ "HEADS_NUM" @ $full_tokens @ "HEAD_HIDDEN" @ 4 op.view "zfb" !
 
@@ -272,15 +279,17 @@
 %def layer_forward
     $L !
     "cache_man" @  "_position" @ nn.ezkv_position  $pos !
-
     "xinput" @ "ln_1.weight" @ "norm2" @ "xa" @ "RMS_EPS" @ op.rmsnorm
 
     ;; attention
     {
         ;; get key for new tokens, combing cached tokens, position embedding
-        "xa" @ "attn.key.weight" @ "attn.key.bias" @ "xb" @ op.linear
-        "yb" @ "rotary_cache" @ $pos @ "yc" @  op.rotary_embed
-        "cache_man" @ "_kcache_" @ "xc" @ "xfb" @ $L @ nn.ezkv_update
+        "xa" @ "attn.key.weight" @ op.null "xb_kv" @ op.linear
+        "yb_kv" @ "rotary_cache" @ $pos @ "yc_kv" @  op.rotary_embed 
+        "cache_man" @ "_kcache_" @ "xc_kv" @ "xfb_kv" @ $L @ nn.ezkv_update
+
+        "xfb_kv" @ io.dump ^
+
         "yfb" @ "zfa" @ op.transpose_0213
         
         ;; get query@key

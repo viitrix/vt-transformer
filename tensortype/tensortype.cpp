@@ -238,6 +238,12 @@ ComputingReturn TensorType::op_transpose_0213(tensor_t self, tensor_t y) {
     op_check(ret, "transpose_0213");
 }
 
+ComputingReturn TensorType::op_transpose_0213_repeated(tensor_t self, tensor_t y) {
+    vt_assert(self.get() == this, "can't be here!");
+    auto ret = impl()->op_transpose_0213_repeated(self, y);
+    op_check(ret, "transpose_0213_repeated");
+}
+
 ComputingReturn TensorType::op_qk(tensor_t self, tensor_t k, tensor_t qk) {
     vt_assert(self.get() == this, "can't be here!");
     auto ret = impl()->op_qk(self, k, qk);
