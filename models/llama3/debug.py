@@ -16,7 +16,7 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 
 messages = [
-    {"role": "user", "content": "hello"},
+    {"role": "user", "content": "who are you"},
 ]
 
 #
@@ -26,11 +26,6 @@ talk = tokenizer.apply_chat_template( messages, tokenize=False, add_generation_p
 input_ids = tokenizer.apply_chat_template(
     messages, add_generation_prompt=True, return_tensors="pt"
 ).to(model.device)
-
-
-print(talk);
-print(input_ids.shape);
-print(input_ids);
 
 outputs = model.generate(
     input_ids,

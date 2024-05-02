@@ -65,12 +65,6 @@ struct ChatApplication {
             history.push_back("<|start_header_id|>assistant<|end_header_id|>\n\n");
             std::vector<int> input_tokens = build_from_history(history);
 
-            std::cout << " ################ " << input_tokens.size() << std::endl;
-            for (int i = 0; i < (int)input_tokens.size(); i++) {
-                std::cout << input_tokens[i] << " " ;
-            }
-            std::cout << std::endl;
-
             std::vector<int> id;
             std::vector<int> mask;
             for (size_t i = 0; i < input_tokens.size(); i++ ) {

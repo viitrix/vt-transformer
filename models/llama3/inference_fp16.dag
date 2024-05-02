@@ -1,4 +1,4 @@
-1e-06                   "RMS_EPS"               !
+1e-05                   "RMS_EPS"               !
 500000                  "ROPE_THETA"            !
 2.5                     "TEMPERATURE"           !
 
@@ -274,8 +274,6 @@
     "cache_man" @  "_position" @ nn.ezkv_position  $pos !
 
     "xinput" @ "ln_1.weight" @ "norm2" @ "xa" @ "RMS_EPS" @ op.rmsnorm
-   
-    "xa" @ io.dump ^
 
     ;; attention
     {
@@ -361,8 +359,6 @@
         "ids~" @ "wte.weight" @ "xinput~" @ op.embed
         "xinput" @ "xinput~" @ op.copy
     }
-
-    "ids~" @ io.dump ^
 
     %for 0 31
         "L%%."   sync_layer_clone %% layer_forward 
