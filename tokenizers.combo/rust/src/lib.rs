@@ -1,5 +1,6 @@
 pub mod tiktoken;
 pub mod tiktoken_wrapper;
+pub mod tokenizers_wrapper;
 
 use image::imageops::FilterType;
 

@@ -14,7 +14,7 @@ const size_t MEM_CTX_SIZE = 16 * 1024 * 1024 * 1024l;
 
 struct ChatApplication {
     ChatApplication() {
-        tokenizer_ = vt::build_tokenizer_llama3("./llama3.tiktoken");
+        tokenizer_ = vt::build_tokenizer_llama3("./tokenizer.json");
     }
     ~ChatApplication() {
         delete tokenizer_;
@@ -60,16 +60,16 @@ struct ChatApplication {
                 continue;
             }
 
-            std::string new_user =  "<|start_header_id|>user|end_header_id|>\n\n" + text + "<|eot_id|>";
+            std::string new_user =  "<|start_header_id|>user<|end_header_id|>\n\n" + text + "<|eot_id|>";
             history.push_back(new_user);
             history.push_back("<|start_header_id|>assistant<|end_header_id|>\n\n");
             std::vector<int> input_tokens = build_from_history(history);
 
-            for(int i = 0; i < (int)input_tokens.size(); i++) {
-                std::cout << input_tokens[i] << " ";
+            std::cout << " ################ " << input_tokens.size() << std::endl;
+            for (int i = 0; i < (int)input_tokens.size(); i++) {
+                std::cout << input_tokens[i] << " " ;
             }
             std::cout << std::endl;
-
 
             std::vector<int> id;
             std::vector<int> mask;

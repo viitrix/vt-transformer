@@ -6,7 +6,7 @@
 4096                    "HIDDEN_SIZE"           !
 1024                    "KV_PROJ"               !
 14336                   "INTERMEDIATE_SIZE"     !
-32                      "ATTEN_HEADS_NUM"       !
+32                      "HEADS_NUM"       !
 8                       "KV_HEADS_NUM"          !
 128                     "HEAD_HIDDEN"           !
 
@@ -34,10 +34,12 @@
     1 $DEVICE @  "int"  op.create  "_ids"      !
     1 $DEVICE @  "int"  op.create  "_mask"     !
     "MAX_CONTEXT" @ 1 $DEVICE @  "int" op.create "_position" !
-    
+   
+    /*
     10000 "HEAD_HIDDEN" @ 2 3 $DEVICE @  "float" op.create dup 
     "ROTARY_BASE" @ op.rotary_cache 
     "rotary_cache" !
+    */
 
     $DEVICE !!
 %end
@@ -140,11 +142,8 @@
     $L @ "ln_1.weight"                        | @ "ln_1.weight"                   !
     $L @ "ln_2.weight"                        | @ "ln_2.weight"                   !
     $L @ "attn.query.weight"                  | @ "attn.query.weight"             !
-    $L @ "attn.query.bias"                    | @ "attn.query.bias"               !
     $L @ "attn.key.weight"                    | @ "attn.key.weight"               !
-    $L @ "attn.key.bias"                      | @ "attn.key.bias"                 !
     $L @ "attn.value.weight"                  | @ "attn.value.weight"             !
-    $L @ "attn.value.bias"                    | @ "attn.value.bias"               !
     $L @ "attn.o_proj.weight"                 | @ "attn.o_proj.weight"            !
     $L @ "mlp.w1.weight"                      | @ "mlp.w1.weight"                 !
     $L @ "mlp.w2.weight"                      | @ "mlp.w2.weight"                 !
@@ -275,7 +274,9 @@
     "cache_man" @  "_position" @ nn.ezkv_position  $pos !
 
     "xinput" @ "ln_1.weight" @ "norm2" @ "xa" @ "RMS_EPS" @ op.rmsnorm
-    
+   
+    "xa" @ io.dump ^
+
     ;; attention
     {
         ;; get key for new tokens, combing cached tokens, position embedding
@@ -334,7 +335,7 @@
 %def gpu_init
     "G_DEVICE" ! 
 
-    ;"G_DEVICE" @       init_internal_variable
+    "G_DEVICE" @       init_internal_variable
 
     "host"             create_input_weight
     "G_DEVICE" @       create_output_weight
@@ -360,6 +361,8 @@
         "ids~" @ "wte.weight" @ "xinput~" @ op.embed
         "xinput" @ "xinput~" @ op.copy
     }
+
+    "ids~" @ io.dump ^
 
     %for 0 31
         "L%%."   sync_layer_clone %% layer_forward 
