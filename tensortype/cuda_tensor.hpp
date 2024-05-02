@@ -95,6 +95,7 @@ struct CUDATensor : public TransformerComputing {
     ComputingReturn op_rotary_embed(tensor_t self, tensor_t cached, tensor_t pos, tensor_t y) override;
 
     ComputingReturn op_transpose_0213(tensor_t self, tensor_t y) override;
+    ComputingReturn op_transpose_0213_repeated(tensor_t self, tensor_t y) override;
     ComputingReturn op_qk(tensor_t self, tensor_t k, tensor_t qk) override;
     ComputingReturn op_softmax(tensor_t self, tensor_t out) override;
     ComputingReturn op_attn(tensor_t self, tensor_t value, tensor_t out) override;

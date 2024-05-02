@@ -178,6 +178,7 @@
     ;; xa, xb, xquery/key/value, xll, x4a, x4b, all_logits
     dup
     "_var_" @ swap $batch @ $tokens @ "HIDDEN_SIZE" @ 3 op.view "xa" !
+    $batch @ $tokens @ "HIDDEN_SIZE" @  * * +
     "xa" @ 0 $batch @ $tokens @ "KV_PROJ" @ 3  op.view "xa_kv" !
     "xa" @ 0 $batch @ $tokens @ "KV_HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "ya_kv" !
     "xa" @ 0 $batch @ $tokens @ "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "ya" !
@@ -216,10 +217,6 @@
         "xfb" @ 0 $batch @ $full_tokens @ "KV_HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "yfb_kv" !
         "xfb" @ 0 $batch @ $full_tokens @ "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "yfb" !
         "xfb" @ 0 $batch @ "HEADS_NUM" @ $full_tokens @ "HEAD_HIDDEN" @ 4 op.view "zfb" !
-
-        dup
-        "_var_" @ swap $batch @ "HEADS_NUM" @ $tokens @ $full_tokens @ 4 op.view "xll_half" !
-        $batch @ "HEADS_NUM" @ $tokens @ $full_tokens @ * * * +
 
         "_var_" @ swap $batch @ "HEADS_NUM" @ $tokens @ $full_tokens @ 4 "float" op.view_as "xll" !
     }  
@@ -287,13 +284,10 @@
         "xa" @ "attn.key.weight" @ op.null "xb_kv" @ op.linear
         "yb_kv" @ "rotary_cache" @ $pos @ "yc_kv" @  op.rotary_embed 
         "cache_man" @ "_kcache_" @ "xc_kv" @ "xfb_kv" @ $L @ nn.ezkv_update
-
-        "xfb_kv" @ io.dump ^
-
-        "yfb" @ "zfa" @ op.transpose_0213
-        
+        "yfb_kv" @ "zfa" @ op.transpose_0213_repeated
+       
         ;; get query@key
-        "xa" @ "attn.query.weight" @ "attn.query.bias" @ "xc" @ op.linear
+        "xa" @ "attn.query.weight" @ op.null "xc" @ op.linear
         "yc" @ "rotary_cache" @ $pos @ "yb" @  op.rotary_embed
         "yb" @ "zc" @ op.transpose_0213
         
@@ -303,13 +297,12 @@
         "xll" @ "xll" @ op.softmax
         
         ;; get value for new tokens, combing cached tokens 
-        "xa" @ "attn.value.weight" @ "attn.value.bias" @ "xb" @ op.linear
-        "cache_man" @ "_vcache_" @ "xb" @ "xfa" @ $L @ nn.ezkv_update
-        "yfa" @ "zfb" @ op.transpose_0213
+        "xa" @ "attn.value.weight" @ op.null "xb_kv" @ op.linear
+        "cache_man" @ "_vcache_" @ "xb_kv" @ "xfa_kv" @ $L @ nn.ezkv_update
+        "yfa_kv" @ "zfb" @ op.transpose_0213_repeated
 
         ;; do attention and transpose back
-        "xll_half" @ "xll" @ op.convert
-        "xll_half" @ "zfb" @ "zb" @ op.attn          
+        "xll" @ "zfb" @ "zb" @ op.attn          
         "zb" @ "ya" @ op.transpose_0213          ;; attn->ya 
     }
     
@@ -324,7 +317,6 @@
     {
         ;; xa atteion output
         ;; xb passed post layernorm
-        
         "xb" @ "mlp.w2.weight" @ op.null "x4a" @ op.linear
         "xb" @ "mlp.w1.weight" @ op.null "x4b" @ op.linear
         
@@ -334,7 +326,7 @@
         ;; residual
         "xa" @ "xb" @ "xinput" @ op.add
     }
-    
+   
     $pos !!
     $L !!
 %end

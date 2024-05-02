@@ -1280,6 +1280,32 @@ ComputingReturn  CUDATensor<DT>::op_transpose_0213(tensor_t self, tensor_t y) {
 }
 
 template<DataType DT>
+ComputingReturn  CUDATensor<DT>::op_transpose_0213_repeated(tensor_t self, tensor_t y) {
+    auto x = this;
+    auto stream = ComputingContext::cuda_stream;
+
+    int sz0 = self->shape()[0];
+    int sz1 = self->shape()[1];
+    int sz2_f = self->shape()[2];
+    int sz2_t = y->shape()[1];
+    int sz3 = self->shape()[3];
+
+    if ( DT == DataType::Float ) {
+        auto out = y->cuda_float();
+        vt::cuda::transpose_0213_repeated<float>((float *)x->data(), (float *)out->data(), sz0, sz1, sz2_f, sz2_t, sz3, stream);
+        return OP_OK;
+    }
+    if ( DT == DataType::FP16 ) {
+        auto out = y->cuda_fp16();
+        vt::cuda::transpose_0213_repeated<device_fp16_t>((device_fp16_t *)x->data(), (device_fp16_t *)out->data(), sz0, sz1, sz2_f, sz2_t, sz3, stream);
+        return OP_OK;
+    }
+
+    return OP_TODO_ERROR;
+}
+
+
+template<DataType DT>
 ComputingReturn  CUDATensor<DT>::op_qk(tensor_t self, tensor_t k_, tensor_t qk_) {
     auto shape_ = self->shape().vec();
 

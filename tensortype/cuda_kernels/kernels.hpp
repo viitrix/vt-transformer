@@ -5,6 +5,8 @@
 #include "lightseq/kernels.h"
 
 namespace vt { namespace cuda {
+template <typename T>
+int transpose_0213_repeated(const T* src, T* target, int a, int b, int cf, int ct, int d, cudaStream_t stream);
 
 template <typename T>
 int linear2d_q8(const T *in, const void* w, T *out, int M, int N, int K, cudaStream_t stream);

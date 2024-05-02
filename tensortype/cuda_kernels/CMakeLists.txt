@@ -29,6 +29,7 @@ set(cuda_kernel_files
     lightseq/transform_kernels_new.cu
     lightseq/crf.cu
     lightseq/transformerKernels.cc.cu
+    blackriver/transpose_0213_repeated.cu
     blackriver/LtSgemm.cu
     blackriver/LtSgemmBatched.cu
     blackriver/gelu.cu
