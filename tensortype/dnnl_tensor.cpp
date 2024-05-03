@@ -3,7 +3,7 @@
 
 #include "dnnl_kernels/impl.hpp"
 
-#ifndef _DNNL_GPU_
+#ifdef _DNNL_GPU_
 #include "dnnl_kernels/cl_kernels.hpp"
 #endif
 
@@ -1037,7 +1037,7 @@ ComputingReturn DNNLTensor<DT>::op_rotary_embed(tensor_t self, tensor_t cached, 
         OPENCL_CHECK(ret);
 
         size_t pos_size = std::get<1>(pos_->op_sizeof(pos_));
-        pos = clEnqueueMapBuffer(queue, (cl_mem)pos_->device_data(),  CL_TRUE, CL_MAP_WRITE , 0, pos_size, 0, nullptr, nullptr, &ret);
+        pos = clEnqueueMapBuffer(queue, (cl_mem)pos_->device_data(),  CL_TRUE, CL_MAP_READ , 0, pos_size, 0, nullptr, nullptr, &ret);
         OPENCL_CHECK(ret);
 
         out = clEnqueueMapBuffer(queue, (cl_mem)y->device_data(),  CL_TRUE, CL_MAP_WRITE , 0, size_, 0, nullptr, nullptr, &ret);
