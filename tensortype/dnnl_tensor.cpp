@@ -484,8 +484,10 @@ ComputingReturn DNNLTensor<DT>::op_causal_mask(tensor_t self, tensor_t out) {
         int* mask = (int *)clEnqueueMapBuffer(queue, (cl_mem)mem_,  CL_TRUE, CL_MAP_READ , 0, size_, 0, nullptr, nullptr, &ret);
         OPENCL_CHECK(ret);
 
+        size_t out_size = std::get<1>(out->op_sizeof(out));
         if ( out->dtype() == DataType::Float ) {
-            float* out32 = (float *)clEnqueueMapBuffer(queue, (cl_mem)out->dnnl_float()->mem_,  CL_TRUE, CL_MAP_WRITE , 0, size_, 0, nullptr, nullptr, &ret);
+            
+            float* out32 = (float *)clEnqueueMapBuffer(queue, (cl_mem)out->dnnl_float()->mem_,  CL_TRUE, CL_MAP_WRITE , 0, out_size, 0, nullptr, nullptr, &ret);
             OPENCL_CHECK(ret);
 
             for (int e = 0; e < batch * new_tokens; e++) {
@@ -500,7 +502,7 @@ ComputingReturn DNNLTensor<DT>::op_causal_mask(tensor_t self, tensor_t out) {
             }
             clEnqueueUnmapMemObject(queue, (cl_mem)out->dnnl_float()->mem_, out32, 0, nullptr,  nullptr);
         } else if ( out->dtype() == DataType::FP16 ) {
-            local_fp16_t* out16 = (local_fp16_t *)clEnqueueMapBuffer(queue, (cl_mem)out->dnnl_fp16()->mem_,  CL_TRUE, CL_MAP_WRITE , 0, size_, 0, nullptr, nullptr, &ret);
+            local_fp16_t* out16 = (local_fp16_t *)clEnqueueMapBuffer(queue, (cl_mem)out->dnnl_fp16()->mem_,  CL_TRUE, CL_MAP_WRITE , 0, out_size, 0, nullptr, nullptr, &ret);
             OPENCL_CHECK(ret);
 
             for (int e = 0; e < batch * new_tokens; e++) {
