@@ -194,6 +194,8 @@ namespace op {
                     t = vt::create_dnnl_fp16(shape, true);
                 } else if ( dtype == vt::Int ) {
                     t = vt::create_dnnl_int(shape, true);
+                } else if ( dtype == vt::Q8 ) {
+                    t = vt::create_dnnl_q8(shape, true);
                 } else {
                     vt_panic("Can't be here!");
                 }

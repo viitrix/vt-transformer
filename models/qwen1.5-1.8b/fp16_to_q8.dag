@@ -70,7 +70,16 @@
     "mlp.w2.weight"                   @ "mlp.w2.weight~"      @        op.quantize
     "mlp.o_proj.weight"               @ "mlp.o_proj.weight~"  @        op.quantize
    
-    "Done" ?
+
+    "attn.query.weight~"               @ $weights_path @  "attn.query.weight.q8"          | io.save
+    "attn.key.weight~"                 @ $weights_path @  "attn.key.weight.q8"            | io.save
+    "attn.value.weight~"               @ $weights_path @  "attn.value.weight.q8"          | io.save
+    "attn.o_proj.weight~"              @ $weights_path @  "attn.o_proj.weight.q8"         | io.save
+    "mlp.w1.weight~"                   @ $weights_path @  "mlp.w1.weight.q8"              | io.save
+    "mlp.w2.weight~"                   @ $weights_path @  "mlp.w2.weight.q8"              | io.save
+    "mlp.o_proj.weight~"               @ $weights_path @  "mlp.o_proj.weight.q8"          | io.save
+
+    "Done" ? 
 
     $L !!
     $weights_path !!
