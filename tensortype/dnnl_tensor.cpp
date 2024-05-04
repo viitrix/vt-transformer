@@ -1322,16 +1322,7 @@ std::variant<ComputingReturn,int> DNNLTensor<DT>::op_all_logits(tensor_t self, t
 
 #ifdef _DNNL_GPU_
     if ( is_gpu() ) {
-        auto queue = dnnl::ocl_interop::get_command_queue(*ComputingContext::dnnl_gpu_stream);
-        int ret = 0;
-        void* src_ = clEnqueueMapBuffer(queue, (cl_mem)mem_,  CL_TRUE, CL_MAP_READ , 0, size_, 0, nullptr, nullptr, &ret);
-        OPENCL_CHECK(ret);
-        size_t lm_head_size = std::get<1>( lm_head->op_sizeof(lm_head) );
-        void* w_ = clEnqueueMapBuffer(queue, (cl_mem)lm_head->device_data(),  CL_TRUE, CL_MAP_READ , 0, lm_head_size, 0, nullptr, nullptr, &ret);
-        OPENCL_CHECK(ret);
-        size_t output_size = std::get<1>( output->op_sizeof(output) );
-        void* dst_ = clEnqueueMapBuffer(queue, (cl_mem)output->device_data(),  CL_TRUE, CL_MAP_WRITE , 0, output_size, 0, nullptr, nullptr, &ret);
-        OPENCL_CHECK(ret);
+        std::vector<cl_mem> temp_buffers;
 
         for (int b = 0;  b < batch; b++) {
             int* mk = &mask[b * full_tokens];
@@ -1341,26 +1332,33 @@ std::variant<ComputingReturn,int> DNNLTensor<DT>::op_all_logits(tensor_t self, t
                     continue;
                 }
                 int target = i;
+                cl_mem x;
+                cl_mem w;
+                cl_mem y;
                 if ( DT == DataType::Float ) {
-                    float* dst = (float *)dst_ + pred * vocab_size;
-                    float* src = (float *)src_ + b * new_tokens * hidden_size + target * hidden_size;
-                    float* w = (float *)w_;
-                    dnnl_kernels::simple_gemm(src, w, dst, src_md, w_md, dst_md);
+                    x = (cl_mem)sub_buffer( ( b * new_tokens * hidden_size + target * hidden_size) * sizeof(local_fp16_t), hidden_size * sizeof(local_fp16_t));
+                    w = (cl_mem)lm_head->device_data();
+                    y = (cl_mem)output->dnnl_float()->sub_buffer( pred * vocab_size * sizeof(local_fp16_t) , vocab_size * sizeof(local_fp16_t));
+                    dnnl_kernels::simple_gpu_gemm(x, w, y, src_md, w_md, dst_md);
                 } else if ( DT == DataType::FP16 ) {
-                    auto* dst = (local_fp16_t *)dst_ + pred * vocab_size;
-                    auto* src = (local_fp16_t *)src_ + b * new_tokens * hidden_size + target * hidden_size;
-                    auto* w = (local_fp16_t *)w_;
-                    dnnl_kernels::simple_gemm(src, w, dst, src_md, w_md, dst_md);
+                    x = (cl_mem)sub_buffer( ( b * new_tokens * hidden_size + target * hidden_size) * sizeof(local_fp16_t), hidden_size * sizeof(local_fp16_t));
+                    w = (cl_mem)lm_head->device_data();
+                    y = (cl_mem)output->dnnl_fp16()->sub_buffer( pred * vocab_size * sizeof(local_fp16_t) , vocab_size * sizeof(local_fp16_t));
+                    dnnl_kernels::simple_gpu_gemm(x, w, y, src_md, w_md, dst_md);
                 } else {
                     return OP_TODO_ERROR;
                 }
+
+                temp_buffers.push_back(x);
+                temp_buffers.push_back(y);
                 pred ++;
             }
         }
 
-        clEnqueueUnmapMemObject(queue, (cl_mem)mem_, src_, 0, nullptr,  nullptr);
-        clEnqueueUnmapMemObject(queue, (cl_mem)lm_head->device_data(), w_, 0, nullptr,  nullptr);
-        clEnqueueUnmapMemObject(queue, (cl_mem)output->device_data(), dst_, 0, nullptr,  nullptr);
+        for(int i = 0; i < (int)temp_buffers.size(); i++) {
+            clReleaseMemObject(temp_buffers[i]);
+        }
+
         return pred;
     }
 #endif

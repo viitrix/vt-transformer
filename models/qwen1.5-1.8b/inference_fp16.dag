@@ -288,12 +288,8 @@
         "xa" @ "attn.key.weight" @ "attn.key.bias" @ "xb" @ op.linear
         "yb" @ "rotary_cache" @ $pos @ "yc" @  op.rotary_embed
         "cache_man" @ "_kcache_" @ "xc" @ "xfb" @ $L @ nn.ezkv_update
-       
         "yfb" @ "zfa" @ op.transpose_0213
        
-        "zfa" @ io.dump
-        "zfa" @ 128 [128] op.view io.dump ^
-            
         ;; get query@key
         "xa" @ "attn.query.weight" @ "attn.query.bias" @ "xc" @ op.linear
         "yc" @ "rotary_cache" @ $pos @ "yb" @  op.rotary_embed
@@ -373,13 +369,13 @@
     %for 0 23
         "L%%."   sync_layer_clone %% layer_forward 
     %endf
-
+    
     ;; ln & output    
     {
         "xinput" @ "ln_f.weight" @ "norm2" @ "xb" @ "RMS_EPS" @ op.rmsnorm
         "xb" @ "mask~" @ "lm_head.weight" @ "all_logits" @  op.all_logits 
     }
- 
+
     ;; reshape all_logits according to user's masks
     "all_logits" @ 0 rot "VOCAB_SIZE" @ 2 op.view "all_logits" !
 
