@@ -199,6 +199,7 @@ template <DataType _DTYPE_> struct DNNLTensor;
 using dnnl_float_t = DNNLTensor<DataType::Float>;
 using dnnl_fp16_t = DNNLTensor<DataType::FP16>;
 using dnnl_int_t = DNNLTensor<DataType::Int>;
+using dnnl_q8_t = DNNLTensor<DataType::Q8>;
 #endif
 
 // TensorType is all you need
@@ -250,6 +251,7 @@ public:
     TensorType(dnnl_float_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Float), impl_(tensor) {};
     TensorType(dnnl_fp16_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::FP16), impl_(tensor) {};
     TensorType(dnnl_int_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Int), impl_(tensor) {};
+    TensorType(dnnl_q8_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Q8), impl_(tensor) {};
 #endif
 
     virtual ~TensorType();
@@ -462,6 +464,12 @@ public:
         }
         return std::get<DNNL_INT>(impl_);
     }
+    dnnl_q8_t* dnnl_q8() {
+        if ( impl_.index() != DNNL_Q8 ) {
+            vt_panic("Cant get dnnl_int from a tensor");
+        }
+        return std::get<DNNL_Q8>(impl_);
+    }
 #endif
 
     // help functions
@@ -531,7 +539,7 @@ public:
 #ifdef _USING_DEVICE_DNNL_
     bool is_dnnl() const {
         auto ii = impl_index();
-        if ( (ii >= ImplType::DNNL_FLOAT) && (ii <= ImplType::DNNL_INT) ) {
+        if ( (ii >= ImplType::DNNL_FLOAT) && (ii <= ImplType::DNNL_Q8) ) {
             return true;
         }
         return false;
@@ -664,6 +672,11 @@ public:
 #endif
 #ifdef _USING_DEVICE_COREX_
         if (impl_index() == ImplType::CX_Q8) {
+            return true;
+        }
+#endif
+#ifdef _USING_DEVICE_DNNL_
+        if (impl_index() == ImplType::DNNL_Q8) {
             return true;
         }
 #endif
@@ -838,6 +851,7 @@ private:
         DNNL_FLOAT,
         DNNL_FP16,
         DNNL_INT,
+        DNNL_Q8,
 #endif
         HOST_FLOAT,
         HOST_FP16,
@@ -884,6 +898,7 @@ private:
                                         dnnl_float_t*,
                                         dnnl_fp16_t*,
                                         dnnl_int_t*,
+                                        dnnl_q8_t*,
 #endif
                                         host_float_t*,
                                         host_fp16_t*,
@@ -938,6 +953,7 @@ tensor_t create_acl_int(std::vector<size_t>& shape);
 tensor_t create_dnnl_float(std::vector<size_t>& shape, bool gpu = false);
 tensor_t create_dnnl_fp16(std::vector<size_t>& shape, bool gpu = false);
 tensor_t create_dnnl_int(std::vector<size_t>& shape, bool gpu = false);
+tensor_t create_dnnl_q8(std::vector<size_t>& shape, bool gpu = false);
 #endif
 
 

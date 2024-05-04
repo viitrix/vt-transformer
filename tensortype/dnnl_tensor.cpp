@@ -35,6 +35,8 @@ DNNLTensor<_DTYPE_>::DNNLTensor(const ShapeType& shape, bool isGPU) : owner_(tru
         size_ = shape.numel() * sizeof(int);
     } else if ( _DTYPE_ == DataType::FP16 ) {
         size_ =  shape.numel() * sizeof(local_fp16_t);
+    } else if ( _DTYPE_ == DataType::Q8 ) {
+        size_ =  shape.numel() + (shape.numel() / shape.vec().back()) * sizeof(float);
     } else {
         vt_panic("Can't be here!");
     }
@@ -187,6 +189,23 @@ ComputingReturn DNNLTensor<_DTYPE_>::io_dump(tensor_t self) {
                 std::cout << fp16_to_fp32(d[i]) << " ";
             }
             std::cout << std::endl;
+        } else  if ( _DTYPE_ == DataType::Q8 ) {
+            int8_t* d = (int8_t *)target;
+            float* tab = (float *)((int8_t *)target + self->items());
+            size_t tab_size = self->items() / self->shape().vec().back();
+
+            std::cout << "First " << first8 << " : ";
+            for(size_t i = 0; i < first8; i++) {
+                std::cout << d[i] * tab[0] << " ";
+            }
+            std::cout << std::endl;
+
+            d = (int8_t *)data() + self->items() - first8;
+            std::cout << "Last " << first8 << " : ";
+            for(size_t i = 0; i < first8; i++) {
+                std::cout << d[i] * tab[tab_size-1] << " ";
+            }
+            std::cout << std::endl;
         } else {
             return OP_TODO_ERROR;
         }
@@ -241,6 +260,25 @@ ComputingReturn DNNLTensor<_DTYPE_>::io_dump(tensor_t self) {
         }
         std::cout << std::endl;
 
+        return OP_OK;
+    }
+    if ( _DTYPE_ == DataType::Q8 ) {
+        int8_t* d = (int8_t *)data();
+        float* tab = (float *)((int8_t *)data() + self->items());
+        size_t tab_size = self->items() / self->shape().vec().back();
+
+        std::cout << "First " << first8 << " : ";
+        for(size_t i = 0; i < first8; i++) {
+            std::cout << d[i] * tab[0] << " ";
+        }
+        std::cout << std::endl;
+
+        d = (int8_t *)data() + self->items() - first8;
+        std::cout << "Last " << first8 << " : ";
+        for(size_t i = 0; i < first8; i++) {
+            std::cout << d[i] * tab[tab_size-1] << " ";
+        }
+        std::cout << std::endl;
         return OP_OK;
     }
     return OP_TODO_ERROR;
@@ -486,7 +524,7 @@ ComputingReturn DNNLTensor<DT>::op_causal_mask(tensor_t self, tensor_t out) {
 
         size_t out_size = std::get<1>(out->op_sizeof(out));
         if ( out->dtype() == DataType::Float ) {
-            
+
             float* out32 = (float *)clEnqueueMapBuffer(queue, (cl_mem)out->dnnl_float()->mem_,  CL_TRUE, CL_MAP_WRITE , 0, out_size, 0, nullptr, nullptr, &ret);
             OPENCL_CHECK(ret);
 
@@ -596,6 +634,53 @@ ComputingReturn DNNLTensor<DT>::op_rotary_cache(tensor_t self, float base) {
         return OP_OK;
     }
     return OP_OUTPUT_ERROR;
+}
+
+template<DataType DT>
+ComputingReturn DNNLTensor<DT>::op_quantize(tensor_t self, tensor_t out) {
+#ifdef _DNNL_GPU_
+    if ( is_gpu() ) {
+        return OP_TODO_ERROR;
+    }
+#endif
+
+    if ( DT == DataType::FP16 && out->dtype() == DataType::Q8 ) {
+        size_t channel_size = self->shape().vec().back();
+        size_t scale_offset = self->items();
+        size_t channel_num = self->items() / channel_size;
+        float* tab = (float *)((int8_t *) out->device_data() + scale_offset);
+
+#pragma omp parallel for
+        for(size_t c = 0; c < channel_num; c++) {
+            local_fp16_t* src = (local_fp16_t *)data() + c * channel_size;
+            float amax = 0.0;
+            for(size_t i = 0; i < channel_size; i++) {
+                float d = abs(fp16_to_fp32(src[i]));
+                if ( d > amax ) {
+                    amax = d;
+                }
+            }
+
+            float scale = amax / ((1 << 8) - 1);
+            tab[c] = scale;
+
+            const float id = scale ? 1.0 / scale : 0.0f;
+            uint8_t* dst = (uint8_t*) out->device_data() + c * channel_size;
+            for(size_t i = 0; i < channel_size; i++) {
+                float d = fp16_to_fp32(src[i]);
+                float v = d * id;
+                dst[i] = (int8_t)(v + 0.5);
+            }
+        }
+        return OP_OK;
+    }
+
+    return OP_TODO_ERROR;
+}
+
+template<DataType DT>
+ComputingReturn DNNLTensor<DT>::op_dequantize(tensor_t self, tensor_t out) {
+    return OP_TODO_ERROR;
 }
 
 template<DataType DT>
@@ -1564,5 +1649,17 @@ tensor_t create_dnnl_int(std::vector<size_t>& shape_, bool gpu) {
     DNNLTensor<DataType::Int>* tensor = new DNNLTensor<DataType::Int>(shape, gpu);
     return std::make_shared<TensorType>(tensor, shape);
 }
+
+tensor_t create_dnnl_q8(std::vector<size_t>& shape_, bool gpu) {
+#ifndef _DNNL_GPU_
+    if ( gpu ) {
+        vt_panic("Can't be here");
+    }
+#endif
+    ShapeType shape(shape_);
+    DNNLTensor<DataType::Q8>* tensor = new DNNLTensor<DataType::Q8>(shape, gpu);
+    return std::make_shared<TensorType>(tensor, shape);
+}
+
 
 }

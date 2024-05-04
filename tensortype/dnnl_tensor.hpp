@@ -46,6 +46,9 @@ public:
     ComputingReturn op_causal_mask(tensor_t self, tensor_t out) override;
     ComputingReturn op_rotary_cache(tensor_t self, float base) override;
 
+    ComputingReturn op_quantize(tensor_t self, tensor_t out) override;
+    ComputingReturn op_dequantize(tensor_t self, tensor_t out) override;
+
     ComputingReturn op_copy(tensor_t self, tensor_t from) override;
     ComputingReturn op_convert(tensor_t self, tensor_t from) override;
     std::variant<ComputingReturn, tensor_t> op_view(tensor_t self, size_t offset, const std::vector<size_t>& newShape_) override;
@@ -88,6 +91,7 @@ protected:
     friend struct DNNLTensor<DataType::Float>;
     friend struct DNNLTensor<DataType::Int>;
     friend struct DNNLTensor<DataType::FP16>;
+    friend struct DNNLTensor<DataType::Q8>;
 };
 
 

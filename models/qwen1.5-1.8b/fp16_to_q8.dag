@@ -1,0 +1,96 @@
+1e-06                   "RMS_EPS"               !
+1000000.0               "ROTARY_BASE"           !
+2.5                     "TEMPERATURE"           !
+
+151936                  "VOCAB_SIZE"            !
+2048                    "HIDDEN_SIZE"           !
+5504                   "INTERMEDIATE_SIZE"     !
+16                      "HEADS_NUM"             !
+128                     "HEAD_HIDDEN"           !
+
+1                       "MAX_BATCH"             !
+2048                    "MAX_CONTEXT"           !
+"./weights/"            "G_PATH"                !
+
+%def create_layer_weight_fp16
+    $DEVICE !
+
+    ("HIDDEN_SIZE" @ "HIDDEN_SIZE" @ 2 $DEVICE @  "fp16" )  op.create  "attn.query.weight" !
+    ("HIDDEN_SIZE" @ "HIDDEN_SIZE" @ 2 $DEVICE @  "fp16" )  op.create  "attn.key.weight"   !
+    ("HIDDEN_SIZE" @ "HIDDEN_SIZE" @ 2 $DEVICE @  "fp16" )  op.create  "attn.value.weight" !
+    ("HIDDEN_SIZE" @                 1 $DEVICE @  "fp16" )  op.create  "attn.query.bias" !
+    ("HIDDEN_SIZE" @                 1 $DEVICE @  "fp16" )  op.create  "attn.key.bias"  !
+    ("HIDDEN_SIZE" @                 1 $DEVICE @  "fp16" )  op.create  "attn.value.bias"  !
+    ("HIDDEN_SIZE" @  "HIDDEN_SIZE" @ 2 $DEVICE @  "fp16")  op.create  "attn.o_proj.weight"   !
+    ("INTERMEDIATE_SIZE" @  "HIDDEN_SIZE" @ 2 $DEVICE @  "fp16")  op.create  "mlp.w1.weight"   !
+    ("INTERMEDIATE_SIZE" @  "HIDDEN_SIZE" @ 2 $DEVICE @  "fp16")  op.create  "mlp.w2.weight"  !
+    ("HIDDEN_SIZE" @  "INTERMEDIATE_SIZE" @ 2 $DEVICE @  "fp16")  op.create  "mlp.o_proj.weight" !
+
+    $DEVICE !!
+%end
+
+%def create_layer_weight_q8
+    $DEVICE !
+
+    ("HIDDEN_SIZE" @ "HIDDEN_SIZE" @ 2 $DEVICE @  "q8" )  op.create  "attn.query.weight~"  !
+    ("HIDDEN_SIZE" @ "HIDDEN_SIZE" @ 2 $DEVICE @  "q8" )  op.create  "attn.key.weight~"    !
+    ("HIDDEN_SIZE" @ "HIDDEN_SIZE" @ 2 $DEVICE @  "q8" )  op.create  "attn.value.weight~"  !
+    ("HIDDEN_SIZE" @  "HIDDEN_SIZE" @ 2 $DEVICE @  "q8")  op.create  "attn.o_proj.weight~"   !
+    ("INTERMEDIATE_SIZE" @  "HIDDEN_SIZE" @ 2 $DEVICE @  "q8")  op.create  "mlp.w1.weight~"   !
+    ("INTERMEDIATE_SIZE" @  "HIDDEN_SIZE" @ 2 $DEVICE @  "q8")  op.create  "mlp.w2.weight~"   !
+    ("HIDDEN_SIZE" @  "INTERMEDIATE_SIZE" @ 2 $DEVICE @  "q8")  op.create  "mlp.o_proj.weight~"  !
+
+    $DEVICE !!
+%end
+
+
+%def convert_layer_weight
+    $L !
+    $weights_path ! 
+    
+    "Loading... " $weights_path @ | ?
+    
+    "attn.query.weight"               @ $weights_path @  "attn.query.weight.fp16"          | io.load
+    "attn.key.weight"                 @ $weights_path @  "attn.key.weight.fp16"            | io.load
+    "attn.value.weight"               @ $weights_path @  "attn.value.weight.fp16"          | io.load
+    "attn.o_proj.weight"              @ $weights_path @  "attn.o_proj.weight.fp16"         | io.load
+    "mlp.w1.weight"                   @ $weights_path @  "mlp.w1.weight.fp16"              | io.load
+    "mlp.w2.weight"                   @ $weights_path @  "mlp.w2.weight.fp16"              | io.load
+    "mlp.o_proj.weight"               @ $weights_path @  "mlp.o_proj.weight.fp16"          | io.load
+   
+    "Loaded " $weights_path @ | ?
+
+    "Converting ..." ?
+    
+    "attn.query.weight"               @ "attn.query.weight~"  @        op.quantize
+    "attn.key.weight"                 @ "attn.key.weight~"    @        op.quantize
+    "attn.value.weight"               @ "attn.value.weight~"  @        op.quantize
+    "attn.o_proj.weight"              @ "attn.o_proj.weight~" @        op.quantize
+    "mlp.w1.weight"                   @ "mlp.w1.weight~"      @        op.quantize
+    "mlp.w2.weight"                   @ "mlp.w2.weight~"      @        op.quantize
+    "mlp.o_proj.weight"               @ "mlp.o_proj.weight~"  @        op.quantize
+   
+    "Done" ?
+
+    $L !!
+    $weights_path !!
+%end
+
+%def gpu_init
+    drop
+    "dnnl" "G_DEVICE" !
+
+    "G_DEVICE" @ create_layer_weight_q8
+
+    "G_DEVICE" @ create_layer_weight_fp16
+
+    %for 0 23
+        "G_PATH" @ "h_%%."  | "L%%." convert_layer_weight
+    %endf
+
+%end
+
+%def gpu_main
+
+%end
+

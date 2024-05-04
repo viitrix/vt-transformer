@@ -166,7 +166,7 @@ namespace op {
                     t = vt::create_acl_fp16(shape);
                 } else if ( dtype == vt::Int ) {
                     t = vt::create_acl_int(shape);
-                }
+                } 
 #else
                 vt_panic("Can't be here!");
 #endif
@@ -178,6 +178,10 @@ namespace op {
                     t = vt::create_dnnl_fp16(shape);
                 } else if ( dtype == vt::Int ) {
                     t = vt::create_dnnl_int(shape);
+                } else if ( dtype == vt::Q8 ) {
+                    t = vt::create_dnnl_q8(shape);
+                } else {
+                    vt_panic("Can't be here!");
                 }
 #else
                 vt_panic("Can't be here!");
@@ -190,6 +194,8 @@ namespace op {
                     t = vt::create_dnnl_fp16(shape, true);
                 } else if ( dtype == vt::Int ) {
                     t = vt::create_dnnl_int(shape, true);
+                } else {
+                    vt_panic("Can't be here!");
                 }
 #else
                 vt_panic("Can't be here!");

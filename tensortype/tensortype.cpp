@@ -581,6 +581,10 @@ TensorType::~TensorType() {
         dnnl_int_t* tensor = std::get<DNNL_INT>(impl_);
         delete tensor;
     }
+    if ( impl_index() == ImplType::DNNL_Q8 ) {
+        dnnl_q8_t* tensor = std::get<DNNL_Q8>(impl_);
+        delete tensor;
+    }
 #endif
 
 }
@@ -720,6 +724,10 @@ TransformerComputing* TensorType::impl() {
         dnnl_int_t* tensor = std::get<DNNL_INT>(impl_);
         return tensor;
     }
+    if ( impl_index() == ImplType::DNNL_Q8 ) {
+        dnnl_q8_t* tensor = std::get<DNNL_Q8>(impl_);
+        return tensor;
+    }
 #endif
 
     vt_panic("Can't be here!");
@@ -755,7 +763,7 @@ const char* TensorType::device_name() {
 #endif
 
 #ifdef _USING_DEVICE_DNNL_
-    if ( (impl_index() <= ImplType::DNNL_INT) && (impl_index() >= ImplType::DNNL_FLOAT) ) {
+    if ( (impl_index() <= ImplType::DNNL_Q8) && (impl_index() >= ImplType::DNNL_FLOAT) ) {
         if ( impl_index() == ImplType::DNNL_INT ) {
             if (dnnl_int()->is_gpu()) {
                 return "dnnl_ocl";
@@ -768,6 +776,11 @@ const char* TensorType::device_name() {
         }
         if ( impl_index() == ImplType::DNNL_FLOAT ) {
             if (dnnl_float()->is_gpu()) {
+                return "dnnl_ocl";
+            }
+        }
+        if ( impl_index() == ImplType::DNNL_Q8 ) {
+            if (dnnl_q8()->is_gpu()) {
                 return "dnnl_ocl";
             }
         }
@@ -917,6 +930,10 @@ void* TensorType::device_data(size_t index) {
         dnnl_fp16_t* tensor = std::get<DNNL_FP16>(impl_);
         return tensor->data();
     }
+    if ( index == ImplType::DNNL_Q8 ) {
+        dnnl_q8_t* tensor = std::get<DNNL_Q8>(impl_);
+        return tensor->data();
+    }
 #endif
     vt_panic("Can't be here!");
     return nullptr;
@@ -963,6 +980,10 @@ bool TensorType::is_shared() {
     }
     if ( index == ImplType::DNNL_FP16 ) {
         dnnl_fp16_t* tensor = std::get<DNNL_FP16>(impl_);
+        return !tensor->is_gpu();
+    }
+    if ( index == ImplType::DNNL_Q8 ) {
+        dnnl_q8_t* tensor = std::get<DNNL_Q8>(impl_);
         return !tensor->is_gpu();
     }
 #endif
