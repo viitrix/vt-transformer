@@ -127,6 +127,61 @@ void eltwise(T* in, T* out,  size_t items, ::dnnl::algorithm op, float alpha, fl
     eltwise_prim.execute(*ComputingContext::dnnl_stream, eltwise_args);
 }
 
+#ifdef _DNNL_GPU_
+template<typename T>
+void linear_w8(T* src, DNNLTensor<Q8>* weight, T* bias, T* dst, size_t batch, size_t outFeature, size_t inFeature ) {
+    // TODO 
+    /*
+    onednn_verbose,info,oneDNN v3.6.0 (commit 95c00edd0afd50e9cff045b9838bfc77b2a82b5a)
+    onednn_verbose,info,cpu,runtime:OpenMP,nthr:22
+    onednn_verbose,info,cpu,isa:Intel AVX2 with Intel DL Boost
+    onednn_verbose,info,gpu,runtime:OpenCL
+    onednn_verbose,info,gpu,engine,0,name:Intel(R) Arc(TM) Graphics,driver_version:24.9.28717,binary_kernels:enabled
+    onednn_verbose,primitive,info,template:operation,engine,primitive,implementation,prop_kind,memory_descriptors,attributes,auxiliary,problem_desc,exec_time
+    onednn_verbose,primitive,create:check,matmul,unsupported scales configuration,src/common/matmul.cpp:86
+    terminate called after throwing an instance of 'dnnl::error'
+        what():  could not create a primitive descriptor for a matmul primitive
+    */
+
+    auto src_md = src->build_memory_desc( {batch, inFeature},  dnnl::memory::format_tag::ab);
+    auto w_md = weight->build_memory_desc( {inFeature, outFeature}, dnnl::memory::format_tag::ba);
+    auto dst_md = dst->build_memory_desc( {batch, outFeature}, dnnl::memory::format_tag::ab);
+
+    dnnl::memory::desc scale_md = dnnl::memory::desc({(long int)outFeature},  dnnl::memory::data_type::f32, dnnl::memory::format_tag::a);
+    auto scale_mem =  dnnl::memory(scale_md, *ComputingContext::dnnl_gpu_engine, (cl_mem)weight->scale_buffer());
+    
+    dnnl::primitive_attr attr;
+    attr.set_scales_mask(DNNL_ARG_WEIGHTS, 1);
+
+    dnnl::matmul::primitive_desc matmul_pd = dnnl::matmul::primitive_desc(*ComputingContext::dnnl_gpu_engine, src_md, w_md, dst_md, attr);
+    auto matmul_prim = dnnl::matmul(matmul_pd);
+    {
+        std::unordered_map<int, dnnl::memory> matmul_args;
+        matmul_args[DNNL_ARG_SRC] = src->build_memory(src_md);
+        matmul_args[DNNL_ARG_WEIGHTS] = weight->build_memory(w_md);
+        matmul_args[DNNL_ARG_DST] = dst->build_memory(dst_md);
+        matmul_args[DNNL_ARG_ATTR_SCALES | DNNL_ARG_WEIGHTS] = scale_mem;
+        matmul_prim.execute(*ComputingContext::dnnl_gpu_stream, matmul_args);
+    }
+
+    /*
+    dnnl::memory::desc scale_md = dnnl::memory::desc({1, (long int)outFeature},  dnnl::memory::data_type::f32, dnnl::memory::format_tag::ab);
+    auto scale_mem =  dnnl::memory(scale_md, *ComputingContext::dnnl_gpu_engine, (cl_mem)weight->scale_buffer());
+    
+    auto binary_pd = dnnl::binary::primitive_desc(*ComputingContext::dnnl_gpu_engine, dnnl::algorithm::binary_mul , dst_md, scale_md, dst_md);
+    auto binary_prim = dnnl::binary(binary_pd);
+    {
+        std::unordered_map<int, dnnl::memory> matmul_args;
+        matmul_args[DNNL_ARG_SRC_0] = dst->build_memory(dst_md);
+        matmul_args[DNNL_ARG_SRC_1] = scale_mem;
+        matmul_args[DNNL_ARG_DST] = dst->build_memory(dst_md);
+        binary_prim.execute(*ComputingContext::dnnl_gpu_stream, matmul_args);
+    }
+    */
+    return;
+}
+#endif
+
 template<typename T>
 void linear(T* src, T* weight, T* bias, T* dst, size_t batch, size_t outFeature, size_t inFeature ) {
     auto src_md = src->build_memory_desc( {1, batch, inFeature},  dnnl::memory::format_tag::abc);

@@ -17,6 +17,9 @@ DNNLTensor<_DTYPE_>::~DNNLTensor() {
     if ( owner_ ) {
 #ifdef _DNNL_GPU_
         if ( gpu_ == true) {
+            if ( _DTYPE_ == DataType::Q8) {
+                clReleaseMemObject((cl_mem)scale_);
+            }            
             cl_mem mem = (cl_mem)mem_;
             clReleaseMemObject(mem);
             return;
@@ -53,6 +56,13 @@ DNNLTensor<_DTYPE_>::DNNLTensor(const ShapeType& shape, bool isGPU) : owner_(tru
         OPENCL_CHECK(err);
         from_ = mem_;
         offset_ = 0;
+
+        if ( _DTYPE_ == DataType::Q8) {
+            scale_ = sub_ocl_buffer( shape.numel(), (shape.numel() / shape.vec().back()) * sizeof(float));
+        } else {
+            scale_ = nullptr;
+        }
+
         return;
     }
 #endif
@@ -88,6 +98,9 @@ dnnl::memory::desc DNNLTensor<_DTYPE_>::build_memory_desc(const std::vector<size
     if ( dt == DataType::FP16 ) {
         return dnnl::memory::desc(dims,  dnnl::memory::data_type::f16, tag);
     }
+    if ( dt == DataType::Q8 ) {
+        return dnnl::memory::desc(dims,  dnnl::memory::data_type::s8, tag);
+    }
 
     vt_panic("Can't be here!");
     return dnnl::memory::desc();
@@ -105,6 +118,9 @@ dnnl::memory::desc DNNLTensor<_DTYPE_>::build_memory_desc(const std::vector<size
     if ( _DTYPE_ == DataType::FP16 ) {
         return dnnl::memory::desc(dims,  dnnl::memory::data_type::f16, tag);
     }
+    if ( _DTYPE_ == DataType::Q8 ) {
+        return dnnl::memory::desc(dims,  dnnl::memory::data_type::s8, tag);
+    }
 
     vt_panic("Can't be here!");
     return dnnl::memory::desc();
@@ -112,7 +128,9 @@ dnnl::memory::desc DNNLTensor<_DTYPE_>::build_memory_desc(const std::vector<size
 
 template <DataType _DTYPE_>
 dnnl::memory DNNLTensor<_DTYPE_>::build_memory(const dnnl::memory::desc& desc) {
-    vt_assert( desc.get_size() == size_ , "dnnl memory's data must have same size with desc");
+    if ( _DTYPE_ != DataType::Q8) {
+        vt_assert( desc.get_size() == size_ , "dnnl memory's data must have same size with desc");
+    }
     if ( gpu_ == false) {
         return dnnl::memory(desc, *ComputingContext::dnnl_engine, mem_);
     } else {
@@ -127,7 +145,14 @@ dnnl::memory DNNLTensor<_DTYPE_>::build_memory(const dnnl::memory::desc& desc) {
 
 #ifdef _DNNL_GPU_
 template <DataType _DTYPE_>
-void* DNNLTensor<_DTYPE_>::sub_buffer(size_t offset, size_t size) {
+void* DNNLTensor<_DTYPE_>::scale_buffer() {
+    if ( _DTYPE_ != DataType::Q8) {
+        vt_panic("Can't be here!");
+    }
+    return scale_;
+}
+template <DataType _DTYPE_>
+void* DNNLTensor<_DTYPE_>::sub_ocl_buffer(size_t offset, size_t size) {
     cl_buffer_region region;
     region.origin = offset + offset_;
     region.size = size;
@@ -193,7 +218,8 @@ ComputingReturn DNNLTensor<_DTYPE_>::io_dump(tensor_t self) {
             int8_t* d = (int8_t *)target;
             float* tab = (float *)((int8_t *)target + self->items());
             size_t tab_size = self->items() / self->shape().vec().back();
-
+            
+            std::cout << ">>>>>>>>>>>>>>>>>> " << tab[0] << std::endl;
             std::cout << "First " << first8 << " : ";
             for(size_t i = 0; i < first8; i++) {
                 std::cout << d[i] * tab[0] << " ";
@@ -1001,6 +1027,14 @@ ComputingReturn DNNLTensor<DT>::op_linear(tensor_t self, tensor_t w, tensor_t bi
     size_t outSize = w->shape()[0];
 
     size_t num = batch * tokens;
+#ifdef _DNNL_GPU_
+    if ( DT == DataType::FP16 && is_gpu() && w->is_q8() ) {
+        dnnl_kernels::linear_w8(self->dnnl_fp16(), w->dnnl_q8(),
+            bias == nullptr? nullptr : bias->dnnl_fp16(), dst->dnnl_fp16(), num, outSize, inSize);
+        return OP_OK;
+    }
+#endif
+    
     if (   DT == DataType::Float) {
         dnnl_kernels::linear<DNNLTensor<DataType::Float>>(self->dnnl_float(), w->dnnl_float(),
             bias == nullptr? nullptr : bias->dnnl_float(), dst->dnnl_float(), num, outSize, inSize);
@@ -1412,14 +1446,14 @@ std::variant<ComputingReturn,int> DNNLTensor<DT>::op_all_logits(tensor_t self, t
                 cl_mem w;
                 cl_mem y;
                 if ( DT == DataType::Float ) {
-                    x = (cl_mem)sub_buffer( ( b * new_tokens * hidden_size + target * hidden_size) * sizeof(local_fp16_t), hidden_size * sizeof(local_fp16_t));
+                    x = (cl_mem)sub_ocl_buffer( ( b * new_tokens * hidden_size + target * hidden_size) * sizeof(local_fp16_t), hidden_size * sizeof(local_fp16_t));
                     w = (cl_mem)lm_head->device_data();
-                    y = (cl_mem)output->dnnl_float()->sub_buffer( pred * vocab_size * sizeof(local_fp16_t) , vocab_size * sizeof(local_fp16_t));
+                    y = (cl_mem)output->dnnl_float()->sub_ocl_buffer( pred * vocab_size * sizeof(local_fp16_t) , vocab_size * sizeof(local_fp16_t));
                     dnnl_kernels::simple_gpu_gemm(x, w, y, src_md, w_md, dst_md);
                 } else if ( DT == DataType::FP16 ) {
-                    x = (cl_mem)sub_buffer( ( b * new_tokens * hidden_size + target * hidden_size) * sizeof(local_fp16_t), hidden_size * sizeof(local_fp16_t));
+                    x = (cl_mem)sub_ocl_buffer( ( b * new_tokens * hidden_size + target * hidden_size) * sizeof(local_fp16_t), hidden_size * sizeof(local_fp16_t));
                     w = (cl_mem)lm_head->device_data();
-                    y = (cl_mem)output->dnnl_fp16()->sub_buffer( pred * vocab_size * sizeof(local_fp16_t) , vocab_size * sizeof(local_fp16_t));
+                    y = (cl_mem)output->dnnl_fp16()->sub_ocl_buffer( pred * vocab_size * sizeof(local_fp16_t) , vocab_size * sizeof(local_fp16_t));
                     dnnl_kernels::simple_gpu_gemm(x, w, y, src_md, w_md, dst_md);
                 } else {
                     return OP_TODO_ERROR;
