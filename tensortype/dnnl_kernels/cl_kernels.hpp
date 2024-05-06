@@ -12,6 +12,7 @@ struct cl_kernels {
     
     static const char* source_;
     static cl_program programe_;
+    static cl_kernel rmsnorm_kernel;
 };
 
 }}

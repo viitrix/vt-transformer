@@ -10,6 +10,7 @@ const char* cl_kernels::source_  =
 ;
 
 cl_program cl_kernels::programe_ = nullptr;
+cl_kernel cl_kernels::rmsnorm_kernel = nullptr;
 
 void print_olc_compile_error(cl_device_id did,  cl_program prog) {
     // Determine the size of the log
@@ -38,11 +39,13 @@ void cl_kernels::init() {
     }
     OPENCL_CHECK(err);
 
-    //cl_kernel kernel = clCreateKernel(programe_, "vecAdd", &err);
+    rmsnorm_kernel = clCreateKernel(programe_, "rmsnorm_kernel", &err);
+    OPENCL_CHECK(err);
 }
 
 void cl_kernels::release() {
-    clReleaseProgram(programe_);
+    OPENCL_CHECK(clReleaseKernel(rmsnorm_kernel));
+    OPENCL_CHECK(clReleaseProgram(programe_));
 }
 
 }}

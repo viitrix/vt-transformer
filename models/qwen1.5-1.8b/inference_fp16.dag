@@ -280,7 +280,6 @@
     $L !
     "cache_man" @  "_position" @ nn.ezkv_position  $pos !
     "xinput" @ "ln_1.weight" @ "norm2" @ "xa" @ "RMS_EPS" @ op.rmsnorm
-    
 
     ;; attention
     {
@@ -309,7 +308,9 @@
         "xll" @ "zfb" @ "zb" @ op.attn          
         "zb" @ "ya" @ op.transpose_0213          ;; attn->ya 
     }
-    
+   
+    "xa" @ io.dump ^
+
     ;; do dense & residual
     "xa" @ "attn.o_proj.weight" @  op.null "xb" @ op.linear
     "xb" @ "xinput" @ "xa" @ op.add

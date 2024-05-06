@@ -123,6 +123,9 @@ struct TransformerComputing {
     virtual ComputingReturn op_transpose_0213(tensor_t self, tensor_t y) {
         return OP_TODO_ERROR;
     }
+    virtual ComputingReturn op_transpose_0213_rotary(tensor_t self, tensor_t cached, tensor_t pos, tensor_t y) {
+        return OP_TODO_ERROR;
+    }
     virtual ComputingReturn op_transpose_0213_repeated(tensor_t self, tensor_t y) {
         return OP_TODO_ERROR;
     }

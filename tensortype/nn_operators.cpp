@@ -420,6 +420,19 @@ namespace op {
         }
         NWORD_CREATOR_DEFINE_LR(Transpose0213)
     };
+
+    struct Transpose0213Rotary : public NativeWord {
+        void run(Stack& stack) override {
+            tensor_t out = stack.pop_tensor();
+            tensor_t pos = stack.pop_tensor();
+            tensor_t cached = stack.pop_tensor();
+            tensor_t x = stack.pop_tensor();
+
+            x->op_transpose_0213_rotary(x, cached, pos, out);
+        }
+        NWORD_CREATOR_DEFINE_LR( Transpose0213Rotary );
+    };
+
     struct Transpose0213Repeated : public NativeWord {
         void run(Stack& stack) override {
             tensor_t y = stack.pop_tensor();
@@ -839,6 +852,7 @@ void load_nn_operators(Enviroment& env) {
     env.insert_native_word("op.rmsnorm", op::RMSnorm::creator );
     env.insert_native_word("op.rotary_embed", op::RotaryEmbed::creator );
     env.insert_native_word("op.transpose_0213", op::Transpose0213::creator );
+    env.insert_native_word("op.transpose_0213_rotary", op::Transpose0213Rotary::creator );
     env.insert_native_word("op.transpose_0213_repeated", op::Transpose0213Repeated::creator );
     env.insert_native_word("op.add", op::Add::creator);
     env.insert_native_word("op.mul", op::Mul::creator);

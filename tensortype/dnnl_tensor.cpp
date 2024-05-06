@@ -1081,6 +1081,7 @@ ComputingReturn DNNLTensor<_DTYPE_>::op_rmsnorm(tensor_t self, tensor_t scale, t
 
 #ifdef _DNNL_GPU_
     if ( is_gpu() ) {
+#if 1
         auto queue = dnnl::ocl_interop::get_command_queue(*ComputingContext::dnnl_gpu_stream);
         int ret = 0;
         void* src = clEnqueueMapBuffer(queue, (cl_mem)mem_,  CL_TRUE, CL_MAP_READ , 0, size_, 0, nullptr, nullptr, &ret);
@@ -1106,6 +1107,31 @@ ComputingReturn DNNLTensor<_DTYPE_>::op_rmsnorm(tensor_t self, tensor_t scale, t
         clEnqueueUnmapMemObject(queue, (cl_mem)y->device_data(), dst, 0, nullptr,  nullptr);
         clEnqueueUnmapMemObject(queue, (cl_mem)scale->device_data(), s, 0, nullptr,  nullptr);
         return result;
+#else
+        if ( _DTYPE_ != DataType::FP16) {
+            return OP_TODO_ERROR;
+        }
+        cl_kernel rmsnorm_kernel = dnnl_kernels::cl_kernels::rmsnorm_kernel;
+        {
+            cl_mem buffer = (cl_mem)mem_;
+            clSetKernelArg(rmsnorm_kernel, 0, sizeof(buffer), &buffer);
+            buffer = (cl_mem)scale->dnnl_fp16()->data();
+            clSetKernelArg(rmsnorm_kernel, 1, sizeof(buffer), &buffer);
+            buffer = (cl_mem)y->dnnl_fp16()->data();
+            clSetKernelArg(rmsnorm_kernel, 2, sizeof(buffer), &buffer);
+            buffer = (cl_mem)norm2->dnnl_fp16()->data();
+            clSetKernelArg(rmsnorm_kernel, 3, sizeof(buffer), &buffer);
+            int ivalue = num;
+            clSetKernelArg(rmsnorm_kernel, 4, sizeof(ivalue), &ivalue);
+            ivalue = feature;
+            clSetKernelArg(rmsnorm_kernel, 5, sizeof(ivalue), &ivalue);
+            clSetKernelArg(rmsnorm_kernel, 6, sizeof(eps), &eps);
+        }
+
+        auto queue = dnnl::ocl_interop::get_command_queue(*ComputingContext::dnnl_gpu_stream);
+        OPENCL_CHECK(clEnqueueNDRangeKernel(queue, rmsnorm_kernel, 1, nullptr, &num, nullptr, 0, nullptr, nullptr));
+        return OP_OK;
+#endif
     }
  #endif
 
