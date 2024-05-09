@@ -1019,6 +1019,44 @@ ComputingReturn DNNLTensor<DT>::op_mul(tensor_t self, tensor_t b, tensor_t c) {
     return OP_TODO_ERROR;
 }
 
+#ifdef _DNNL_GPU_
+void linear_kernel(DNNLTensor<DataType::FP16>* src, DNNLTensor<DataType::FP16>* weight, DNNLTensor<DataType::FP16>* bias, DNNLTensor<DataType::FP16>* dst, 
+                  size_t batch, size_t outFeature, size_t inFeature ) {
+    cl_kernel kernel = dnnl_kernels::cl_kernels::linear_kernel_fp16;
+    {
+        cl_mem buffer = (cl_mem)src->data();
+        clSetKernelArg(kernel, 0, sizeof(buffer), &buffer);
+        buffer = (cl_mem)weight->data();
+        clSetKernelArg(kernel, 1, sizeof(buffer), &buffer);
+        buffer = (cl_mem)dst->data();
+        clSetKernelArg(kernel, 2, sizeof(buffer), &buffer);
+        
+        if ( bias != nullptr) {
+            buffer = (cl_mem)bias->data();
+        }
+        clSetKernelArg(kernel, 3, sizeof(buffer), &buffer);
+
+        int ivalue = batch;
+        clSetKernelArg(kernel, 4, sizeof(ivalue), &ivalue);
+        ivalue = outFeature;
+        clSetKernelArg(kernel, 5, sizeof(ivalue), &ivalue);
+        ivalue = inFeature;
+        clSetKernelArg(kernel, 6, sizeof(ivalue), &ivalue);
+        ivalue = 1;
+        if ( bias == nullptr) {
+            ivalue = 0;
+        }
+        clSetKernelArg(kernel, 7, sizeof(ivalue), &ivalue);
+    }
+    const size_t TS = 16;
+    const size_t local[2] =  { 1, TS };
+    const size_t global[2] = { batch, outFeature * TS};
+
+    auto queue = dnnl::ocl_interop::get_command_queue(*ComputingContext::dnnl_gpu_stream);
+    OPENCL_CHECK(clEnqueueNDRangeKernel(queue, kernel, 2, nullptr, global, local, 0, nullptr, nullptr));
+}
+#endif
+
 template<DataType DT>
 ComputingReturn DNNLTensor<DT>::op_linear(tensor_t self, tensor_t w, tensor_t bias, tensor_t dst) {
     size_t batch = self->shape()[0];
@@ -1030,6 +1068,11 @@ ComputingReturn DNNLTensor<DT>::op_linear(tensor_t self, tensor_t w, tensor_t bi
 #ifdef _DNNL_GPU_
     if ( DT == DataType::FP16 && is_gpu() && w->is_q8() ) {
         dnnl_kernels::linear_w8(self->dnnl_fp16(), w->dnnl_q8(),
+            bias == nullptr? nullptr : bias->dnnl_fp16(), dst->dnnl_fp16(), num, outSize, inSize);
+        return OP_OK;
+    }
+    if ( DT == DataType::FP16 && is_gpu() ) {
+        linear_kernel(self->dnnl_fp16(), w->dnnl_fp16(),
             bias == nullptr? nullptr : bias->dnnl_fp16(), dst->dnnl_fp16(), num, outSize, inSize);
         return OP_OK;
     }
@@ -1133,7 +1176,7 @@ ComputingReturn DNNLTensor<_DTYPE_>::op_rmsnorm(tensor_t self, tensor_t scale, t
         return OP_OK;
 #endif
     }
- #endif
+#endif
 
     void* src = data();
     void* dst = y->device_data();
@@ -1410,7 +1453,7 @@ ComputingReturn DNNLTensor<_DTYPE_>::op_silu_product(tensor_t self, tensor_t in,
         }
 
         clEnqueueUnmapMemObject(queue, (cl_mem)mem_, a, 0, nullptr,  nullptr);
-        clEnqueueUnmapMemObject(queue, (cl_mem)in->device_data(), a, 0, nullptr,  nullptr);
+        clEnqueueUnmapMemObject(queue, (cl_mem)in->device_data(), b, 0, nullptr,  nullptr);
         clEnqueueUnmapMemObject(queue, (cl_mem)dst->device_data(), out, 0, nullptr,  nullptr);
         return result;
     }

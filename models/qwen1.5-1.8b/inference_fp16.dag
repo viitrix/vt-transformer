@@ -309,8 +309,6 @@
         "zb" @ "ya" @ op.transpose_0213          ;; attn->ya 
     }
    
-    "xa" @ io.dump ^
-
     ;; do dense & residual
     "xa" @ "attn.o_proj.weight" @  op.null "xb" @ op.linear
     "xb" @ "xinput" @ "xa" @ op.add
