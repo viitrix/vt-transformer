@@ -1066,15 +1066,17 @@ ComputingReturn DNNLTensor<DT>::op_linear(tensor_t self, tensor_t w, tensor_t bi
 
     size_t num = batch * tokens;
 #ifdef _DNNL_GPU_
-    if ( DT == DataType::FP16 && is_gpu() && w->is_q8() ) {
-        dnnl_kernels::linear_w8(self->dnnl_fp16(), w->dnnl_q8(),
-            bias == nullptr? nullptr : bias->dnnl_fp16(), dst->dnnl_fp16(), num, outSize, inSize);
-        return OP_OK;
-    }
-    if ( DT == DataType::FP16 && is_gpu() ) {
-        linear_kernel(self->dnnl_fp16(), w->dnnl_fp16(),
-            bias == nullptr? nullptr : bias->dnnl_fp16(), dst->dnnl_fp16(), num, outSize, inSize);
-        return OP_OK;
+    if ( is_gpu() ) {
+        if ( DT == DataType::FP16 && w->is_q8() ) {
+            dnnl_kernels::linear_w8(self->dnnl_fp16(), w->dnnl_q8(),
+                bias == nullptr? nullptr : bias->dnnl_fp16(), dst->dnnl_fp16(), num, outSize, inSize);
+            return OP_OK;
+        }
+        if ( DT == DataType::FP16 ) {
+            linear_kernel(self->dnnl_fp16(), w->dnnl_fp16(),
+                bias == nullptr? nullptr : bias->dnnl_fp16(), dst->dnnl_fp16(), num, outSize, inSize);
+            return OP_OK;
+        }
     }
 #endif
     
@@ -1154,7 +1156,7 @@ ComputingReturn DNNLTensor<_DTYPE_>::op_rmsnorm(tensor_t self, tensor_t scale, t
         if ( _DTYPE_ != DataType::FP16) {
             return OP_TODO_ERROR;
         }
-        cl_kernel rmsnorm_kernel = dnnl_kernels::cl_kernels::rmsnorm_kernel;
+        cl_kernel rmsnorm_kernel = dnnl_kernels::cl_kernels::rmsnorm_kernel_fp16;
         {
             cl_mem buffer = (cl_mem)mem_;
             clSetKernelArg(rmsnorm_kernel, 0, sizeof(buffer), &buffer);
@@ -1172,9 +1174,12 @@ ComputingReturn DNNLTensor<_DTYPE_>::op_rmsnorm(tensor_t self, tensor_t scale, t
         }
 
         auto queue = dnnl::ocl_interop::get_command_queue(*ComputingContext::dnnl_gpu_stream);
-        OPENCL_CHECK(clEnqueueNDRangeKernel(queue, rmsnorm_kernel, 1, nullptr, &num, nullptr, 0, nullptr, nullptr));
+
+        const size_t local[1] =  {16};
+        const size_t global[1] = {num * 16};
+        OPENCL_CHECK(clEnqueueNDRangeKernel(queue, rmsnorm_kernel, 1, nullptr, global, local, 0, nullptr, nullptr));
         return OP_OK;
-#endif
+    #endif
     }
 #endif
 
@@ -1208,37 +1213,36 @@ ComputingReturn DNNLTensor<DT>::op_rotary_embed(tensor_t self, tensor_t cached, 
 
 #ifdef _DNNL_GPU_
     if ( is_gpu() ) {
+        if ( DT != DataType::FP16) {
+            return OP_TODO_ERROR;
+        }
+
+        cl_kernel kernel = dnnl_kernels::cl_kernels::rotary_embed_kernel_fp16;
+        {
+            cl_mem buffer = (cl_mem)mem_;
+            clSetKernelArg(kernel, 0, sizeof(buffer), &buffer);
+            buffer = (cl_mem)cached->dnnl_float()->data();
+            clSetKernelArg(kernel, 1, sizeof(buffer), &buffer);
+            buffer = (cl_mem)pos_->dnnl_int()->data();
+            clSetKernelArg(kernel, 2, sizeof(buffer), &buffer);
+            buffer = (cl_mem)y->dnnl_fp16()->data();
+            clSetKernelArg(kernel, 3, sizeof(buffer), &buffer);
+            int ivalue = batch;
+            clSetKernelArg(kernel, 4, sizeof(ivalue), &ivalue);
+            ivalue = heads;
+            clSetKernelArg(kernel, 5, sizeof(ivalue), &ivalue);
+            ivalue = tokens;
+            clSetKernelArg(kernel, 6, sizeof(ivalue), &ivalue);
+            ivalue = hidden;
+            clSetKernelArg(kernel, 7, sizeof(ivalue), &ivalue);
+        }
+
+        const size_t local[1] =  { 1};
+        const size_t global[1] = { batch * tokens * heads};
+
         auto queue = dnnl::ocl_interop::get_command_queue(*ComputingContext::dnnl_gpu_stream);
-        int ret = 0;
-        in = clEnqueueMapBuffer(queue, (cl_mem)mem_,  CL_TRUE, CL_MAP_READ , 0, size_, 0, nullptr, nullptr, &ret);
-        OPENCL_CHECK(ret);
-
-        size_t tab_size = std::get<1>(cached->op_sizeof(cached));
-        cos_sin = clEnqueueMapBuffer(queue, (cl_mem)cached->device_data(),  CL_TRUE, CL_MAP_READ , 0, tab_size, 0, nullptr, nullptr, &ret);
-        OPENCL_CHECK(ret);
-
-        size_t pos_size = std::get<1>(pos_->op_sizeof(pos_));
-        pos = clEnqueueMapBuffer(queue, (cl_mem)pos_->device_data(),  CL_TRUE, CL_MAP_READ , 0, pos_size, 0, nullptr, nullptr, &ret);
-        OPENCL_CHECK(ret);
-
-        out = clEnqueueMapBuffer(queue, (cl_mem)y->device_data(),  CL_TRUE, CL_MAP_WRITE , 0, size_, 0, nullptr, nullptr, &ret);
-        OPENCL_CHECK(ret);
-
-        ComputingReturn result = OP_TODO_ERROR;
-        if (   DT == DataType::Float) {
-             dnnl_kernels::rotary_embed<float>((float *)in, (float *)cos_sin, (int *)pos, (float *)out, batch, heads, tokens, hidden);
-            result = OP_OK;
-        }
-        if (   DT == DataType::FP16) {
-            dnnl_kernels::rotary_embed<local_fp16_t>((local_fp16_t *)in, (float *)cos_sin, (int *)pos, (local_fp16_t *)out, batch, heads, tokens, hidden);
-            result = OP_OK;
-        }
-
-        clEnqueueUnmapMemObject(queue, (cl_mem)mem_, in, 0, nullptr,  nullptr);
-        clEnqueueUnmapMemObject(queue, (cl_mem)cached->device_data(), cos_sin, 0, nullptr,  nullptr);
-        clEnqueueUnmapMemObject(queue, (cl_mem)pos_->device_data(), pos, 0, nullptr,  nullptr);
-        clEnqueueUnmapMemObject(queue, (cl_mem)y->device_data(), out, 0, nullptr,  nullptr);
-        return result;
+        OPENCL_CHECK(clEnqueueNDRangeKernel(queue, kernel, 1, nullptr, global, local, 0, nullptr, nullptr));
+        return OP_OK;
     }
  #endif
 

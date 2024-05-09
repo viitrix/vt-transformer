@@ -1,25 +1,38 @@
 R"=====(
 
 
-__kernel void rmsnorm_kernel(__global const half *feature, __global  const half *w, __global  half *out, __global  half *norm2,
+__kernel void rmsnorm_fp16(__global const half *feature, __global  const half *w, __global  half *out, __global  half *norm2,
                                const int batch, const int dim, const float eps) {    
-    int b = get_global_id(0);
-    if ( b >= batch) {
-        return;
-    }
-
-    __global const  half* src = feature + b * dim;
-    __global half* dst = out + b * dim;
+    const int GROUP_SIZE = 16;
+    int b = get_group_id(0);
+    int tid = get_local_id(0);
     
+    __global const half* src = feature + b * dim;
+    __global half* dst = out + b * dim;
+
+    __local float s[GROUP_SIZE];
+    __local float srms;
+
     float rms = 0.0;
-    for(int i = 0; i < dim; i++) {
+    for(int i = tid; i < dim; i += GROUP_SIZE) {
         rms = rms + (src[i] * src[i]);
     }
+    s[tid] = rms;
+    barrier(CLK_LOCAL_MEM_FENCE);
 
-    rms = rms / (float)dim;
-    rms = 1.0 / sqrt(rms + eps);
-
-    for(int i = 0; i < dim; i++) {
+    if ( tid == 0 ) {
+        rms = 0.0;
+        for (int i = 0; i < GROUP_SIZE; i++) {
+            rms = rms + s[i];
+        }
+        rms = rms / (float)dim;
+        rms = 1.0 / sqrt(rms + eps);
+        srms = rms;
+    }
+    barrier(CLK_LOCAL_MEM_FENCE);
+    
+    rms = srms;
+    for(int i = tid; i < dim; i += GROUP_SIZE) {
         dst[i] = rms * src[i] * w[i];
     }
 }
@@ -58,6 +71,29 @@ __kernel void linear_fp16(const __global half* A, const __global half* B, __glob
         } else {
             C[batch * OUT + out] = sum;
         }
+    }
+}
+
+ __kernel void rotary_embed_fp16(const __global half *in, const __global float *cos_sin, const __global int* pos, __global half *out,
+                                   const int bs, const int hnum, const int len, const int dims) {
+    int e = get_global_id(0);
+    if ( e > bs * hnum * dims) {
+        return;
+    }
+    
+    in = in + e * dims;
+    out = out + e * dims;
+
+    int b = e / (len * hnum);
+    int l = (e - b * len * hnum) / hnum + pos[b];
+    cos_sin = cos_sin + l * dims * 2;
+
+    for (int i = 0; i < dims / 2; i++) {
+        int ii = i + dims/2;
+        float x = in[i];
+        float y = in[ii];
+        out[i] = (cos_sin[i*2] * x - cos_sin[i*2+1] * y);
+        out[ii] = (cos_sin[ii*2] * y + cos_sin[ii*2+1] * x);
     }
 }
 

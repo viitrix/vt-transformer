@@ -10,8 +10,9 @@ const char* cl_kernels::source_  =
 ;
 
 cl_program cl_kernels::programe_ = nullptr;
-cl_kernel cl_kernels::rmsnorm_kernel = nullptr;
+cl_kernel cl_kernels::rmsnorm_kernel_fp16 = nullptr;
 cl_kernel cl_kernels::linear_kernel_fp16 = nullptr;
+cl_kernel cl_kernels::rotary_embed_kernel_fp16 = nullptr;
 
 void print_olc_compile_error(cl_device_id did,  cl_program prog) {
     // Determine the size of the log
@@ -40,14 +41,18 @@ void cl_kernels::init() {
     }
     OPENCL_CHECK(err);
 
-    rmsnorm_kernel = clCreateKernel(programe_, "rmsnorm_kernel", &err);
+    rmsnorm_kernel_fp16 = clCreateKernel(programe_, "rmsnorm_fp16", &err);
     OPENCL_CHECK(err);
     linear_kernel_fp16 = clCreateKernel(programe_, "linear_fp16", &err);
+    OPENCL_CHECK(err);
+    rotary_embed_kernel_fp16 = clCreateKernel(programe_, "rotary_embed_fp16", &err);
     OPENCL_CHECK(err);
 }
 
 void cl_kernels::release() {
-    OPENCL_CHECK(clReleaseKernel(rmsnorm_kernel));
+    OPENCL_CHECK(clReleaseKernel(rmsnorm_kernel_fp16));
+    OPENCL_CHECK(clReleaseKernel(linear_kernel_fp16));
+    OPENCL_CHECK(clReleaseKernel(rotary_embed_kernel_fp16));
     OPENCL_CHECK(clReleaseProgram(programe_));
 }
 

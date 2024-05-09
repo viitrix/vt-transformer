@@ -12,8 +12,9 @@ struct cl_kernels {
     
     static const char* source_;
     static cl_program programe_;
-    static cl_kernel rmsnorm_kernel;
+    static cl_kernel rmsnorm_kernel_fp16;
     static cl_kernel linear_kernel_fp16;
+    static cl_kernel rotary_embed_kernel_fp16;
 };
 
 }}
