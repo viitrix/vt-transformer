@@ -1048,9 +1048,12 @@ void linear_kernel(DNNLTensor<DataType::FP16>* src, DNNLTensor<DataType::FP16>* 
         }
         clSetKernelArg(kernel, 7, sizeof(ivalue), &ivalue);
     }
-    const size_t TS = 16;
-    const size_t local[2] =  { 1, TS };
-    const size_t global[2] = { batch, outFeature * TS};
+    const size_t TB = 4;
+    const size_t local[2] =  { TB, TB };
+    const size_t global[2] = { batch, outFeature};
+    vt_assert(batch % TB == 0, "Can't be here");
+    vt_assert(outFeature % TB == 0, "Can't be here");
+    vt_assert(inFeature % TB == 0, "Can't be here");
 
     auto queue = dnnl::ocl_interop::get_command_queue(*ComputingContext::dnnl_gpu_stream);
     OPENCL_CHECK(clEnqueueNDRangeKernel(queue, kernel, 2, nullptr, global, local, 0, nullptr, nullptr));
@@ -1126,7 +1129,7 @@ ComputingReturn DNNLTensor<_DTYPE_>::op_rmsnorm(tensor_t self, tensor_t scale, t
 
 #ifdef _DNNL_GPU_
     if ( is_gpu() ) {
-#if 1
+#if 0
         auto queue = dnnl::ocl_interop::get_command_queue(*ComputingContext::dnnl_gpu_stream);
         int ret = 0;
         void* src = clEnqueueMapBuffer(queue, (cl_mem)mem_,  CL_TRUE, CL_MAP_READ , 0, size_, 0, nullptr, nullptr, &ret);

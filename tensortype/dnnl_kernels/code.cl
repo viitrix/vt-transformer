@@ -37,44 +37,42 @@ __kernel void rmsnorm_fp16(__global const half *feature, __global  const half *w
     }
 }
 
-#define TS  16
 __kernel void linear_fp16(const __global half* A, const __global half* B, __global half* C, const __global half* bias, 
                           const int BATCH, const int OUT, const int IN, const int using_bias) {
+    const int TB = 4;
+    int b = get_local_id(0);    // 0..TB
+    int o = get_local_id(1);
+    int gb = get_group_id(0) * TB;
+    int go = get_group_id(1) * TB;
+
+    __local half SubA[TB][TB];
+    __local half SubB[TB][TB];
+
+    float acc = 0;
+    for (int i = 0; i < IN; i += TB) {
+        SubA[b][o] = A[ (gb + b) * IN + i + o];
+        SubB[b][o] = B[ (go + b) * IN + i + o];
+
+        barrier(CLK_LOCAL_MEM_FENCE);
+
+        acc += SubA[b][0] * SubB[o][0];
+        acc += SubA[b][1] * SubB[o][1];
+        acc += SubA[b][2] * SubB[o][2];
+        acc += SubA[b][3] * SubB[o][3];
+
+        barrier(CLK_LOCAL_MEM_FENCE); 
+    } 
     
-    // Thread identifiers
-    const int si = get_local_id(1);        // 0.. TS 
-    const int batch = get_group_id(0);     // 0.. BATCH
-    const int out = get_group_id(1);       // 0.. OUT
-
-    // Local memory to fit a tile of TS*TS elements of A and B
-    __local float accs[TS];
- 
-    // Initialise the accumulation registers
-    float accWPT = 0.0f;
-
-    const int numTiles = IN/TS;
-    for (int t = 0; t < numTiles; t++) {
-        float a = A[ batch * IN + t * TS + si ];
-        float b = B[ out * IN + t * TS + si];    
-        accWPT += a * b; 
-    }
-    accs[si] = accWPT;
-    barrier(CLK_LOCAL_MEM_FENCE);
-
-    if ( si == 0 ) {
-        float sum = 0.0;
-        for (int i = 0; i < TS; i++) {
-            sum += accs[i];
-        }        
-        if ( using_bias ) {
-            C[batch * OUT + out] = sum + bias[out];
-        } else {
-            C[batch * OUT + out] = sum;
-        }
+    int batch = get_global_id(0);
+    int out = get_global_id(1);
+    if( using_bias ) {
+        C[ batch * OUT + out] = acc + bias[out];
+    } else {
+        C[ batch * OUT + out] = acc;
     }
 }
 
- __kernel void rotary_embed_fp16(const __global half *in, const __global float *cos_sin, const __global int* pos, __global half *out,
+__kernel void rotary_embed_fp16(const __global half *in, const __global float *cos_sin, const __global int* pos, __global half *out,
                                    const int bs, const int hnum, const int len, const int dims) {
     int e = get_global_id(0);
     if ( e > bs * hnum * dims) {
@@ -102,7 +100,6 @@ __kernel void transpose_0213_fp16(const __global half *in, __global half *out,
     
     size_t id = get_global_id(0);
 
-    
     int d = id % D; id = id / D;
     int c = id % C; id = id / C;
     int b = id % B;
