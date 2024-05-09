@@ -80,7 +80,7 @@ __kernel void linear_fp16(const __global half* A, const __global half* B, __glob
     if ( e > bs * hnum * dims) {
         return;
     }
-    
+
     in = in + e * dims;
     out = out + e * dims;
 
@@ -95,6 +95,22 @@ __kernel void linear_fp16(const __global half* A, const __global half* B, __glob
         out[i] = (cos_sin[i*2] * x - cos_sin[i*2+1] * y);
         out[ii] = (cos_sin[ii*2] * y + cos_sin[ii*2+1] * x);
     }
+}
+
+__kernel void transpose_0213_fp16(const __global half *in, __global half *out,
+                                   const int A, const int B, const int C, const int D) {
+    
+    size_t id = get_global_id(0);
+
+    
+    int d = id % D; id = id / D;
+    int c = id % C; id = id / C;
+    int b = id % B;
+    int a = id / B;
+
+    id = get_global_id(0);
+    size_t to = a * B * C * D + c * B * D + b * D + d;
+    out[to] = in[id];
 }
 
 )====="

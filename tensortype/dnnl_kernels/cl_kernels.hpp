@@ -15,6 +15,7 @@ struct cl_kernels {
     static cl_kernel rmsnorm_kernel_fp16;
     static cl_kernel linear_kernel_fp16;
     static cl_kernel rotary_embed_kernel_fp16;
+    static cl_kernel transpose_0213_kernel_fp16;    
 };
 
 }}

@@ -1266,27 +1266,29 @@ ComputingReturn DNNLTensor<DT>::op_transpose_0213(tensor_t self, tensor_t y) {
 
 #ifdef _DNNL_GPU_
     if ( is_gpu() ) {
+if ( DT != DataType::FP16) {
+            return OP_TODO_ERROR;
+        }
+        cl_kernel kernel = dnnl_kernels::cl_kernels::transpose_0213_kernel_fp16;
+        {
+            cl_mem buffer = (cl_mem)mem_;
+            clSetKernelArg(kernel, 0, sizeof(buffer), &buffer);
+            buffer = (cl_mem)y->dnnl_fp16()->data();
+            clSetKernelArg(kernel, 1, sizeof(buffer), &buffer);
+            int ivalue = batch;
+            clSetKernelArg(kernel, 2, sizeof(ivalue), &ivalue);
+            ivalue = tokens;
+            clSetKernelArg(kernel, 3, sizeof(ivalue), &ivalue);
+            ivalue = heads;
+            clSetKernelArg(kernel, 4, sizeof(ivalue), &ivalue);
+            ivalue = hidden;
+            clSetKernelArg(kernel, 5, sizeof(ivalue), &ivalue);
+        }
+        const size_t local[1] = { 1};
+        const size_t global[1] = { batch * tokens * heads * hidden};
         auto queue = dnnl::ocl_interop::get_command_queue(*ComputingContext::dnnl_gpu_stream);
-        int ret = 0;
-        void* in = clEnqueueMapBuffer(queue, (cl_mem)mem_,  CL_TRUE, CL_MAP_READ , 0, size_, 0, nullptr, nullptr, &ret);
-        OPENCL_CHECK(ret);
-
-        void* out = clEnqueueMapBuffer(queue, (cl_mem)y->device_data(),  CL_TRUE, CL_MAP_WRITE , 0, size_, 0, nullptr, nullptr, &ret);
-        OPENCL_CHECK(ret);
-
-        ComputingReturn result = OP_TODO_ERROR;
-        if (   DT == DataType::Float) {
-            dnnl_kernels::transpose_0213<float>((float *)in, (float *)out, batch, heads, tokens, hidden);
-            result = OP_OK;
-        }
-        if (   DT == DataType::FP16) {
-            dnnl_kernels::transpose_0213<local_fp16_t>((local_fp16_t *)in, (local_fp16_t *)out, batch, heads, tokens, hidden);
-            result = OP_OK;
-        }
-
-        clEnqueueUnmapMemObject(queue, (cl_mem)mem_, in, 0, nullptr,  nullptr);
-        clEnqueueUnmapMemObject(queue, (cl_mem)y->device_data(), out, 0, nullptr,  nullptr);
-        return result;
+        OPENCL_CHECK(clEnqueueNDRangeKernel(queue, kernel, 1, nullptr, global, local, 0, nullptr, nullptr));
+        return OP_OK;
     }
  #endif
 
