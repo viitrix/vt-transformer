@@ -86,8 +86,7 @@
 %end
 
 %def gpu_init
-    drop
-    "dnnl" "G_DEVICE" !
+    "G_DEVICE" !
 
     "G_DEVICE" @ create_layer_weight_q8
 

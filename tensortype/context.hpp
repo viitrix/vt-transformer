@@ -216,6 +216,8 @@ using local_fp16_t = uint16_t;
 float fp16_to_fp32(local_fp16_t value);
 local_fp16_t fp32_to_fp16(float value);
 
+// TODO re-factory quantize
+const int Q8_BLCOK_SIZE = 1024;
 const int Q4_BLOCK_SIZE = 128;
 typedef struct {
     float   d;

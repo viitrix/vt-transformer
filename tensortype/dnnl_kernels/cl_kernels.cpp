@@ -12,8 +12,11 @@ const char* cl_kernels::source_  =
 cl_program cl_kernels::programe_ = nullptr;
 cl_kernel cl_kernels::rmsnorm_kernel_fp16 = nullptr;
 cl_kernel cl_kernels::linear_kernel_fp16 = nullptr;
+cl_kernel cl_kernels::linear_kernel_fp16_w8 = nullptr;
 cl_kernel cl_kernels::rotary_embed_kernel_fp16 = nullptr;
 cl_kernel cl_kernels::transpose_0213_kernel_fp16 = nullptr;
+cl_kernel cl_kernels::quantize_kernel_fp16 = nullptr;
+cl_kernel cl_kernels::dequantize_kernel_fp16 = nullptr;
 
 void print_olc_compile_error(cl_device_id did,  cl_program prog) {
     // Determine the size of the log
@@ -34,10 +37,10 @@ void cl_kernels::init() {
     int err;
     auto ctx = dnnl::ocl_interop::get_context( *ComputingContext::dnnl_gpu_engine);
     auto did = dnnl::ocl_interop::get_device(*ComputingContext::dnnl_gpu_engine);
-    programe_ = clCreateProgramWithSource(ctx, 1, (const char **) & source_, NULL, &err); 
+    programe_ = clCreateProgramWithSource(ctx, 1, (const char **) & source_, NULL, &err);
 
     err = clBuildProgram(programe_, 1, &did, NULL, NULL, NULL);
-    if (err == CL_BUILD_PROGRAM_FAILURE) {        
+    if (err == CL_BUILD_PROGRAM_FAILURE) {
         print_olc_compile_error(did, programe_);
     }
     OPENCL_CHECK(err);
@@ -46,17 +49,25 @@ void cl_kernels::init() {
     OPENCL_CHECK(err);
     linear_kernel_fp16 = clCreateKernel(programe_, "linear_fp16", &err);
     OPENCL_CHECK(err);
+    linear_kernel_fp16_w8 = clCreateKernel(programe_, "linear_fp16_w8", &err);
+    OPENCL_CHECK(err);
     rotary_embed_kernel_fp16 = clCreateKernel(programe_, "rotary_embed_fp16", &err);
     OPENCL_CHECK(err);
     transpose_0213_kernel_fp16 = clCreateKernel(programe_, "transpose_0213_fp16", &err);
+    OPENCL_CHECK(err);
+    quantize_kernel_fp16 = clCreateKernel(programe_, "quantize_fp16", &err);
+    OPENCL_CHECK(err);
+    dequantize_kernel_fp16 = clCreateKernel(programe_, "dequantize_fp16", &err);
     OPENCL_CHECK(err);
 }
 
 void cl_kernels::release() {
     OPENCL_CHECK(clReleaseKernel(rmsnorm_kernel_fp16));
     OPENCL_CHECK(clReleaseKernel(linear_kernel_fp16));
+    OPENCL_CHECK(clReleaseKernel(linear_kernel_fp16_w8));
     OPENCL_CHECK(clReleaseKernel(rotary_embed_kernel_fp16));
     OPENCL_CHECK(clReleaseKernel(transpose_0213_kernel_fp16));
+    OPENCL_CHECK(clReleaseKernel(dequantize_kernel_fp16));
     OPENCL_CHECK(clReleaseProgram(programe_));
 }
 

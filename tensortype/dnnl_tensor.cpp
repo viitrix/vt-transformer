@@ -19,7 +19,7 @@ DNNLTensor<_DTYPE_>::~DNNLTensor() {
         if ( gpu_ == true) {
             if ( _DTYPE_ == DataType::Q8) {
                 clReleaseMemObject((cl_mem)scale_);
-            }            
+            }
             cl_mem mem = (cl_mem)mem_;
             clReleaseMemObject(mem);
             return;
@@ -39,7 +39,8 @@ DNNLTensor<_DTYPE_>::DNNLTensor(const ShapeType& shape, bool isGPU) : owner_(tru
     } else if ( _DTYPE_ == DataType::FP16 ) {
         size_ =  shape.numel() * sizeof(local_fp16_t);
     } else if ( _DTYPE_ == DataType::Q8 ) {
-        size_ =  shape.numel() + (shape.numel() / shape.vec().back()) * sizeof(float);
+        vt_assert( (shape.numel() % Q8_BLCOK_SIZE) == 0, "Gourp quantize must be align");
+        size_ =  shape.numel() + (shape.numel() / Q8_BLCOK_SIZE) * 2 * sizeof(float);
     } else {
         vt_panic("Can't be here!");
     }
@@ -58,7 +59,7 @@ DNNLTensor<_DTYPE_>::DNNLTensor(const ShapeType& shape, bool isGPU) : owner_(tru
         offset_ = 0;
 
         if ( _DTYPE_ == DataType::Q8) {
-            scale_ = sub_ocl_buffer( shape.numel(), (shape.numel() / shape.vec().back()) * sizeof(float));
+            scale_ = sub_ocl_buffer( shape.numel(), (shape.numel() / Q8_BLCOK_SIZE) * 2 * sizeof(float));
         } else {
             scale_ = nullptr;
         }
@@ -98,10 +99,7 @@ dnnl::memory::desc DNNLTensor<_DTYPE_>::build_memory_desc(const std::vector<size
     if ( dt == DataType::FP16 ) {
         return dnnl::memory::desc(dims,  dnnl::memory::data_type::f16, tag);
     }
-    if ( dt == DataType::Q8 ) {
-        return dnnl::memory::desc(dims,  dnnl::memory::data_type::s8, tag);
-    }
-
+    
     vt_panic("Can't be here!");
     return dnnl::memory::desc();
 }
@@ -117,9 +115,6 @@ dnnl::memory::desc DNNLTensor<_DTYPE_>::build_memory_desc(const std::vector<size
     }
     if ( _DTYPE_ == DataType::FP16 ) {
         return dnnl::memory::desc(dims,  dnnl::memory::data_type::f16, tag);
-    }
-    if ( _DTYPE_ == DataType::Q8 ) {
-        return dnnl::memory::desc(dims,  dnnl::memory::data_type::s8, tag);
     }
 
     vt_panic("Can't be here!");
@@ -217,9 +212,8 @@ ComputingReturn DNNLTensor<_DTYPE_>::io_dump(tensor_t self) {
         } else  if ( _DTYPE_ == DataType::Q8 ) {
             int8_t* d = (int8_t *)target;
             float* tab = (float *)((int8_t *)target + self->items());
-            size_t tab_size = self->items() / self->shape().vec().back();
-            
-            std::cout << ">>>>>>>>>>>>>>>>>> " << tab[0] << std::endl;
+            size_t tab_size = self->items() / Q8_BLCOK_SIZE;
+
             std::cout << "First " << first8 << " : ";
             for(size_t i = 0; i < first8; i++) {
                 std::cout << d[i] * tab[0] << " ";
@@ -286,25 +280,6 @@ ComputingReturn DNNLTensor<_DTYPE_>::io_dump(tensor_t self) {
         }
         std::cout << std::endl;
 
-        return OP_OK;
-    }
-    if ( _DTYPE_ == DataType::Q8 ) {
-        int8_t* d = (int8_t *)data();
-        float* tab = (float *)((int8_t *)data() + self->items());
-        size_t tab_size = self->items() / self->shape().vec().back();
-
-        std::cout << "First " << first8 << " : ";
-        for(size_t i = 0; i < first8; i++) {
-            std::cout << d[i] * tab[0] << " ";
-        }
-        std::cout << std::endl;
-
-        d = (int8_t *)data() + self->items() - first8;
-        std::cout << "Last " << first8 << " : ";
-        for(size_t i = 0; i < first8; i++) {
-            std::cout << d[i] * tab[tab_size-1] << " ";
-        }
-        std::cout << std::endl;
         return OP_OK;
     }
     return OP_TODO_ERROR;
@@ -386,7 +361,7 @@ ComputingReturn DNNLTensor<_DTYPE_>::io_load(tensor_t self, const char* fileName
         } else if (_DTYPE_ == DataType::FP16) {
             size_t ret = inf.read( (char *)target, sizeof(local_fp16_t) * self->items() ).gcount();
             vt_assert(ret == sizeof(local_fp16_t) * self->items(), "file size dont't match tensor");
-        } else if (_DTYPE_ == DataType::Q8) {            
+        } else if (_DTYPE_ == DataType::Q8) {
             size_t ret = inf.read( (char *)target, size_ ).gcount();
             vt_assert(ret == size_, "file size dont't match tensor");
         } else {
@@ -655,48 +630,60 @@ ComputingReturn DNNLTensor<DT>::op_rotary_cache(tensor_t self, float base) {
 }
 
 template<DataType DT>
-ComputingReturn DNNLTensor<DT>::op_quantize(tensor_t self, tensor_t out) {
+ComputingReturn DNNLTensor<DT>::op_quantize(tensor_t self, tensor_t out) {    
 #ifdef _DNNL_GPU_
-    if ( is_gpu() ) {
-        return OP_TODO_ERROR;
+    if ( is_gpu() && self->is_fp16() && out->is_q8() ) {
+
+        cl_kernel kernel = dnnl_kernels::cl_kernels::quantize_kernel_fp16;
+        {
+            cl_mem buffer = (cl_mem)data();
+            clSetKernelArg(kernel, 0, sizeof(buffer), &buffer);
+            buffer = (cl_mem)out->dnnl_q8()->scale_buffer();
+            clSetKernelArg(kernel, 1, sizeof(buffer), &buffer);
+            buffer = (cl_mem)out->dnnl_q8()->data();
+            clSetKernelArg(kernel, 2, sizeof(buffer), &buffer);
+            int ivalue = Q8_BLCOK_SIZE;
+            clSetKernelArg(kernel, 3, sizeof(ivalue), &ivalue);
+        }
+
+        const size_t local[1] = { 1 };
+        const size_t global[1] = { self->items() / Q8_BLCOK_SIZE };
+
+        auto queue = dnnl::ocl_interop::get_command_queue(*ComputingContext::dnnl_gpu_stream);
+        OPENCL_CHECK(clEnqueueNDRangeKernel(queue, kernel, 1, nullptr, global, local, 0, nullptr, nullptr));
+        return OP_OK;
     }
 #endif
 
-    if ( DT == DataType::FP16 && out->dtype() == DataType::Q8 ) {
-        size_t channel_size = self->shape().vec().back();
-        size_t channel_num = self->items() / channel_size;
-        float* tab = (float *)((int8_t *) out->device_data() + self->items());
-
-#pragma omp parallel for
-        for(size_t c = 0; c < channel_num; c++) {
-            local_fp16_t* src = (local_fp16_t *)data() + c * channel_size;
-            int8_t* dst = (int8_t*) out->device_data() + c * channel_size;
-            float amax = 0.0;
-            for(size_t i = 0; i < channel_size; i++) {
-                float d = abs(fp16_to_fp32(src[i]));
-                if ( d > amax ) {
-                    amax = d;
-                }
-            }
-
-            float scale = amax / ((1 << 8) - 1);
-            tab[c] = scale;
-
-            const float id = scale ? 1.0 / scale : 0.0f;
-            for(size_t i = 0; i < channel_size; i++) {
-                float d = fp16_to_fp32(src[i]);
-                float v = d * id;
-                dst[i] = (int8_t)(v + 0.5);
-            }
-        }
-        return OP_OK;
-    }
-
-    return OP_TODO_ERROR;
+    return OP_OUTPUT_ERROR;
 }
 
 template<DataType DT>
 ComputingReturn DNNLTensor<DT>::op_dequantize(tensor_t self, tensor_t out) {
+
+#ifdef _DNNL_GPU_
+    if ( is_gpu() && self->is_q8() && out->is_fp16() ) {
+
+        cl_kernel kernel = dnnl_kernels::cl_kernels::dequantize_kernel_fp16;
+        {
+            cl_mem buffer = (cl_mem)data();
+            clSetKernelArg(kernel, 0, sizeof(buffer), &buffer);
+            buffer = (cl_mem)scale_buffer();
+            clSetKernelArg(kernel, 1, sizeof(buffer), &buffer);
+            buffer = (cl_mem)out->dnnl_fp16()->data();
+            clSetKernelArg(kernel, 2, sizeof(buffer), &buffer);
+            int ivalue = Q8_BLCOK_SIZE;
+            clSetKernelArg(kernel, 3, sizeof(ivalue), &ivalue);
+        }
+
+        const size_t local[1] = { 1};
+        const size_t global[1] = { self->items() };
+
+        auto queue = dnnl::ocl_interop::get_command_queue(*ComputingContext::dnnl_gpu_stream);
+        OPENCL_CHECK(clEnqueueNDRangeKernel(queue, kernel, 1, nullptr, global, local, 0, nullptr, nullptr));
+        return OP_OK;
+    }
+#endif
     return OP_TODO_ERROR;
 }
 
@@ -1020,7 +1007,7 @@ ComputingReturn DNNLTensor<DT>::op_mul(tensor_t self, tensor_t b, tensor_t c) {
 }
 
 #ifdef _DNNL_GPU_
-void linear_kernel(DNNLTensor<DataType::FP16>* src, DNNLTensor<DataType::FP16>* weight, DNNLTensor<DataType::FP16>* bias, DNNLTensor<DataType::FP16>* dst, 
+void linear_kernel(DNNLTensor<DataType::FP16>* src, DNNLTensor<DataType::FP16>* weight, DNNLTensor<DataType::FP16>* bias, DNNLTensor<DataType::FP16>* dst,
                   size_t batch, size_t outFeature, size_t inFeature ) {
     cl_kernel kernel = dnnl_kernels::cl_kernels::linear_kernel_fp16;
     {
@@ -1030,7 +1017,7 @@ void linear_kernel(DNNLTensor<DataType::FP16>* src, DNNLTensor<DataType::FP16>* 
         clSetKernelArg(kernel, 1, sizeof(buffer), &buffer);
         buffer = (cl_mem)dst->data();
         clSetKernelArg(kernel, 2, sizeof(buffer), &buffer);
-        
+
         if ( bias != nullptr) {
             buffer = (cl_mem)bias->data();
         }
@@ -1058,6 +1045,46 @@ void linear_kernel(DNNLTensor<DataType::FP16>* src, DNNLTensor<DataType::FP16>* 
     auto queue = dnnl::ocl_interop::get_command_queue(*ComputingContext::dnnl_gpu_stream);
     OPENCL_CHECK(clEnqueueNDRangeKernel(queue, kernel, 2, nullptr, global, local, 0, nullptr, nullptr));
 }
+
+void linear_kernel_w8(DNNLTensor<DataType::FP16>* src, DNNLTensor<DataType::Q8>* weight, DNNLTensor<DataType::FP16>* bias, DNNLTensor<DataType::FP16>* dst,
+                  size_t batch, size_t outFeature, size_t inFeature ) {
+    cl_kernel kernel = dnnl_kernels::cl_kernels::linear_kernel_fp16_w8;
+    {
+        cl_mem buffer = (cl_mem)src->data();
+        clSetKernelArg(kernel, 0, sizeof(buffer), &buffer);
+        buffer = (cl_mem)weight->data();
+        clSetKernelArg(kernel, 1, sizeof(buffer), &buffer);
+        buffer = (cl_mem)weight->scale_buffer();
+        clSetKernelArg(kernel, 2, sizeof(buffer), &buffer);
+        buffer = (cl_mem)dst->data();
+        clSetKernelArg(kernel, 3, sizeof(buffer), &buffer);
+        if ( bias != nullptr) {
+            buffer = (cl_mem)bias->data();
+        }
+        clSetKernelArg(kernel, 4, sizeof(buffer), &buffer);
+
+        int ivalue = batch;
+        clSetKernelArg(kernel, 5, sizeof(ivalue), &ivalue);
+        ivalue = outFeature;
+        clSetKernelArg(kernel, 6, sizeof(ivalue), &ivalue);
+        ivalue = inFeature;
+        clSetKernelArg(kernel, 7, sizeof(ivalue), &ivalue);
+        ivalue = 1;
+        if ( bias == nullptr) {
+            ivalue = 0;
+        }
+        clSetKernelArg(kernel, 8, sizeof(ivalue), &ivalue);
+    }
+    const size_t TB = 4;
+    const size_t local[2] =  { TB, TB };
+    const size_t global[2] = { batch, outFeature};
+    vt_assert(batch % TB == 0, "Can't be here");
+    vt_assert(outFeature % TB == 0, "Can't be here");
+    vt_assert(inFeature % TB == 0, "Can't be here");
+
+    auto queue = dnnl::ocl_interop::get_command_queue(*ComputingContext::dnnl_gpu_stream);
+    OPENCL_CHECK(clEnqueueNDRangeKernel(queue, kernel, 2, nullptr, global, local, 0, nullptr, nullptr));
+}
 #endif
 
 template<DataType DT>
@@ -1071,7 +1098,7 @@ ComputingReturn DNNLTensor<DT>::op_linear(tensor_t self, tensor_t w, tensor_t bi
 #ifdef _DNNL_GPU_
     if ( is_gpu() ) {
         if ( DT == DataType::FP16 && w->is_q8() ) {
-            dnnl_kernels::linear_w8(self->dnnl_fp16(), w->dnnl_q8(),
+            linear_kernel_w8(self->dnnl_fp16(), w->dnnl_q8(),
                 bias == nullptr? nullptr : bias->dnnl_fp16(), dst->dnnl_fp16(), num, outSize, inSize);
             return OP_OK;
         }
@@ -1082,7 +1109,7 @@ ComputingReturn DNNLTensor<DT>::op_linear(tensor_t self, tensor_t w, tensor_t bi
         }
     }
 #endif
-    
+
     if (   DT == DataType::Float) {
         dnnl_kernels::linear<DNNLTensor<DataType::Float>>(self->dnnl_float(), w->dnnl_float(),
             bias == nullptr? nullptr : bias->dnnl_float(), dst->dnnl_float(), num, outSize, inSize);

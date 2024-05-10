@@ -37,6 +37,47 @@ __kernel void rmsnorm_fp16(__global const half *feature, __global  const half *w
     }
 }
 
+__kernel void linear_fp16_w8(const __global half* A, const __global uchar* B, __global const float* Bscale,  __global half* C, const __global half* bias, 
+                          const int BATCH, const int OUT, const int IN, const int using_bias) {
+    const int TB = 4;
+    int b = get_local_id(0);    // 0..TB
+    int o = get_local_id(1);
+    int gb = get_group_id(0) * TB;
+    int go = get_group_id(1) * TB;
+
+    __local float SubA[TB][TB];
+    __local float SubB[TB][TB];
+
+    float acc = 0;
+    float minv;
+    float scale;
+    for (int i = 0; i < IN; i += TB) {
+        int si = ((go + b) * IN + i + o) / 1024;
+        scale = Bscale[si * 2 + 1];
+        minv =  Bscale[si * 2 ];
+
+        SubA[b][o] = A[ (gb + b) * IN + i + o];
+        SubB[b][o] = B[ (go + b) * IN + i + o] * scale + minv;
+
+        barrier(CLK_LOCAL_MEM_FENCE);
+
+        acc += SubA[b][0] * SubB[o][0];
+        acc += SubA[b][1] * SubB[o][1];
+        acc += SubA[b][2] * SubB[o][2];
+        acc += SubA[b][3] * SubB[o][3];
+
+        barrier(CLK_LOCAL_MEM_FENCE); 
+    } 
+    
+    int batch = get_global_id(0);
+    int out = get_global_id(1);
+    if( using_bias ) {
+        C[ batch * OUT + out] = acc + bias[out];
+    } else {
+        C[ batch * OUT + out] = acc;
+    }
+}
+
 __kernel void linear_fp16(const __global half* A, const __global half* B, __global half* C, const __global half* bias, 
                           const int BATCH, const int OUT, const int IN, const int using_bias) {
     const int TB = 4;
@@ -108,6 +149,45 @@ __kernel void transpose_0213_fp16(const __global half *in, __global half *out,
     id = get_global_id(0);
     size_t to = a * B * C * D + c * B * D + b * D + d;
     out[to] = in[id];
+}
+
+__kernel void dequantize_fp16(__global const uchar *in, __global const float* scale, __global half *out,
+                                   const int feature) {
+    size_t id = get_global_id(0);
+    size_t sid = id / feature;
+
+    out[id] = in[id] * scale[sid * 2 + 1] + scale[sid * 2];
+}
+
+__kernel void quantize_fp16(__global const half *in, __global float* scale, __global uchar *out,
+                                   const int feature) {
+    size_t f = get_global_id(0);
+    
+    in = in + f * feature;
+    out = out + f * feature;
+
+    float maxv = 0.0;
+    float minv = 0.0;
+    for (int i = 0; i < feature; i++) {
+        float v = in[i];
+        if ( v > maxv) {
+            maxv = v;
+        }
+        if ( v < minv ) {
+            minv = v;
+        }
+    }
+
+    float s = (maxv - minv) / 255.0;
+    scale[f * 2] = minv;
+    scale[f * 2 + 1] = s;
+
+    const float id = (s != 0.0) ? 1.0 / s : 0.0f;
+     
+    for(size_t i = 0; i < feature; i++) {
+        float v = (in[i] - minv)* id;
+        out[i] = (uchar)(v + 0.5);
+    }
 }
 
 )====="
