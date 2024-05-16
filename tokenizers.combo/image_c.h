@@ -6,7 +6,7 @@
 #include <fstream>
 #include <map>
 
-#include <vt.hpp>
+//#include <vt.hpp>
 
 // The C API
 #ifdef __cplusplus

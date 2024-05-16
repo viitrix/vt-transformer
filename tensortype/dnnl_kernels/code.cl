@@ -37,6 +37,8 @@ __kernel void rmsnorm_fp16(__global const half *feature, __global  const half *w
     }
 }
 
+#define Q8_BLOCK_SIZE 1024
+
 __kernel void linear_fp16_w8(const __global half* A, const __global uchar* B, __global const float* Bscale,  __global half* C, const __global half* bias, 
                           const int BATCH, const int OUT, const int IN, const int using_bias) {
     const int TB = 4;
@@ -52,7 +54,7 @@ __kernel void linear_fp16_w8(const __global half* A, const __global uchar* B, __
     float minv;
     float scale;
     for (int i = 0; i < IN; i += TB) {
-        int si = ((go + b) * IN + i + o) / 1024;
+        int si = ((go + b) * IN + i + o) / Q8_BLOCK_SIZE;
         scale = Bscale[si * 2 + 1];
         minv =  Bscale[si * 2 ];
 
