@@ -14,27 +14,28 @@
 namespace vt {
 
 enum DataType {
-    Float = 0,
+    UDF = -1,
+    F32 = 0,
     BF16 = 1,
-    FP16 = 2,
-    Int = 3,
-    Q8 = 4,     // grouped per channel
-    Q4 = 5,     // grouped 128 items with scale & min
-    PQ = 6,     // Focal ProductQuantizer config from impl
+    F16 = 2,
+    I32 = 3,
+    Q8 = 4,     // 1024 grouped with zero and scale
+    Q4 = 5,     // 128  grouped with zero and scale
+    PQ = 6,     // Focal Product Quantizer
 };
 
 inline DataType DataType_from(const char* dtype) {
-    if ( strcmp(dtype, "float") == 0) {
-        return DataType::Float;
+    if ( strcmp(dtype, "f32") == 0) {
+        return DataType::F32;
+    }
+    if ( strcmp(dtype, "i32") == 0) {
+        return DataType::I32;
     }
     if ( strcmp(dtype, "fp16") == 0) {
-        return DataType::FP16;
+        return DataType::F16;
     }
     if ( strcmp(dtype, "bf16") == 0) {
         return DataType::BF16;
-    }
-    if ( strcmp(dtype, "int") == 0) {
-        return DataType::Int;
     }
     if ( strcmp(dtype, "q8") == 0) {
         return DataType::Q8;
@@ -45,20 +46,20 @@ inline DataType DataType_from(const char* dtype) {
     if ( strcmp(dtype, "pq") == 0) {
         return DataType::PQ;
     }
-    vt_panic("Can't be here");
-    return DataType::Float;
+    vt_fatal_error();
+    return DataType::UDF;
 }
 
 inline const char* DataType_name(DataType type_) {
     switch( type_ ) {
-        case Float:
-            return "float";
-        case FP16:
-            return "fp16";
+        case F32:
+            return "f32";
+        case I32:
+            return "i32";
+        case F16:
+            return "f16";
         case BF16:
             return "bf16";
-        case Int:
-            return "int";
         case Q8:
             return "q8";
         case Q4:
@@ -150,113 +151,89 @@ private:
 
 // forward declare
 template <DataType _DTYPE_> struct HostTensor;
-using host_float_t = HostTensor<DataType::Float>;
-using host_fp16_t = HostTensor<DataType::FP16>;
-using host_int_t = HostTensor<DataType::Int>;
+using host_f32_t = HostTensor<DataType::F32>;
+using host_i32_t = HostTensor<DataType::I32>;
+using host_f16_t = HostTensor<DataType::F16>;
+using host_bf16_t = HostTensor<DataType::BF16>;
 using host_q8_t = HostTensor<DataType::Q8>;
 using host_q4_t = HostTensor<DataType::Q4>;
 using host_pq_t = HostTensor<DataType::PQ>;
 
 #ifdef _USING_DEVICE_CUDA_
 template <DataType _DTYPE_> struct CUDATensor;
-using cuda_float_t = CUDATensor<DataType::Float>;
-using cuda_fp16_t = CUDATensor<DataType::FP16>;
-using cuda_int_t = CUDATensor<DataType::Int>;
+using cuda_f32_t = CUDATensor<DataType::F32>;
+using cuda_i32_t = CUDATensor<DataType::I32>;
+using cuda_f16_t = CUDATensor<DataType::F16>;
+using cuda_bf16_t = CUDATensor<DataType::BF16>;
 using cuda_q8_t = CUDATensor<DataType::Q8>;
 using cuda_q4_t = CUDATensor<DataType::Q4>;
 using cuda_pq_t = CUDATensor<DataType::PQ>;
-#endif
-
-#ifdef _USING_DEVICE_DCU_
-template <DataType _DTYPE_> struct DCUTensor;
-using dcu_float_t = DCUTensor<DataType::Float>;
-using dcu_fp16_t = DCUTensor<DataType::FP16>;
-using dcu_int_t = DCUTensor<DataType::Int>;
-using dcu_q8_t = DCUTensor<DataType::Q8>;
-using dcu_q4_t = DCUTensor<DataType::Q4>;
-using dcu_pq_t = DCUTensor<DataType::PQ>;
-#endif
-
-#ifdef _USING_DEVICE_COREX_
-template <DataType _DTYPE_> struct CXTensor;
-using cx_float_t = CXTensor<DataType::Float>;
-using cx_fp16_t = CXTensor<DataType::FP16>;
-using cx_int_t = CXTensor<DataType::Int>;
-using cx_q8_t = CXTensor<DataType::Q8>;
-using cx_q4_t = CXTensor<DataType::Q4>;
-using cx_pq_t = CXTensor<DataType::PQ>;
-#endif
-
-#ifdef _USING_DEVICE_ACL_
-template <DataType _DTYPE_> struct ACLTensor;
-using acl_float_t = ACLTensor<DataType::Float>;
-using acl_fp16_t = ACLTensor<DataType::FP16>;
-using acl_int_t = ACLTensor<DataType::Int>;
-#endif
-
-#ifdef _USING_DEVICE_DNNL_
-template <DataType _DTYPE_> struct DNNLTensor;
-using dnnl_float_t = DNNLTensor<DataType::Float>;
-using dnnl_fp16_t = DNNLTensor<DataType::FP16>;
-using dnnl_int_t = DNNLTensor<DataType::Int>;
-using dnnl_q8_t = DNNLTensor<DataType::Q8>;
 #endif
 
 // TensorType is all you need
 struct TensorType: public TransformerComputing {
 public:
     // init functions
-    TensorType() = delete;
-    TensorType(host_float_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Float), impl_(tensor) {};
-    TensorType(host_fp16_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::FP16), impl_(tensor) {};
-    TensorType(host_int_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Int), impl_(tensor) {};
-    TensorType(host_q8_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Q8), impl_(tensor) {};
-    TensorType(host_q4_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Q4), impl_(tensor) {};
-    TensorType(host_pq_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::PQ), impl_(tensor) {};
-
-#ifdef _USING_DEVICE_CUDA_
-    TensorType(cuda_float_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Float), impl_(tensor) {};
-    TensorType(cuda_fp16_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::FP16), impl_(tensor) {};
-    TensorType(cuda_int_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Int), impl_(tensor) {};
-    TensorType(cuda_q8_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Q8), impl_(tensor) {};
-    TensorType(cuda_q4_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Q4), impl_(tensor) {};
-    TensorType(cuda_pq_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::PQ), impl_(tensor) {};
-#endif
-
-#ifdef _USING_DEVICE_DCU_
-    TensorType(dcu_float_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Float), impl_(tensor) {};
-    TensorType(dcu_fp16_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::FP16), impl_(tensor) {};
-    TensorType(dcu_int_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Int), impl_(tensor) {};
-    TensorType(dcu_q8_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Q8), impl_(tensor) {};
-    TensorType(dcu_q4_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Q4), impl_(tensor) {};
-    TensorType(dcu_pq_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::PQ), impl_(tensor) {};
-#endif
-
-#ifdef _USING_DEVICE_COREX_
-    TensorType(cx_float_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Float), impl_(tensor) {};
-    TensorType(cx_fp16_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::FP16), impl_(tensor) {};
-    TensorType(cx_int_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Int), impl_(tensor) {};
-    TensorType(cx_q8_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Q8), impl_(tensor) {};
-    TensorType(cx_q4_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Q4), impl_(tensor) {};
-    TensorType(cx_pq_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::PQ), impl_(tensor) {};
-#endif
-
-#ifdef _USING_DEVICE_ACL_
-    TensorType(acl_float_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Float), impl_(tensor) {};
-    TensorType(acl_fp16_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::FP16), impl_(tensor) {};
-    TensorType(acl_int_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Int), impl_(tensor) {};
-#endif
-
-#ifdef _USING_DEVICE_DNNL_
-    TensorType(dnnl_float_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Float), impl_(tensor) {};
-    TensorType(dnnl_fp16_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::FP16), impl_(tensor) {};
-    TensorType(dnnl_int_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Int), impl_(tensor) {};
-    TensorType(dnnl_q8_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Q8), impl_(tensor) {};
-#endif
-
     virtual ~TensorType();
+    TensorType() = delete;
 
-    // fast access
+    TensorType(host_f32_t* tensor, const ShapeType& shape);
+    TensorType(host_i32_t* tensor, const ShapeType& shape);
+    TensorType(host_f16_t* tensor, const ShapeType& shape);
+    TensorType(host_bf16_t* tensor, const ShapeType& shape);
+    TensorType(host_q8_t* tensor, const ShapeType& shape);
+    TensorType(host_q4_t* tensor, const ShapeType& shape);
+    TensorType(host_pq_t* tensor, const ShapeType& shape);
+#ifdef _USING_DEVICE_CUDA_
+    TensorType(cuda_f32_t* tensor, const ShapeType& shape);
+    TensorType(cuda_i32_t* tensor, const ShapeType& shape);
+    TensorType(cuda_f16_t* tensor, const ShapeType& shape);
+    TensorType(cuda_bf16_t* tensor, const ShapeType& shape);
+    TensorType(cuda_q8_t* tensor, const ShapeType& shape);
+    TensorType(cuda_q4_t* tensor, const ShapeType& shape);
+    TensorType(cuda_pq_t* tensor, const ShapeType& shape);
+#endif
+
+public:
+    ComputingReturn io_load(ComputingContext* ctx, tensor_t self, const char* fileName) override;
+    ComputingReturn io_save(ComputingContext* ctx, tensor_t self, const char* fileName) override;
+    ComputingReturn io_dump(ComputingContext* ctx, tensor_t self) override;
+    ComputingReturn io_pipe_read(ComputingContext* ctx, tensor_t self) override;
+    ComputingReturn io_pipe_write(ComputingContext* ctx, tensor_t self, int dst) override;
+    std::variant<ComputingReturn, size_t> op_sizeof(ComputingContext* ctx, tensor_t self) override;
+    ComputingReturn op_zero(ComputingContext* ctx, tensor_t self) override;
+    ComputingReturn op_fill(ComputingContext* ctx, tensor_t self, float value) override;
+    ComputingReturn op_rotary_cache(ComputingContext* ctx, tensor_t self, float base) override;
+    ComputingReturn op_causal_mask(ComputingContext* ctx, tensor_t self, tensor_t output) override;
+    ComputingReturn op_copy_from(ComputingContext* ctx, tensor_t self, tensor_t src) override;
+    ComputingReturn op_copy_to(ComputingContext* ctx, tensor_t self, tensor_t dst) override;
+    ComputingReturn op_convert(ComputingContext* ctx, tensor_t self, tensor_t src) override;
+    std::variant<ComputingReturn, tensor_t> op_view(ComputingContext* ctx, tensor_t self, size_t offset, const std::vector<size_t>& newShape) override;
+    std::variant<ComputingReturn, tensor_t> op_view_as(ComputingContext* ctx, tensor_t self, size_t offset, const std::vector<size_t>& newShape, const char* dtype) override;
+    ComputingReturn op_reshape(ComputingContext* ctx, tensor_t self, size_t offset, const std::vector<size_t>& newShape) override;
+    ComputingReturn op_quantize(ComputingContext* ctx, tensor_t self, tensor_t out) override;
+    ComputingReturn op_dequantize(ComputingContext* ctx, tensor_t self, tensor_t out) override;
+    ComputingReturn op_embed(ComputingContext* ctx, tensor_t self, tensor_t table, tensor_t output) override;
+    ComputingReturn op_add(ComputingContext* ctx, tensor_t self, tensor_t b, tensor_t c) override;
+    ComputingReturn op_mul(ComputingContext* ctx, tensor_t self, tensor_t b, tensor_t c) override;
+    ComputingReturn op_linear(ComputingContext* ctx, tensor_t self, tensor_t w, tensor_t bias, tensor_t y) override;
+    ComputingReturn op_layernorm(ComputingContext* ctx, tensor_t self, tensor_t mean, tensor_t var, tensor_t scale, tensor_t bias, tensor_t y, float eps) override;
+    ComputingReturn op_rmsnorm(ComputingContext* ctx, tensor_t self, tensor_t scale, tensor_t norm2, tensor_t y, float eps) override;
+    ComputingReturn op_rotary_embed(ComputingContext* ctx, tensor_t self, tensor_t cached, tensor_t pos, tensor_t y) override;
+    ComputingReturn op_transpose_0213(ComputingContext* ctx, tensor_t self, tensor_t y) override;
+    ComputingReturn op_transpose_0213_rotary(ComputingContext* ctx, tensor_t self, tensor_t cached, tensor_t pos, tensor_t y) override;
+    ComputingReturn op_transpose_0213_repeated(ComputingContext* ctx, tensor_t self, tensor_t y) override;
+    ComputingReturn op_qk(ComputingContext* ctx, tensor_t self, tensor_t k, tensor_t qk) override;
+    ComputingReturn op_softmax(ComputingContext* ctx, tensor_t self, tensor_t out) override;
+    ComputingReturn op_attn(ComputingContext* ctx, tensor_t self, tensor_t v, tensor_t attn) override;
+    ComputingReturn op_gelu(ComputingContext* ctx, tensor_t self, tensor_t dst) override;
+    ComputingReturn op_silu_product(ComputingContext* ctx, tensor_t self, tensor_t up, tensor_t dst) override;
+    std::variant<ComputingReturn, int> op_all_logits(ComputingContext* ctx, tensor_t self, tensor_t mask, tensor_t lm_head, tensor_t output ) override;
+    std::variant<ComputingReturn, tensor_t> op_sampling_top1(ComputingContext* ctx, tensor_t self) override;
+    std::variant<ComputingReturn, tensor_t> op_sampling_top3(ComputingContext* ctx, tensor_t self, float temp) override;
+    ComputingReturn op_conv2d(ComputingContext* ctx, tensor_t self, tensor_t weight, tensor_t bias, tensor_t dst, int stride, int padding) override;
+
+   // fast access
     const ShapeType& shape() const {
         return shape_;
     }
@@ -266,214 +243,73 @@ public:
     const size_t items() {
         return shape_.numel();
     }
-    size_t impl_index() const {
-        return impl_.index();
-    }
 
-    host_float_t* host_float() {
-        if ( impl_.index() != HOST_FLOAT ) {
-            vt_panic("Cant get host_float from a tensor");
+#define _CONVERT_(TT) \
+        if ( impl_.index() == ImplType::TT ) { \
+            return (TransformerComputing *)std::get<ImplType::TT>(impl_).get(); \
         }
-        return std::get<HOST_FLOAT>(impl_);
-    }
-    host_fp16_t* host_fp16() {
-        if ( impl_.index() != HOST_FP16 ) {
-            vt_panic("Cant get host_fp16 from a tensor");
-        }
-        return std::get<HOST_FP16>(impl_);
-    }
-    host_int_t* host_int() {
-        if ( impl_.index() != HOST_INT ) {
-            vt_panic("Cant get host_int from a tensor");
-        }
-        return std::get<HOST_INT>(impl_);
-    }
-    host_q8_t* host_q8() {
-        if ( impl_.index() != HOST_Q8 ) {
-            vt_panic("Cant get host_q8 from a tensor");
-        }
-        return std::get<HOST_Q8>(impl_);
-    }
-    host_q4_t* host_q4() {
-        if ( impl_.index() != HOST_Q4 ) {
-            vt_panic("Cant get host_q4 from a tensor");
-        }
-        return std::get<HOST_Q4>(impl_);
-    }
-    host_pq_t* host_pq() {
-        if ( impl_.index() != HOST_PQ ) {
-            vt_panic("Cant get host_pq from a tensor");
-        }
-        return std::get<HOST_PQ>(impl_);
-    }
+
+    TransformerComputing* impl() {
+        _CONVERT_(HOST_F32)
+        _CONVERT_(HOST_I32)
+        _CONVERT_(HOST_Q8)
+        _CONVERT_(HOST_Q4)
+        _CONVERT_(HOST_PQ)
 
 #ifdef _USING_DEVICE_CUDA_
-    cuda_float_t* cuda_float() {
-        if ( impl_.index() != CUDA_FLOAT ) {
-            vt_panic("Cant get cuda_float from a tensor");
-        }
-        return std::get<CUDA_FLOAT>(impl_);
-    }
-    cuda_fp16_t* cuda_fp16() {
-        if ( impl_.index() != CUDA_FP16 ) {
-            vt_panic("Cant get cuda_fp16 from a tensor");
-        }
-        return std::get<CUDA_FP16>(impl_);
-    }
-    cuda_int_t* cuda_int() {
-        if ( impl_.index() != CUDA_INT ) {
-            vt_panic("Cant get cuda_int from a tensor");
-        }
-        return std::get<CUDA_INT>(impl_);
-    }
-    cuda_q8_t* cuda_q8() {
-        if ( impl_.index() != CUDA_Q8 ) {
-            vt_panic("Cant get cuda_q8 from a tensor");
-        }
-        return std::get<CUDA_Q8>(impl_);
-    }
-    cuda_q4_t* cuda_q4() {
-        if ( impl_.index() != CUDA_Q4 ) {
-            vt_panic("Cant get cuda_q4 from a tensor");
-        }
-        return std::get<CUDA_Q4>(impl_);
-    }
-    cuda_pq_t* cuda_pq() {
-        if ( impl_.index() != CUDA_PQ ) {
-            vt_panic("Cant get cuda_pq from a tensor");
-        }
-        return std::get<CUDA_PQ>(impl_);
-    }
+        _CONVERT_(CUDA_F32)
+        _CONVERT_(CUDA_I32)
+        _CONVERT_(CUDA_F16)
+        _CONVERT_(CUDA_BF16)
+        _CONVERT_(CUDA_Q8)
+        _CONVERT_(CUDA_Q4)
+        _CONVERT_(CUDA_PQ)
 #endif
+        vt_fatal_error();
+        return nullptr;
+    }
 
-#if _USING_DEVICE_DCU_
-    dcu_float_t* dcu_float() {
-        if ( impl_.index() != DCU_FLOAT ) {
-            vt_panic("Cant get dcu_float from a tensor");
-        }
-        return std::get<DCU_FLOAT>(impl_);
+#define _ACCESSOR_(T, TT) \
+    T##_t * T() {             \
+        if ( impl_.index() == ImplType::TT ) { \
+            return std::get<ImplType::TT>(impl_).get();       \
+        }                               \
+        vt::_M_Panic(__FILE__, __LINE__, "Can't be here!"); \
+        return nullptr; \
     }
-    dcu_fp16_t* dcu_fp16() {
-        if ( impl_.index() != DCU_FP16 ) {
-            vt_panic("Cant get dcu_fp16 from a tensor");
-        }
-        return std::get<DCU_FP16>(impl_);
-    }
-    dcu_int_t* dcu_int() {
-        if ( impl_.index() != DCU_INT ) {
-            vt_panic("Cant get dcu_int from a tensor");
-        }
-        return std::get<DCU_INT>(impl_);
-    }
-    dcu_q8_t* dcu_q8() {
-        if ( impl_.index() != DCU_Q8 ) {
-            vt_panic("Cant get dcu_q8 from a tensor");
-        }
-        return std::get<DCU_Q8>(impl_);
-    }
-    dcu_q4_t* dcu_q4() {
-        if ( impl_.index() != DCU_Q4 ) {
-            vt_panic("Cant get dcu_q4 from a tensor");
-        }
-        return std::get<DCU_Q4>(impl_);
-    }
-    dcu_pq_t* dcu_pq() {
-        if ( impl_.index() != DCU_PQ ) {
-            vt_panic("Cant get dcu_q4 from a tensor");
-        }
-        return std::get<DCU_PQ>(impl_);
-    }
-#endif
-
-#if _USING_DEVICE_COREX_
-    cx_float_t* cx_float() {
-        if ( impl_.index() != CX_FLOAT ) {
-            vt_panic("Cant get cx_float from a tensor");
-        }
-        return std::get<CX_FLOAT>(impl_);
-    }
-    cx_fp16_t* cx_fp16() {
-        if ( impl_.index() != CX_FP16 ) {
-            vt_panic("Cant get cx_fp16 from a tensor");
-        }
-        return std::get<CX_FP16>(impl_);
-    }
-    cx_int_t* cx_int() {
-        if ( impl_.index() != CX_INT ) {
-            vt_panic("Cant get cx_int from a tensor");
-        }
-        return std::get<CX_INT>(impl_);
-    }
-    cx_q8_t* cx_q8() {
-        if ( impl_.index() != CX_Q8 ) {
-            vt_panic("Cant get cx_q8 from a tensor");
-        }
-        return std::get<CX_Q8>(impl_);
-    }
-    cx_q4_t* cx_q4() {
-        if ( impl_.index() != CX_Q4 ) {
-            vt_panic("Cant get cx_q4 from a tensor");
-        }
-        return std::get<CX_Q4>(impl_);
-    }
-    cx_pq_t* cx_pq() {
-        if ( impl_.index() != CX_PQ ) {
-            vt_panic("Cant get cx_q4 from a tensor");
-        }
-        return std::get<CX_PQ>(impl_);
-    }
-#endif
-
-#if _USING_DEVICE_ACL_
-    acl_float_t* acl_float() {
-        if ( impl_.index() != ACL_FLOAT ) {
-            vt_panic("Cant get acl_float from a tensor");
-        }
-        return std::get<ACL_FLOAT>(impl_);
-    }
-    acl_fp16_t* acl_fp16() {
-        if ( impl_.index() != ACL_FP16 ) {
-            vt_panic("Cant get acl_fp16 from a tensor");
-        }
-        return std::get<ACL_FP16>(impl_);
-    }
-    acl_int_t* acl_int() {
-        if ( impl_.index() != ACL_INT ) {
-            vt_panic("Cant get acl_int from a tensor");
-        }
-        return std::get<ACL_INT>(impl_);
-    }
-#endif
-
-#if _USING_DEVICE_DNNL_
-    dnnl_float_t* dnnl_float() {
-        if ( impl_.index() != DNNL_FLOAT ) {
-            vt_panic("Cant get dnnl_float from a tensor");
-        }
-        return std::get<DNNL_FLOAT>(impl_);
-    }
-    dnnl_fp16_t* dnnl_fp16() {
-        if ( impl_.index() != DNNL_FP16 ) {
-            vt_panic("Cant get dnnl_fp16 from a tensor");
-        }
-        return std::get<DNNL_FP16>(impl_);
-    }
-    dnnl_int_t* dnnl_int() {
-        if ( impl_.index() != DNNL_INT ) {
-            vt_panic("Cant get dnnl_int from a tensor");
-        }
-        return std::get<DNNL_INT>(impl_);
-    }
-    dnnl_q8_t* dnnl_q8() {
-        if ( impl_.index() != DNNL_Q8 ) {
-            vt_panic("Cant get dnnl_int from a tensor");
-        }
-        return std::get<DNNL_Q8>(impl_);
-    }
+    _ACCESSOR_(host_f32, HOST_F32)
+    _ACCESSOR_(host_i32, HOST_I32)
+    _ACCESSOR_(host_f16, HOST_F16)
+    _ACCESSOR_(host_bf16, HOST_BF16)
+    _ACCESSOR_(host_q8,  HOST_Q8)
+    _ACCESSOR_(host_q4,  HOST_Q4)
+    _ACCESSOR_(host_pq,  HOST_PQ)
+#ifdef _USING_DEVICE_CUDA_
+    _ACCESSOR_(cuda_f32,  CUDA_F32)
+    _ACCESSOR_(cuda_i32,  CUDA_I32)
+    _ACCESSOR_(cuda_f16,  CUDA_F16)
+    _ACCESSOR_(cuda_bf16, CUDA_BF16)
+    _ACCESSOR_(cuda_q8,   CUDA_Q8)
+    _ACCESSOR_(cuda_q4,   CUDA_Q4)
+    _ACCESSOR_(cuda_pq,   CUDA_PQ)
 #endif
 
     // help functions
-    const char* device_name() ;
+    const char* device_name();
+    void* device_data();
+    bool is_quantized() {
+        if ( dtype_ == DataType::Q8 ) {
+            return true;
+        }
+        if ( dtype_ == DataType::Q4 ) {
+            return true;
+        }
+        if ( dtype_ == DataType::PQ ) {
+            return true;
+        }
+        return false;
+    }
+
     std::string to_string() {
         std::stringstream ss;
         ss << device_name() << ":" <<  DataType_name( dtype() ) ;
@@ -488,476 +324,70 @@ public:
         return ss.str();
     }
 
-    bool is_host() const {
-        auto ii = impl_index();
-        if ( (ii >= ImplType::HOST_FLOAT) && (ii <= ImplType::HOST_PQ) ) {
-            return true;
-        }
-        return false;
-    }
-
-#ifdef _USING_DEVICE_CUDA_
-    bool is_cuda() const {
-        auto ii = impl_index();
-        if ( (ii >= ImplType::CUDA_FLOAT) && (ii <= ImplType::CUDA_PQ) ) {
-            return true;
-        }
-        return false;
-    }
-#endif
-
-#ifdef _USING_DEVICE_DCU_
-    bool is_dcu() const {
-        auto ii = impl_index();
-        if ( (ii >= ImplType::DCU_FLOAT) && (ii <= ImplType::DCU_PQ) ) {
-            return true;
-        }
-        return false;
-    }
-#endif
-
-#ifdef _USING_DEVICE_COREX_
-    bool is_corex() const {
-        auto ii = impl_index();
-        if ( (ii >= ImplType::CX_FLOAT) && (ii <= ImplType::CX_PQ) ) {
-            return true;
-        }
-        return false;
-    }
-#endif
-
-#ifdef _USING_DEVICE_ACL_
-    bool is_acl() const {
-        auto ii = impl_index();
-        if ( (ii >= ImplType::ACL_FLOAT) && (ii <= ImplType::ACL_INT) ) {
-            return true;
-        }
-        return false;
-    }
-#endif
-
-#ifdef _USING_DEVICE_DNNL_
-    bool is_dnnl() const {
-        auto ii = impl_index();
-        if ( (ii >= ImplType::DNNL_FLOAT) && (ii <= ImplType::DNNL_Q8) ) {
-            return true;
-        }
-        return false;
-    }
-#endif
-
-    bool is_float() const {
-        if (impl_index() == ImplType::HOST_FLOAT) {
-            return true;
-        }
-#ifdef _USING_DEVICE_CUDA_
-        if (impl_index() == ImplType::CUDA_FLOAT) {
-            return true;
-        }
-#endif
-
-#ifdef _USING_DEVICE_DCU_
-        if (impl_index() == ImplType::DCU_FLOAT) {
-            return true;
-        }
-#endif
-
-#ifdef _USING_DEVICE_COREX_
-        if (impl_index() == ImplType::CX_FLOAT) {
-            return true;
-        }
-#endif
-
-#ifdef _USING_DEVICE_ACL_
-        if (impl_index() == ImplType::ACL_FLOAT) {
-            return true;
-        }
-#endif
-
-#ifdef _USING_DEVICE_DNNL_
-        if (impl_index() == ImplType::DNNL_FLOAT) {
-            return true;
-        }
-#endif
-        return false;
-    }
-
-    bool is_fp16() const {
-        if (impl_index() == ImplType::HOST_FP16) {
-            return true;
-        }
-#ifdef _USING_DEVICE_CUDA_
-        if (impl_index() == ImplType::CUDA_FP16) {
-            return true;
-        }
-#endif
-
-#ifdef _USING_DEVICE_DCU_
-        if (impl_index() == ImplType::DCU_FP16) {
-            return true;
-        }
-#endif
-
-#ifdef _USING_DEVICE_COREX_
-        if (impl_index() == ImplType::CX_FP16) {
-            return true;
-        }
-#endif
-
-#ifdef _USING_DEVICE_ACL_
-        if (impl_index() == ImplType::ACL_FP16) {
-            return true;
-        }
-#endif
-
-#ifdef _USING_DEVICE_DNNL_
-        if (impl_index() == ImplType::DNNL_FP16) {
-            return true;
-        }
-#endif
-        return false;
-    }
-
-    bool is_int() const {
-        if (impl_index() == ImplType::HOST_INT) {
-            return true;
-        }
-#ifdef _USING_DEVICE_CUDA_
-        if (impl_index() == ImplType::CUDA_INT) {
-            return true;
-        }
-#endif
-
-#ifdef _USING_DEVICE_DCU_
-        if (impl_index() == ImplType::DCU_INT) {
-            return true;
-        }
-#endif
-
-#ifdef _USING_DEVICE_COREX_
-        if (impl_index() == ImplType::CX_INT) {
-            return true;
-        }
-#endif
-
-#ifdef _USING_DEVICE_ACL_
-        if (impl_index() == ImplType::ACL_INT) {
-            return true;
-        }
-#endif
-
-#ifdef _USING_DEVICE_DNNL_
-        if (impl_index() == ImplType::DNNL_INT) {
-            return true;
-        }
-#endif
-        return false;
-    }
-    bool is_quantized() {
-        return is_q4() || is_q8() || is_pq();
-    }
-    bool is_q8() const {
-        if (impl_index() == ImplType::HOST_Q8) {
-            return true;
-        }
-#ifdef _USING_DEVICE_CUDA_
-        if (impl_index() == ImplType::CUDA_Q8) {
-            return true;
-        }
-#endif
-#ifdef _USING_DEVICE_DCU_
-        if (impl_index() == ImplType::DCU_Q8) {
-            return true;
-        }
-#endif
-#ifdef _USING_DEVICE_COREX_
-        if (impl_index() == ImplType::CX_Q8) {
-            return true;
-        }
-#endif
-#ifdef _USING_DEVICE_DNNL_
-        if (impl_index() == ImplType::DNNL_Q8) {
-            return true;
-        }
-#endif
-        return false;
-    }
-    bool is_q4() const {
-        if (impl_index() == ImplType::HOST_Q4) {
-            return true;
-        }
-#ifdef _USING_DEVICE_CUDA_
-        if (impl_index() == ImplType::CUDA_Q4) {
-            return true;
-        }
-#endif
-#ifdef _USING_DEVICE_DCU_
-        if (impl_index() == ImplType::DCU_Q4) {
-            return true;
-        }
-#endif
-#ifdef _USING_DEVICE_COREX_
-        if (impl_index() == ImplType::CX_Q4) {
-            return true;
-        }
-#endif
-
-        return false;
-    }
-    bool is_pq() const {
-        if (impl_index() == ImplType::HOST_PQ) {
-            return true;
-        }
-#ifdef _USING_DEVICE_CUDA_
-        if (impl_index() == ImplType::CUDA_PQ) {
-            return true;
-        }
-#endif
-#ifdef _USING_DEVICE_DCU_
-        if (impl_index() == ImplType::DCU_PQ) {
-            return true;
-        }
-#endif
-#ifdef _USING_DEVICE_COREX_
-        if (impl_index() == ImplType::CX_PQ) {
-            return true;
-        }
-#endif
-
-        return false;
-    }
-
-    bool same_impl(tensor_t& other) {
-        if ( impl_index() != other->impl_index() ) {
-            return false;
-        }
-        return true;
-    }
-    bool same_dtype(tensor_t& other) {
-        if ( dtype_ != other->dtype() ) {
-            return false;
-        }
-        return true;
-    }
-    bool same_shape(tensor_t& other) {
-        if ( shape_ != other->shape() ) {
-            return false;
-        }
-        return true;
-    }
-
-    TransformerComputing* impl();
-    void* device_data();
-    void* device_data(size_t index);
-    bool  is_shared();
-
-public:
-    std::variant<ComputingReturn, size_t> op_sizeof(tensor_t self) override;
-    ComputingReturn op_zero(tensor_t self) override;
-    ComputingReturn op_fill(tensor_t self, float value) override;
-    ComputingReturn op_alibi(tensor_t self) override;
-    ComputingReturn op_rotary_cache(tensor_t self, float base) override;
-    ComputingReturn op_causal_mask(tensor_t self, tensor_t out) override;
-    ComputingReturn op_copy(tensor_t self, tensor_t src) override;
-    ComputingReturn op_convert(tensor_t self, tensor_t src) override;
-    std::variant<ComputingReturn, tensor_t> op_view(tensor_t self, size_t offset, const std::vector<size_t>& newShape) override;
-    std::variant<ComputingReturn, tensor_t> op_view_as(tensor_t self, size_t offset, const std::vector<size_t>& newShape, const char* dtype) override;
-    ComputingReturn op_reshape(tensor_t self, size_t offset, const std::vector<size_t>& newShape) override;
-    ComputingReturn op_quantize(tensor_t self, tensor_t out) override;
-    ComputingReturn op_dequantize(tensor_t self, tensor_t out) override;
-    ComputingReturn op_embed(tensor_t self, tensor_t table, tensor_t out) override;
-    ComputingReturn op_scale(tensor_t self, float scale) override;
-    ComputingReturn op_add(tensor_t self, tensor_t b, tensor_t c) override;
-    ComputingReturn op_mul(tensor_t self, tensor_t b, tensor_t c) override;
-    ComputingReturn op_linear(tensor_t self, tensor_t w, tensor_t b, tensor_t y) override;
-    ComputingReturn op_layernorm(tensor_t self, tensor_t mean, tensor_t var, tensor_t scale, tensor_t bias, tensor_t y, float eps) override;
-    ComputingReturn op_rmsnorm(tensor_t self, tensor_t scale, tensor_t norm2, tensor_t y, float eps) override;
-    ComputingReturn op_rotary_embed(tensor_t self, tensor_t cached, tensor_t pos, tensor_t y) override;
-    ComputingReturn op_transpose_0213(tensor_t self, tensor_t y) override;
-    ComputingReturn op_transpose_0213_rotary(tensor_t self, tensor_t cached, tensor_t pos, tensor_t y) override;
-    ComputingReturn op_transpose_0213_repeated(tensor_t self, tensor_t y) override;
-    ComputingReturn op_qk(tensor_t self, tensor_t k, tensor_t qk) override;
-    ComputingReturn op_softmax(tensor_t self, tensor_t out) override ;
-    ComputingReturn op_attn(tensor_t self, tensor_t v, tensor_t attn) override;
-    ComputingReturn op_xattn(tensor_t self, tensor_t k, tensor_t v, tensor_t qk, tensor_t attn) override;
-    ComputingReturn op_gelu(tensor_t self, tensor_t dst) override;
-    ComputingReturn op_silu_product(tensor_t self, tensor_t up, tensor_t dst) override;
-    std::variant<ComputingReturn, int> op_all_logits(tensor_t self, tensor_t mask,  tensor_t lm_head, tensor_t output) override;
-    std::variant<ComputingReturn, tensor_t> op_sampling_top1(tensor_t self) override;
-    std::variant<ComputingReturn, tensor_t> op_sampling_top3(tensor_t self, float temp) override;
-    ComputingReturn op_conv2d(tensor_t self, tensor_t weight, tensor_t bias, tensor_t dst, int stride, int padding) override;
-    ComputingReturn op_flash_attention(tensor_t query, tensor_t key, tensor_t value, tensor_t dst) override;
-    std::variant<ComputingReturn, float> op_loss_backward(tensor_t self, tensor_t ids, tensor_t mask, tensor_t lm_head, tensor_t all_logits, tensor_t x_g, tensor_t lm_head_g) override;
-    ComputingReturn op_layernorm_backward(tensor_t self, tensor_t scale, tensor_t bias, tensor_t var, tensor_t y, tensor_t dscale, tensor_t dbias, tensor_t din, float eps) override;
-    ComputingReturn op_rmsnorm_backward(tensor_t self, tensor_t x, tensor_t scale, tensor_t norm2, tensor_t dscale, tensor_t dx, float eps) override;
-    ComputingReturn op_linear_backward(tensor_t self, tensor_t x, tensor_t weight, tensor_t bias, tensor_t x_g, tensor_t weight_g, tensor_t bias_g ) override;
-    ComputingReturn op_gelu_backward(tensor_t self, tensor_t x, tensor_t x_g) override;
-    ComputingReturn op_attn_backward(tensor_t self, tensor_t attn, tensor_t v, tensor_t attn_g, tensor_t v_g) override;
-    ComputingReturn op_softmax_backward(tensor_t self, tensor_t out, tensor_t x_g) override;
-    ComputingReturn op_softmax_attn_backward(tensor_t self, tensor_t attn, tensor_t v, tensor_t attn_g, tensor_t v_g) override;
-    ComputingReturn op_qk_backward(tensor_t self, tensor_t q, tensor_t k, tensor_t q_g, tensor_t k_g) override;
-
-    ComputingReturn io_load(tensor_t self, const char* fileName) override;
-    ComputingReturn io_save(tensor_t self, const char* fileName) override;
-    ComputingReturn io_dump(tensor_t self) override;
-    ComputingReturn io_mpi_bcast(tensor_t self, int root) override;
-    ComputingReturn io_mpi_recv(tensor_t self, int source) override;
-    ComputingReturn io_mpi_send(tensor_t self, int dst) override;
-    ComputingReturn io_nccl_recv(tensor_t self, int source) override;
-    ComputingReturn io_nccl_send(tensor_t self, int dst) override;
-    ComputingReturn io_pipe_read(tensor_t self) override;
-    ComputingReturn io_pipe_write(tensor_t self, int n) override;
-
 private:
     // basic info about tensor
-    ShapeType shape_;
+    const ShapeType shape_;
     const DataType  dtype_;
 
     // ImplType enum order is same as TensorImpl's variant
     enum ImplType {
 #ifdef _USING_DEVICE_CUDA_
-        CUDA_FLOAT,
-        CUDA_FP16,
-        CUDA_INT,
+        CUDA_F32,
+        CUDA_I32,
+        CUDA_F16,
+        CUDA_BF16,
         CUDA_Q8,
         CUDA_Q4,
         CUDA_PQ,
 #endif
-
-#ifdef _USING_DEVICE_DCU_
-        DCU_FLOAT,
-        DCU_FP16,
-        DCU_INT,
-        DCU_Q8,
-        DCU_Q4,
-        DCU_PQ,
-#endif
-
-#ifdef _USING_DEVICE_COREX_
-        CX_FLOAT,
-        CX_FP16,
-        CX_INT,
-        CX_Q8,
-        CX_Q4,
-        CX_PQ,
-#endif
-
-#ifdef _USING_DEVICE_ACL_
-        ACL_FLOAT,
-        ACL_FP16,
-        ACL_INT,
-#endif
-
-#ifdef _USING_DEVICE_DNNL_
-        DNNL_FLOAT,
-        DNNL_FP16,
-        DNNL_INT,
-        DNNL_Q8,
-#endif
-        HOST_FLOAT,
-        HOST_FP16,
-        HOST_INT,
+        HOST_F32,
+        HOST_I32,
+        HOST_F16,
+        HOST_BF16,
         HOST_Q8,
         HOST_Q4,
-        HOST_PQ,
+        HOST_PQ
     };
-    using TensorImpl =   std::variant<
+
+    // internal pointer based on unique_ptr auto delete
+    using TensorImpl = std::variant<
 #ifdef _USING_DEVICE_CUDA_
-                                        cuda_float_t*,
-                                        cuda_fp16_t*,
-                                        cuda_int_t*,
-                                        cuda_q8_t*,
-                                        cuda_q4_t*,
-                                        cuda_pq_t*,
+                  std::unique_ptr<cuda_f32_t>,
+                  std::unique_ptr<cuda_i32_t>,
+                  std::unique_ptr<cuda_f16_t>,
+                  std::unique_ptr<cuda_bf16_t>,
+                  std::unique_ptr<cuda_q8_t>,
+                  std::unique_ptr<cuda_q4_t>,
+                  std::unique_ptr<cuda_pq_t>,
 #endif
+                  std::unique_ptr<host_f32_t>,
+                  std::unique_ptr<host_i32_t>,
+                  std::unique_ptr<host_f16_t>,
+                  std::unique_ptr<host_bf16_t>,
+                  std::unique_ptr<host_q8_t>,
+                  std::unique_ptr<host_q4_t>,
+                  std::unique_ptr<host_pq_t> >;
 
-#ifdef _USING_DEVICE_DCU_
-                                        dcu_float_t*,
-                                        dcu_fp16_t*,
-                                        dcu_int_t*,
-                                        dcu_q8_t*,
-                                        dcu_q4_t*,
-                                        dcu_pq_t*,
-#endif
-
-#ifdef _USING_DEVICE_COREX_
-                                        cx_float_t*,
-                                        cx_fp16_t*,
-                                        cx_int_t*,
-                                        cx_q8_t*,
-                                        cx_q4_t*,
-                                        cx_pq_t*,
-#endif
-
-#ifdef _USING_DEVICE_ACL_
-                                        acl_float_t*,
-                                        acl_fp16_t*,
-                                        acl_int_t*,
-#endif
-
-#ifdef _USING_DEVICE_DNNL_
-                                        dnnl_float_t*,
-                                        dnnl_fp16_t*,
-                                        dnnl_int_t*,
-                                        dnnl_q8_t*,
-#endif
-                                        host_float_t*,
-                                        host_fp16_t*,
-                                        host_int_t*,
-                                        host_q8_t*,
-                                        host_q4_t*,
-                                        host_pq_t* >;
     TensorImpl impl_;
 };
 
-tensor_t create_host_float(std::vector<size_t>& shape);
-tensor_t create_host_fp16(std::vector<size_t>& shape);
-tensor_t create_host_int(std::vector<size_t>& shape);
+tensor_t create_host_f32(std::vector<size_t>& shape);
+tensor_t create_host_i32(std::vector<size_t>& shape);
+tensor_t create_host_f16(std::vector<size_t>& shape);
+tensor_t create_host_bf16(std::vector<size_t>& shape);
 tensor_t create_host_q8(std::vector<size_t>& shape);
 tensor_t create_host_q4(std::vector<size_t>& shape);
-tensor_t create_host_pq(std::vector<size_t>& shape, int S);
+tensor_t create_host_pq(std::vector<size_t>& shape);
 
 #ifdef _USING_DEVICE_CUDA_
-tensor_t create_cuda_float(std::vector<size_t>& shape);
-tensor_t create_cuda_fp16(std::vector<size_t>& shape);
-tensor_t create_cuda_int(std::vector<size_t>& shape);
+tensor_t create_cuda_f32(std::vector<size_t>& shape);
+tensor_t create_cuda_i32(std::vector<size_t>& shape);
+tensor_t create_cuda_f16(std::vector<size_t>& shape);
+tensor_t create_cuda_bf16(std::vector<size_t>& shape);
 tensor_t create_cuda_q8(std::vector<size_t>& shape);
 tensor_t create_cuda_q4(std::vector<size_t>& shape);
-tensor_t create_cuda_pq(std::vector<size_t>& shape, int S);
+tensor_t create_cuda_pq(std::vector<size_t>& shape);
 #endif
 
-#ifdef _USING_DEVICE_DCU_
-tensor_t create_dcu_float(std::vector<size_t>& shape);
-tensor_t create_dcu_fp16(std::vector<size_t>& shape);
-tensor_t create_dcu_int(std::vector<size_t>& shape);
-tensor_t create_dcu_q8(std::vector<size_t>& shape);
-tensor_t create_dcu_q4(std::vector<size_t>& shape);
-tensor_t create_dcu_pq(std::vector<size_t>& shape, int S);
-#endif
-
-#ifdef _USING_DEVICE_COREX_
-tensor_t create_cx_float(std::vector<size_t>& shape);
-tensor_t create_cx_fp16(std::vector<size_t>& shape);
-tensor_t create_cx_int(std::vector<size_t>& shape);
-tensor_t create_cx_q8(std::vector<size_t>& shape);
-tensor_t create_cx_q4(std::vector<size_t>& shape);
-tensor_t create_cx_pq(std::vector<size_t>& shape, int S);
-#endif
-
-#ifdef _USING_DEVICE_ACL_
-tensor_t create_acl_float(std::vector<size_t>& shape);
-tensor_t create_acl_fp16(std::vector<size_t>& shape);
-tensor_t create_acl_int(std::vector<size_t>& shape);
-#endif
-
-#ifdef _USING_DEVICE_DNNL_
-tensor_t create_dnnl_float(std::vector<size_t>& shape, bool gpu = false);
-tensor_t create_dnnl_fp16(std::vector<size_t>& shape, bool gpu = false);
-tensor_t create_dnnl_int(std::vector<size_t>& shape, bool gpu = false);
-tensor_t create_dnnl_q8(std::vector<size_t>& shape, bool gpu = false);
-#endif
-
-
-} // end of namespace br
-
+}
 #endif

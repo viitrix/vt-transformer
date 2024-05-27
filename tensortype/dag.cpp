@@ -1,5 +1,6 @@
 #include <regex>
 #include "tensortype.hpp"
+#include "context.hpp"
 #include "dag.hpp"
 
 namespace vt {
@@ -647,7 +648,7 @@ namespace base {
 
 extern void load_nn_operators(Enviroment& env);
 extern void load_nn_kvcache(Enviroment& env);
-Enviroment::Enviroment() {
+Enviroment::Enviroment(ComputingContext* ctx) : ctx_(ctx) {
     load_base_words();
     load_nn_operators(*this);
     load_nn_kvcache(*this);

@@ -1,43 +1,33 @@
 .PHONY: all
 
-FLAGS = -Wall -O3 -Wno-maybe-uninitialized -fopenmp \
-		-D_USING_DEVICE_DNNL_ \
+FLAGS = -Wall -O3 -Wno-maybe-uninitialized -Wno-strict-aliasing -fopenmp \
 		-D_USING_DEVICE_CUDA_
 
-INC = -I. -I../install/include -I../install/include/cuda_kernels \
-	  -I${DNNL_DIR}/include \
-	  -I${CUDA_DIR}/include \
-	  -I${CUDNN_DIR}/include \
-	  -I${NCCL_DIR}/include
+INC = -I. -I../install/include \
+	  -I${CUDA_DIR}/include 
 
 all: libtensortype.a
 
-libtensortype.a: context.o tensortype.o host_tensor.o dnnl_tensor.o cuda_tensor.o dag.o nn_operators.o nn_kvcache.o
+libtensortype.a: tensortype.o context.o host_tensor.o cuda_tensor.o dag.o nn_operators.o
 	 ar rcs $@ $? 
 
-context.o: context.hpp context.cpp
-	g++ $(FLAGS) -c -o $@ $(INC) context.cpp
-
-tensortype.o: computing.hpp tensortype.hpp tensortype.cpp
+tensortype.o: computing.hpp common.hpp tensortype.hpp tensortype.cpp
 	g++ $(FLAGS) -c -o $@ $(INC) tensortype.cpp
 
-host_tensor.o: computing.hpp tensortype.hpp host_tensor.hpp host_tensor.cpp
-	g++ $(FLAGS) -c -o $@ $(INC) host_tensor.cpp
+context.o: computing.hpp common.hpp tensortype.hpp context.cpp 
+	g++ $(FLAGS) -c -o $@ $(INC) context.cpp
 
-dnnl_tensor.o: computing.hpp tensortype.hpp host_tensor.hpp dnnl_tensor.hpp dnnl_tensor.cpp
-	g++ $(FLAGS) -c -o $@ $(INC) dnnl_tensor.cpp
-
-cuda_tensor.o: computing.hpp tensortype.hpp cuda_tensor.hpp cuda_tensor.cpp
-	g++ $(FLAGS) -c -o $@ $(INC) cuda_tensor.cpp
-
-dag.o: tensortype.hpp dag.hpp dag.cpp
+dag.o: computing.hpp common.hpp tensortype.hpp dag.hpp
 	g++ $(FLAGS) -c -o $@ $(INC) dag.cpp
 
-nn_operators.o: computing.hpp tensortype.hpp dag.hpp nn_operators.cpp
+nn_operators.o: computing.hpp common.hpp tensortype.hpp context.hpp nn_operators.cpp
 	g++ $(FLAGS) -c -o $@ $(INC) nn_operators.cpp
 
-nn_kvcache.o: computing.hpp tensortype.hpp dag.hpp nn_kvcache.cpp
-	g++ $(FLAGS) -c -o $@ $(INC) nn_kvcache.cpp
+host_tensor.o: computing.hpp common.hpp tensortype.hpp context.hpp host_tensor.hpp host_tensor.cpp
+	g++ $(FLAGS) -c -o $@ $(INC) host_tensor.cpp
+
+cuda_tensor.o: computing.hpp common.hpp tensortype.hpp context.hpp cuda_tensor.hpp cuda_tensor.cpp
+	g++ $(FLAGS) -c -o $@ $(INC) cuda_tensor.cpp
 
 install: libtensortype.a
 	cp *.hpp ../install/include

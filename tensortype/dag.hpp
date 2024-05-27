@@ -16,6 +16,7 @@
 
 namespace vt {
 
+struct ComputingContext;
 struct TensorType;
 using tensor_t = std::shared_ptr<vt::TensorType>;
 
@@ -381,7 +382,7 @@ private:
 };
 
 struct Enviroment {
-    Enviroment();
+    Enviroment(ComputingContext *ctx);
     ~Enviroment() {
     }
 
@@ -417,6 +418,10 @@ struct Enviroment {
     }
     Hash& hash() {
         return hash_;
+    }
+
+    ComputingContext* ctx() {
+        return ctx_;
     }
 
 private:
@@ -480,6 +485,9 @@ private:
     // runtime
     Stack stack_;
     Hash hash_;
+
+    // global
+    ComputingContext *ctx_;
 };
 
 #define NWORD_CREATOR_DEFINE_LR(CLS)         \
