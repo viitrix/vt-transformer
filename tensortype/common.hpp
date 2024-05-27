@@ -7,6 +7,9 @@
 #include <stdint.h>
 #include <iostream>
 #include <fstream>
+#include <vector>
+
+#include "vt.hpp"
 
 namespace vt {
 
@@ -271,7 +274,8 @@ inline std::string writeToFile(const char* filename, const char* data, size_t le
     return str;
 }
 
-
+template<typename T>
+void fill_rotary_cache(std::vector<T>&data, int len, int dims, float base);
 
 } // namespace vt
 #endif

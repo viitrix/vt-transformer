@@ -13,11 +13,20 @@ struct CUDATensor : public TransformerComputing {
     ~CUDATensor();
     CUDATensor(const ShapeType& shape);
 
+    inline void* data() {
+        return mem_;
+    }
+
 public:
     ComputingReturn io_load(ComputingContext* ctx, tensor_t self, const char* fileName) override;
     //ComputingReturn io_save(ComputingContext* ctx, tensor_t self, const char* fileName) override;
     ComputingReturn io_dump(ComputingContext* ctx, tensor_t self) override;
     std::variant<ComputingReturn, size_t> op_sizeof(ComputingContext* ctx, tensor_t self) override;
+
+    ComputingReturn op_zero(ComputingContext* ctx, tensor_t self) override;
+    ComputingReturn op_fill(ComputingContext* ctx, tensor_t self, float value) override;
+    ComputingReturn op_rotary_cache(ComputingContext* ctx, tensor_t self, float base) override;
+    ComputingReturn op_causal_mask(ComputingContext* ctx, tensor_t self, tensor_t output) override;
 
 protected:
     const size_t size_;

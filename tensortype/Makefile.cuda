@@ -8,7 +8,7 @@ INC = -I. -I../install/include \
 
 all: libtensortype.a
 
-libtensortype.a: tensortype.o context.o host_tensor.o cuda_tensor.o dag.o nn_operators.o
+libtensortype.a: tensortype.o context.o common.o host_tensor.o cuda_tensor.o dag.o nn_operators.o
 	 ar rcs $@ $? 
 
 tensortype.o: computing.hpp common.hpp tensortype.hpp tensortype.cpp
@@ -16,6 +16,9 @@ tensortype.o: computing.hpp common.hpp tensortype.hpp tensortype.cpp
 
 context.o: computing.hpp common.hpp tensortype.hpp context.cpp 
 	g++ $(FLAGS) -c -o $@ $(INC) context.cpp
+
+common.o: common.hpp common.cpp 
+	g++ $(FLAGS) -c -o $@ $(INC) common.cpp
 
 dag.o: computing.hpp common.hpp tensortype.hpp dag.hpp
 	g++ $(FLAGS) -c -o $@ $(INC) dag.cpp
