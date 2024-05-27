@@ -110,4 +110,9 @@ ComputingReturn HostTensor<_DT_>::io_pipe_write(ComputingContext* ctx, tensor_t 
     return OP_OK;
 }
 
+template <DataType _DT_>
+std::variant<ComputingReturn, size_t> HostTensor<_DT_>::op_sizeof(ComputingContext* ctx, tensor_t self) {
+    return size_;
+}
+
 }

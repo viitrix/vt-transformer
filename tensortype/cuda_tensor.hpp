@@ -10,7 +10,14 @@ namespace vt {
 
 template <DataType _DTYPE_>
 struct CUDATensor : public TransformerComputing {
+    ~CUDATensor();
     CUDATensor(const ShapeType& shape);
+
+public:
+    ComputingReturn io_load(ComputingContext* ctx, tensor_t self, const char* fileName) override;
+    //ComputingReturn io_save(ComputingContext* ctx, tensor_t self, const char* fileName) override;
+    ComputingReturn io_dump(ComputingContext* ctx, tensor_t self) override;
+    std::variant<ComputingReturn, size_t> op_sizeof(ComputingContext* ctx, tensor_t self) override;
 
 protected:
     const size_t size_;
