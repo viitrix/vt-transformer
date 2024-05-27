@@ -12,36 +12,35 @@ namespace vt {
 
 const size_t DEFAULT_WORKSPACE_SIZE = 1024 * 1024 * 16;
 
-ComputingContext::ComputingContext(const std::vector<std::string>& devstr) {
-    vt_assert( (devstr.size() > 0) && (devstr.size() % 2 == 0) , "creating ComputingContext error!");
-
+ComputingContext::ComputingContext() {
+    // basic init
     workspace_size = DEFAULT_WORKSPACE_SIZE;
     host_workspace = nullptr;
+    pipe_world = 0;
+    pipe_rank = -1;
 #ifdef _USING_DEVICE_CUDA_
     cuda_device = -1;
 #endif
-
-    for (size_t i = 0; i < devstr.size(); i += 2) {
-        if ( devstr[i] == "host" ) {
-            int id = std::stoi( devstr[i+1] );
-            boot_host(id); 
-            continue;      
-        }
-        if ( devstr[i] == "cuda" ) {
-            int d = std::stoi( devstr[i+1] );
-#ifdef _USING_DEVICE_CUDA_
-            boot_cuda(d);
-#else
-            vt_panic("creating ComputingContext don't support CUDA!");
-#endif
-            continue;
-        }
-        vt_panic("creating ComputingContext don't support device!");
-    }
-
 }
 
-void ComputingContext::boot_host(int id) {
+void ComputingContext::boot_host(int rks) {
+    if ( rks >= 1) {
+        pipe_world = rks + 1;
+        pipe_rank = 0;
+        pipe_fds.resize((rks + 1) * 2, -1);
+        for (int i = 0; i < rks; i++) {
+            int* fds = pipe_fds.data() + i * 2;
+            vt_assert( pipe(fds) >= 0, "Can't create pipe between parent and child process!");
+        }
+
+        for (int i = 0; i < rks; i++) {
+            int n = fork();
+            if ( n == 0 ) {
+                pipe_rank = i + 1;
+                break;
+            }
+        }
+    }
     
     host_workspace = malloc( workspace_size );
     rng = new std::mt19937(1979);
@@ -52,16 +51,6 @@ void ComputingContext::boot_cuda(int dev) {
     cuda_device = dev;
     CUDA_CHECK( cudaSetDevice(cuda_device) );
     CUDA_CHECK( cudaStreamCreate(&cuda_stream) );
-
-    /*
-    assist_streams[0] = cuda_stream;
-    for (int i = 1; i < ALL_CUDA_STREAMS; i++) {
-        CUDA_CHECK( cudaStreamCreate(&assist_streams[i]) );
-    }
-    for (int i = 0; i < ALL_CUDA_EVENTS; i++) {
-        CUDA_CHECK( cudaEventCreate(&events[i]) );
-    }
-    */
 
     CUBLAS_CHECK( cublasCreate_v2(&cublas_handle) );
     CUBLAS_CHECK( cublasLtCreate(&cublasLt_handle) );
@@ -76,7 +65,41 @@ void ComputingContext::boot_cuda(int dev) {
 }
 #endif
 
+void ComputingContext::shutdown() {
+    // device shutdown
+#ifdef _USING_DEVICE_CUDA_
+    if ( cuda_device >= 0) {
+        CUDA_CHECK( cudaFree(cuda_workspace) );
+        CUDNN_CHECK( cudnnDestroy(cudnn_handle) );
+        CUBLAS_CHECK( cublasLtDestroy(cublasLt_handle) );
+        CUBLAS_CHECK( cublasDestroy(cublas_handle) );
+        CUDA_CHECK( cudaStreamDestroy(cuda_stream) );
+    }
+#endif
+    
+    // host shutdown
+    for (size_t i = 0; i < pipe_fds.size(); i++) {
+        close( pipe_fds[i]);
+    }
+    free(host_workspace);
+    delete rng;
+}
 
+int ComputingContext::pipe_write(const int n, const void *buf, size_t nbyte) {
+    if ( pipe_fds.size() == 0) {
+        vt_panic("pipe_fds is note initialized!");
+    }
+    int fd = pipe_fds[n * 2 + 1];
+    return write(fd, buf, nbyte);
+}
+
+int ComputingContext::pipe_read(void *buf, size_t nbyte) {
+    if ( pipe_fds.size() == 0) {
+        vt_panic("pipe_fds is note initialized!");
+    }
+    int fd = pipe_fds[pipe_rank * 2 + 0];
+    return read(fd, buf, nbyte);
+}
 
 }
 

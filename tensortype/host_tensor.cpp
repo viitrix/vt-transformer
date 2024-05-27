@@ -1,5 +1,7 @@
 #include "host_tensor.hpp"
+#include "context.hpp"
 #include "common.hpp"
+
 
 namespace vt {
 
@@ -90,26 +92,21 @@ ComputingReturn HostTensor<_DT_>::io_dump(ComputingContext* ctx, tensor_t self) 
 
 template <DataType _DT_>
 ComputingReturn HostTensor<_DT_>::io_pipe_read(ComputingContext* ctx, tensor_t self) {
-    /*
-    auto size = std::get<1>( self->op_sizeof(self) );
-    int ret = CollectiveContext::pipe_read(data(), size);
+    auto size = std::get<1>( self->op_sizeof(ctx, self) );
+    int ret = ctx->pipe_read(mem_, size);
     if ( ret < 0 ) {
         return OP_OUTPUT_ERROR;
     }
-    */
-
     return OP_OK;
 }
 
 template <DataType _DT_>
 ComputingReturn HostTensor<_DT_>::io_pipe_write(ComputingContext* ctx, tensor_t self, int n) {
-    /*
-    auto size = std::get<1>( self->op_sizeof(self) );
-    int ret = CollectiveContext::pipe_write(n, data(), size);
+    auto size = std::get<1>( self->op_sizeof(ctx, self) );
+    int ret = ctx->pipe_write(n, mem_, size);
     if ( ret < 0 ) {
         return OP_OUTPUT_ERROR;
     }
-    */
     return OP_OK;
 }
 

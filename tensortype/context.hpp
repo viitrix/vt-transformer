@@ -43,14 +43,21 @@ namespace vt {
 
 struct ComputingContext {
     // something like host:0;cuda:1
-    ComputingContext(const std::vector<std::string>&);
-    ~ComputingContext();
+    ComputingContext();
+    ~ComputingContext() {
+        shutdown();
+    }
 
     void* host_workspace;
     size_t workspace_size;
     std::mt19937* rng;
-    void boot_host(const int id);
-    void shutdown();
+
+    int      pipe_world;
+    int      pipe_rank;
+    std::vector<int> pipe_fds;
+    void boot_host(const int ranks);
+    int pipe_read(void *buf, size_t nbyte);
+    int pipe_write(const int n, const void *buf, size_t nbyte);
 
 #ifdef _USING_DEVICE_CUDA_
     int cuda_device;
@@ -62,6 +69,8 @@ struct ComputingContext {
     void boot_cuda(const int dev);
 #endif
 
+private:
+    void shutdown();
 };
 
 } // end of namespace vt
