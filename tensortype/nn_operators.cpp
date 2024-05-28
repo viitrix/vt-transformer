@@ -527,8 +527,8 @@ void load_nn_operators(Enviroment& env) {
     env.insert_native_word("op.dequantize", op::DeQuantize::creator );
     env.insert_native_word("op.embed", op::Embed::creator );
     env.insert_native_word("op.copy", op::CopyFrom::creator );
-    env.insert_native_word("op.copy_from", op::CopyTo::creator );
-    env.insert_native_word("op.copy_from", op::CopyTo::creator );    
+    env.insert_native_word("op.copy_from", op::CopyFrom::creator );
+    env.insert_native_word("op.copy_to", op::CopyTo::creator );    
     env.insert_native_word("op.convert", op::Convert::creator );
     env.insert_native_word("op.linear", op::Linear::creator );
     env.insert_native_word("op.layernorm", op::Layernorm::creator );

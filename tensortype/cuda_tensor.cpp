@@ -15,7 +15,7 @@ void copy_to_local(std::vector<unsigned char> dst, void* src, size_t length, cud
 }
 
 template<DataType _DT_> 
-cudnnTensorDescriptor_t create_cudnn_td_with(std::vector<size_t>& shape) {
+cudnnTensorDescriptor_t create_cudnn_td_with(std::vector<size_t> shape) {
     cudnnTensorFormat_t  format = CUDNN_TENSOR_NCHW;
     cudnnDataType_t dtype;
     cudnnTensorDescriptor_t desc;
@@ -56,7 +56,7 @@ CUDATensor<_DT_>::~CUDATensor() {
 }
 
 template<DataType _DT_>
-CUDATensor<_DT_>::CUDATensor(const ShapeType& shape) : owner_(true) {
+CUDATensor<_DT_>::CUDATensor(const ShapeType& shape) : size_(0), owner_(true) {
     size_t asize = 0;
     size_t number = shape.numel();
     if ( _DT_ == DataType::F32 ) {
@@ -71,12 +71,12 @@ CUDATensor<_DT_>::CUDATensor(const ShapeType& shape) : owner_(true) {
         vt_fatal_error();
     }
 
-    const_cast<size_t>(size_) = asize;
+    *const_cast<size_t *>(&size_) = asize;
     CUDA_CHECK(cudaMalloc(&mem_, asize));
 }
 
 template<DataType _DT_>
-CUDATensor<_DT_>::CUDATensor(const ShapeType& shape, void* vdata) : owner_(false), mem_(vdata) {
+CUDATensor<_DT_>::CUDATensor(const ShapeType& shape, void* vdata) : size_(0), owner_(false), mem_(vdata) {
     size_t asize = 0;
     size_t number = shape.numel();
     if ( _DT_ == DataType::F32 ) {
@@ -90,7 +90,7 @@ CUDATensor<_DT_>::CUDATensor(const ShapeType& shape, void* vdata) : owner_(false
     } else {
         vt_fatal_error();
     }
-    const_cast<size_t>(size_) = asize;
+    *const_cast<size_t *>(&size_) = asize;
 }
 
 template<DataType _DT_>
@@ -190,7 +190,7 @@ ComputingReturn CUDATensor<_DT_>::op_rotary_cache(ComputingContext* ctx, tensor_
         std::vector<float> cos_sin;
         vt::fill_rotary_cache(cos_sin, len, dims, base);
 
-        auto stream = ComputingContext::cuda_stream;
+        auto stream = ctx->cuda_stream;
         CUDA_CHECK(cudaMemcpyAsync( data(), cos_sin.data(), self->items() * sizeof(float), cudaMemcpyHostToDevice, stream));
         return OP_OK;
     } 
@@ -202,7 +202,7 @@ ComputingReturn CUDATensor<_DT_>::op_causal_mask(ComputingContext* ctx, tensor_t
     int batch = self->shape()[0];
     int full_tokens = self->shape()[1];
     int new_tokens = out->shape()[2];
-    auto stream = ComputingContext::cuda_stream;
+    auto stream = ctx->cuda_stream;
 
     int* mask  = (int *)data();
     if ( out->dtype() == DataType::F32 ) {
@@ -226,6 +226,7 @@ ComputingReturn CUDATensor<_DT_>::op_copy_from(ComputingContext* ctx, tensor_t s
     auto stream = ctx->cuda_stream;
     void* from = std::get<1>( src->op_data(ctx, src) );
     CUDA_CHECK(cudaMemcpyAsync(data(), from, size_, cudaMemcpyHostToDevice, stream));
+    return OP_OK;
 }
 
 template<DataType _DT_>
@@ -249,23 +250,23 @@ std::variant<ComputingReturn, tensor_t> CUDATensor<_DT_>::op_view(ComputingConte
     ShapeType newShape(newShape_);
     if ( _DT_ == DataType::F32 ) {
         void *newData = (char *)data() + offset * sizeof(float);
-        auto* newCudaTensor = new CUDATensor<DataType::F32>(newShape, newData);
-        return std::make_shared<TensorType>(newCudaTensor, newShape);
+        auto* newCUDATensor = new CUDATensor<DataType::F32>(newShape, newData);
+        return std::make_shared<TensorType>(newCUDATensor, newShape);
     }
     if ( _DT_ == DataType::I32 ) {
         void *newData = (char *)data() + offset * sizeof(int);
-        auto* newCudaTensor = new CUDATensor<DataType::I32>(newShape, newData);
-        return std::make_shared<TensorType>(newCudaTensor, newShape);
+        auto* newCUDATensor = new CUDATensor<DataType::I32>(newShape, newData);
+        return std::make_shared<TensorType>(newCUDATensor, newShape);
     }
     if ( _DT_ == DataType::F16 ) {
         void *newData = (char *)data() + offset * sizeof(local_fp16_t);
-        auto* newCudaTensor = new CUDATensor<DataType::F16>(newShape, newData);
-        return std::make_shared<TensorType>(newCudaTensor, newShape);
+        auto* newCUDATensor = new CUDATensor<DataType::F16>(newShape, newData);
+        return std::make_shared<TensorType>(newCUDATensor, newShape);
     }
     if ( _DT_ == DataType::BF16 ) {
         void *newData = (char *)data() + offset * sizeof(local_bf16_t);
-        auto* newCudaTensor = new CUDATensor<DataType::BF16>(newShape, newData);
-        return std::make_shared<TensorType>(newCudaTensor, newShape);
+        auto* newCUDATensor = new CUDATensor<DataType::BF16>(newShape, newData);
+        return std::make_shared<TensorType>(newCUDATensor, newShape);
     }
     return OP_TODO_ERROR;
 }
@@ -290,20 +291,20 @@ std::variant<ComputingReturn, tensor_t> CUDATensor<_DT_>::op_view_as(ComputingCo
     }
 
     if ( DT == DataType::F32 ) {
-        auto* newCudaTensor = new CUDATensor<DataType::F32>(newShape, newData);
-        return std::make_shared<TensorType>(newCudaTensor, newShape);
+        auto* newCUDATensor = new CUDATensor<DataType::F32>(newShape, newData);
+        return std::make_shared<TensorType>(newCUDATensor, newShape);
     }
     if ( DT == DataType::I32 ) {
-        auto* newCudaTensor = new CUDATensor<DataType::I32>(newShape, newData);
-        return std::make_shared<TensorType>(newCudaTensor, newShape);
+        auto* newCUDATensor = new CUDATensor<DataType::I32>(newShape, newData);
+        return std::make_shared<TensorType>(newCUDATensor, newShape);
     }
     if ( DT == DataType::F16 ) {
-        auto* newCudaTensor = new CUDATensor<DataType::F16>(newShape, newData);
-        return std::make_shared<TensorType>(newCudaTensor, newShape);
+        auto* newCUDATensor = new CUDATensor<DataType::F16>(newShape, newData);
+        return std::make_shared<TensorType>(newCUDATensor, newShape);
     }
     if ( DT == DataType::BF16 ) {
-        auto* newCudaTensor = new CUDATensor<DataType::BF16>(newShape, newData);
-        return std::make_shared<TensorType>(newCudaTensor, newShape);
+        auto* newCUDATensor = new CUDATensor<DataType::BF16>(newShape, newData);
+        return std::make_shared<TensorType>(newCUDATensor, newShape);
     }
     return OP_TODO_ERROR;
 }
@@ -336,5 +337,49 @@ ComputingReturn CUDATensor<_DT_>::op_reshape(ComputingContext* ctx, tensor_t sel
     }
     return OP_TODO_ERROR;
 }
+
+
+tensor_t create_cuda_f32(std::vector<size_t>& shape_) {
+    ShapeType shape(shape_);
+    CUDATensor<DataType::F32>* tensor = new CUDATensor<DataType::F32>(shape);
+    return std::make_shared<TensorType>(tensor, shape);
+}
+
+tensor_t create_cuda_i32(std::vector<size_t>& shape_) {
+    ShapeType shape(shape_);
+    CUDATensor<DataType::I32>* tensor = new CUDATensor<DataType::I32>(shape);
+    return std::make_shared<TensorType>(tensor, shape);
+}
+
+tensor_t create_cuda_f16(std::vector<size_t>& shape_) {
+    ShapeType shape(shape_);
+    CUDATensor<DataType::F16>* tensor = new CUDATensor<DataType::F16>(shape);
+    return std::make_shared<TensorType>(tensor, shape);
+}
+
+tensor_t create_cuda_bf16(std::vector<size_t>& shape_) {
+    ShapeType shape(shape_);
+    CUDATensor<DataType::BF16>* tensor = new CUDATensor<DataType::BF16>(shape);
+    return std::make_shared<TensorType>(tensor, shape);
+}
+
+tensor_t create_cuda_q8(std::vector<size_t>& shape_) {
+    ShapeType shape(shape_);
+    CUDATensor<DataType::Q8>* tensor = new CUDATensor<DataType::Q8>(shape);
+    return std::make_shared<TensorType>(tensor, shape);
+}
+
+tensor_t create_cuda_q4(std::vector<size_t>& shape_) {
+    ShapeType shape(shape_);
+    CUDATensor<DataType::Q4>* tensor = new CUDATensor<DataType::Q4>(shape);
+    return std::make_shared<TensorType>(tensor, shape);
+}
+
+tensor_t create_cuda_pq(std::vector<size_t>& shape_) {
+    ShapeType shape(shape_);
+    CUDATensor<DataType::PQ>* tensor = new CUDATensor<DataType::PQ>(shape);
+    return std::make_shared<TensorType>(tensor, shape);
+}
+
 
 }

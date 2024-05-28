@@ -342,49 +342,75 @@ ComputingReturn TensorType::op_conv2d(ComputingContext* ctx, tensor_t self, tens
 }
 
 //*************************************************************************
+#define _DELETE_(TT) \
+    if ( impl_.index() == ImplType::TT ) { \
+        delete std::get<ImplType::TT>(impl_); \
+        return;                               \
+    }
+
+TensorType::~TensorType() {
+    _DELETE_(HOST_F32)
+    _DELETE_(HOST_I32)
+    _DELETE_(HOST_F16)
+    _DELETE_(HOST_BF16)
+    _DELETE_(HOST_Q8)
+    _DELETE_(HOST_Q4)
+    _DELETE_(HOST_PQ)
+
+#ifdef _USING_DEVICE_CUDA_
+    _DELETE_(CUDA_F32)
+    _DELETE_(CUDA_I32)
+    _DELETE_(CUDA_F16)
+    _DELETE_(CUDA_BF16)
+    _DELETE_(CUDA_Q8)
+    _DELETE_(CUDA_Q4)
+    _DELETE_(CUDA_PQ)
+#endif
+
+}
 TensorType::TensorType(host_f32_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::F32) {
-    impl_ = std::unique_ptr<host_f32_t>(tensor);
+    impl_ = tensor;
 }
 TensorType::TensorType(host_i32_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::I32) {
-    impl_ = std::unique_ptr<host_i32_t>(tensor);
+    impl_ = tensor;
 }
 TensorType::TensorType(host_f16_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::F16) {
-    impl_ = std::unique_ptr<host_f16_t>(tensor);
+    impl_ = tensor;
 }
 TensorType::TensorType(host_bf16_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::BF16) {
-    impl_ = std::unique_ptr<host_bf16_t>(tensor);
+    impl_ = tensor;
 }
 TensorType::TensorType(host_q8_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Q8) {
-    impl_ = std::unique_ptr<host_q8_t>(tensor);
+    impl_ = tensor;
 }
 TensorType::TensorType(host_q4_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Q4) {
-    impl_ = std::unique_ptr<host_q4_t>(tensor);
+    impl_ = tensor;
 }
 TensorType::TensorType(host_pq_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::PQ) {
-    impl_ = std::unique_ptr<host_pq_t>(tensor);
+    impl_ = tensor;
 }
 
 #ifdef _USING_DEVICE_CUDA_
 TensorType::TensorType(cuda_f32_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::F32) {
-    impl_ = std::unique_ptr<cuda_f32_t>(tensor);
+    impl_ = tensor;
 }
 TensorType::TensorType(cuda_i32_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::I32) {
-    impl_ = std::unique_ptr<cuda_i32_t>(tensor);
+    impl_ = tensor;
 }
 TensorType::TensorType(cuda_f16_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::F16) {
-    impl_ = std::unique_ptr<cuda_f16_t>(tensor);
+    impl_ = tensor;
 }
 TensorType::TensorType(cuda_bf16_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::BF16) {
-    impl_ = std::unique_ptr<cuda_bf16_t>(tensor);
+    impl_ = tensor;
 }
 TensorType::TensorType(cuda_q8_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Q8) {
-    impl_ = std::unique_ptr<cuda_q8_t>(tensor);
+    impl_ = tensor;
 }
 TensorType::TensorType(cuda_q4_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Q4) {
-    impl_ = std::unique_ptr<cuda_q4_t>(tensor);
+    impl_ = tensor;
 }
 TensorType::TensorType(cuda_pq_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::PQ) {
-    impl_ = std::unique_ptr<cuda_pq_t>(tensor);
+    impl_ = tensor;
 }
 #endif
 

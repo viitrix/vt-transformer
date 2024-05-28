@@ -10,7 +10,7 @@ namespace vt {
 
 template <DataType _DTYPE_>
 struct CUDATensor : public TransformerComputing {
-    ~CUDATensor();
+    virtual ~CUDATensor();
     CUDATensor(const ShapeType& shape);
     CUDATensor(const ShapeType& shape, void * vdata);
 

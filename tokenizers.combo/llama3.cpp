@@ -12,6 +12,24 @@
 
 namespace vt {
 
+inline std::string fileToString(const char* filename) {
+    std::ifstream t(filename);
+    if ( ! t.is_open() ) {
+        std::cout << "Can't open " << filename << std::endl;
+        exit(0);
+    }
+
+    std::string str;
+    t.seekg(0, std::ios::end);
+    str.reserve(t.tellg());
+    t.seekg(0, std::ios::beg);
+
+    str.assign((std::istreambuf_iterator<char>(t)),
+        std::istreambuf_iterator<char>());
+
+    return str;
+}
+
 struct Llama3Tokenizer : public Tokenizer {
     TokenizerHandle rustObj;
     Llama3Tokenizer(const char* file_name)  {

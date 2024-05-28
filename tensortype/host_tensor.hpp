@@ -9,7 +9,7 @@ namespace vt {
 
 template <DataType _DTYPE_>
 struct HostTensor : public TransformerComputing {
-    ~HostTensor();
+    virtual ~HostTensor();
     HostTensor(const ShapeType& shape);
 
 public:

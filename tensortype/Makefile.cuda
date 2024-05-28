@@ -1,6 +1,6 @@
 .PHONY: all
 
-FLAGS = -Wall -O3 -Wno-maybe-uninitialized -Wno-strict-aliasing -fopenmp \
+FLAGS = -Wall -O3 -Wno-maybe-uninitialized -Wno-strict-aliasing -Wno-uninitialized -fopenmp \
 		-D_USING_DEVICE_CUDA_
 
 INC = -I. -I../install/include \
@@ -8,10 +8,10 @@ INC = -I. -I../install/include \
 
 all: libtensortype.a
 
-libtensortype.a: tensortype.o context.o common.o host_tensor.o cuda_tensor.o dag.o nn_operators.o
+libtensortype.a: context.o common.o dag.o  tensortype.o  host_tensor.o cuda_tensor.o nn_operators.o
 	 ar rcs $@ $? 
 
-tensortype.o: computing.hpp common.hpp tensortype.hpp tensortype.cpp
+tensortype.o: computing.hpp common.hpp tensortype.hpp tensortype.cpp host_tensor.hpp cuda_tensor.hpp
 	g++ $(FLAGS) -c -o $@ $(INC) tensortype.cpp
 
 context.o: computing.hpp common.hpp tensortype.hpp context.cpp 
@@ -20,7 +20,7 @@ context.o: computing.hpp common.hpp tensortype.hpp context.cpp
 common.o: common.hpp common.cpp 
 	g++ $(FLAGS) -c -o $@ $(INC) common.cpp
 
-dag.o: computing.hpp common.hpp tensortype.hpp dag.hpp
+dag.o: computing.hpp common.hpp tensortype.hpp dag.hpp dag.cpp
 	g++ $(FLAGS) -c -o $@ $(INC) dag.cpp
 
 nn_operators.o: computing.hpp common.hpp tensortype.hpp context.hpp nn_operators.cpp

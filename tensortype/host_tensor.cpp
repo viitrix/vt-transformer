@@ -13,7 +13,7 @@ HostTensor<_DT_>::~HostTensor() {
 }
 
 template<DataType _DT_>
-HostTensor<_DT_>::HostTensor(const ShapeType& shape) : owner_(true) {
+HostTensor<_DT_>::HostTensor(const ShapeType& shape) : size_(0), owner_(true) {
     size_t asize = 0;
     size_t number = shape.numel();
     if ( _DT_ == DataType::F32 ) {
@@ -26,7 +26,7 @@ HostTensor<_DT_>::HostTensor(const ShapeType& shape) : owner_(true) {
         vt_fatal_error();
     }
 
-    const_cast<size_t>(size_) = asize;
+    *const_cast<size_t*>(&size_) = asize;
     mem_ = malloc(asize);
 }
 
@@ -120,6 +120,49 @@ std::variant<ComputingReturn, void *> HostTensor<_DT_>::op_data(ComputingContext
     return mem_;
 }
 
+
+tensor_t create_host_f32(std::vector<size_t>& shape_) {
+    ShapeType shape(shape_);
+    HostTensor<DataType::F32>* tensor = new HostTensor<DataType::F32>(shape);
+    return std::make_shared<TensorType>(tensor, shape);
+}
+
+tensor_t create_host_i32(std::vector<size_t>& shape_) {
+    ShapeType shape(shape_);
+    HostTensor<DataType::I32>* tensor = new HostTensor<DataType::I32>(shape);
+    return std::make_shared<TensorType>(tensor, shape);
+}
+
+tensor_t create_host_f16(std::vector<size_t>& shape_) {
+    ShapeType shape(shape_);
+    HostTensor<DataType::F16>* tensor = new HostTensor<DataType::F16>(shape);
+    return std::make_shared<TensorType>(tensor, shape);
+}
+
+tensor_t create_host_bf16(std::vector<size_t>& shape_) {
+    ShapeType shape(shape_);
+    HostTensor<DataType::BF16>* tensor = new HostTensor<DataType::BF16>(shape);
+    return std::make_shared<TensorType>(tensor, shape);
+}
+
+
+tensor_t create_host_q8(std::vector<size_t>& shape_) {
+    ShapeType shape(shape_);
+    HostTensor<DataType::Q8>* tensor = new HostTensor<DataType::Q8>(shape);
+    return std::make_shared<TensorType>(tensor, shape);
+}
+
+tensor_t create_host_q4(std::vector<size_t>& shape_) {
+    ShapeType shape(shape_);
+    HostTensor<DataType::Q4>* tensor = new HostTensor<DataType::Q4>(shape);
+    return std::make_shared<TensorType>(tensor, shape);
+}
+
+tensor_t create_host_pq(std::vector<size_t>& shape_) {
+    ShapeType shape(shape_);
+    HostTensor<DataType::PQ>* tensor = new HostTensor<DataType::PQ>(shape);
+    return std::make_shared<TensorType>(tensor, shape);
+}
 
 
 }

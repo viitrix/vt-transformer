@@ -76,6 +76,7 @@ inline const char* DataType_name(DataType type_) {
 // Logical/Math shape of a tensor
 struct ShapeType {
 public:
+    ~ShapeType() {}
     ShapeType() = delete;
     ShapeType(const std::vector<size_t>& dims) {
         size_t ND = dims.size();
@@ -281,7 +282,7 @@ public:
 
 #define _CONVERT_(TT) \
         if ( impl_.index() == ImplType::TT ) { \
-            return (TransformerComputing *)std::get<ImplType::TT>(impl_).get(); \
+            return (TransformerComputing *)std::get<ImplType::TT>(impl_); \
         }
 
     TransformerComputing* impl() {
@@ -307,7 +308,7 @@ public:
 #define _ACCESSOR_(T, TT) \
     T##_t * T() {             \
         if ( impl_.index() == ImplType::TT ) { \
-            return std::get<ImplType::TT>(impl_).get();       \
+            return std::get<ImplType::TT>(impl_);       \
         }                               \
         vt::_M_Panic(__FILE__, __LINE__, "Can't be here!"); \
         return nullptr; \
@@ -385,21 +386,21 @@ private:
     // internal pointer based on unique_ptr auto delete
     using TensorImpl = std::variant<
 #ifdef _USING_DEVICE_CUDA_
-                  std::unique_ptr<cuda_f32_t>,
-                  std::unique_ptr<cuda_i32_t>,
-                  std::unique_ptr<cuda_f16_t>,
-                  std::unique_ptr<cuda_bf16_t>,
-                  std::unique_ptr<cuda_q8_t>,
-                  std::unique_ptr<cuda_q4_t>,
-                  std::unique_ptr<cuda_pq_t>,
+                  cuda_f32_t*,
+                  cuda_i32_t*,
+                  cuda_f16_t*,
+                  cuda_bf16_t*,
+                  cuda_q8_t*,
+                  cuda_q4_t*,
+                  cuda_pq_t*,
 #endif
-                  std::unique_ptr<host_f32_t>,
-                  std::unique_ptr<host_i32_t>,
-                  std::unique_ptr<host_f16_t>,
-                  std::unique_ptr<host_bf16_t>,
-                  std::unique_ptr<host_q8_t>,
-                  std::unique_ptr<host_q4_t>,
-                  std::unique_ptr<host_pq_t> >;
+                  host_f32_t*,
+                  host_i32_t*,
+                  host_f16_t*,
+                  host_bf16_t*,
+                  host_q8_t*,
+                  host_q4_t*,
+                  host_pq_t* >;
 
     TensorImpl impl_;
 };
