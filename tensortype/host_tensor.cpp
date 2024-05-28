@@ -115,4 +115,11 @@ std::variant<ComputingReturn, size_t> HostTensor<_DT_>::op_sizeof(ComputingConte
     return size_;
 }
 
+template <DataType _DT_>
+std::variant<ComputingReturn, void *> HostTensor<_DT_>::op_data(ComputingContext* ctx, tensor_t self) {
+    return mem_;
+}
+
+
+
 }

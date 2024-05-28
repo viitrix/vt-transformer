@@ -13,12 +13,15 @@ struct HostTensor : public TransformerComputing {
     HostTensor(const ShapeType& shape);
 
 public:
+    
     ComputingReturn io_load(ComputingContext* ctx, tensor_t self, const char* fileName) override;
     ComputingReturn io_save(ComputingContext* ctx, tensor_t self, const char* fileName) override;
     ComputingReturn io_dump(ComputingContext* ctx, tensor_t self) override;
     ComputingReturn io_pipe_read(ComputingContext* ctx, tensor_t self) override;
     ComputingReturn io_pipe_write(ComputingContext* ctx, tensor_t self, int dst) override;
+
     std::variant<ComputingReturn, size_t> op_sizeof(ComputingContext* ctx, tensor_t self) override;
+    std::variant<ComputingReturn, void *> op_data( ComputingContext* ctx, tensor_t self) override;
 
 protected:
     const size_t size_;

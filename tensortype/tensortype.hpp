@@ -201,6 +201,7 @@ public:
     ComputingReturn io_pipe_read(ComputingContext* ctx, tensor_t self) override;
     ComputingReturn io_pipe_write(ComputingContext* ctx, tensor_t self, int dst) override;
     std::variant<ComputingReturn, size_t> op_sizeof(ComputingContext* ctx, tensor_t self) override;
+    std::variant<ComputingReturn, void *> op_data( ComputingContext* ctx, tensor_t self) override;
     ComputingReturn op_zero(ComputingContext* ctx, tensor_t self) override;
     ComputingReturn op_fill(ComputingContext* ctx, tensor_t self, float value) override;
     ComputingReturn op_rotary_cache(ComputingContext* ctx, tensor_t self, float base) override;
@@ -242,6 +243,40 @@ public:
     }
     const size_t items() {
         return shape_.numel();
+    }
+    size_t impl_index() {
+        return impl_.index();
+    }
+
+    bool is_host() {
+        auto ii = impl_index();
+        if ( (ii >= HOST_F32) && (ii <= HOST_PQ) ) {
+            return true;
+        }
+        return false;
+    }
+
+#ifdef _USING_DEVICE_CUDA_
+    bool is_cuda() {
+        auto ii = impl_index();
+        if ( (ii >= CUDA_F32) && (ii <= CUDA_PQ) ) {
+            return true;
+        }
+        return false;
+    }
+#endif
+
+    bool is_quantized() {
+        if ( dtype_ == DataType::Q8 ) {
+            return true;
+        }
+        if ( dtype_ == DataType::Q4 ) {
+            return true;
+        }
+        if ( dtype_ == DataType::PQ ) {
+            return true;
+        }
+        return false;
     }
 
 #define _CONVERT_(TT) \
@@ -295,19 +330,17 @@ public:
 #endif
 
     // help functions
-    const char* device_name();
-    void* device_data();
-    bool is_quantized() {
-        if ( dtype_ == DataType::Q8 ) {
-            return true;
+    const char* device_name() {
+        if ( (impl_index() <= ImplType::HOST_PQ) && (impl_index() >= ImplType::HOST_F32) ) {
+            return "host";
         }
-        if ( dtype_ == DataType::Q4 ) {
-            return true;
+    #ifdef _USING_DEVICE_CUDA_
+        if ( (impl_index() <= ImplType::CUDA_PQ) && (impl_index() >= ImplType::CUDA_F32) ) {
+            return "cuda";
         }
-        if ( dtype_ == DataType::PQ ) {
-            return true;
-        }
-        return false;
+    #endif
+        vt_panic("Can't be here!");
+        return "";
     }
 
     std::string to_string() {

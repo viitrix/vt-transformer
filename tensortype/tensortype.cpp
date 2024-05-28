@@ -51,6 +51,17 @@ std::variant<ComputingReturn, size_t> TensorType::op_sizeof(ComputingContext* ct
     return result;
 }
 
+std::variant<ComputingReturn, void *> TensorType::op_data(ComputingContext* ctx, tensor_t self) {
+    CHECK_SELF();
+    auto result = impl()->op_data(ctx, self);
+    if ( result.index() == 0) {
+        ComputingReturn ret = std::get<0>(result);
+        op_check(ret, "data");
+    }
+    return result;
+}
+
+
 ComputingReturn TensorType::op_zero(ComputingContext* ctx, tensor_t self) {
     CHECK_SELF();
     auto ret = impl()->op_zero(ctx, self);

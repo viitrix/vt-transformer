@@ -50,6 +50,9 @@ struct TransformerComputing {
     virtual std::variant<ComputingReturn, size_t> op_sizeof(ComputingContext* ctx, tensor_t self) {
         return OP_TODO_ERROR;
     }
+    virtual std::variant<ComputingReturn, void *> op_data( ComputingContext* ctx, tensor_t self) {
+        return OP_TODO_ERROR;
+    }
     virtual ComputingReturn op_zero(ComputingContext* ctx, tensor_t self) {
         return OP_TODO_ERROR;
     }

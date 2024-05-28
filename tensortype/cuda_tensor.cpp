@@ -1,6 +1,7 @@
 #include "cuda_tensor.hpp"
 #include "common.hpp"
 #include "context.hpp"
+#include "host_tensor.hpp"
 
 namespace vt {
 
@@ -72,6 +73,24 @@ CUDATensor<_DT_>::CUDATensor(const ShapeType& shape) : owner_(true) {
 }
 
 template<DataType _DT_>
+CUDATensor<_DT_>::CUDATensor(const ShapeType& shape, void* vdata) : owner_(false), mem_(vdata) {
+    size_t asize = 0;
+    size_t number = shape.numel();
+    if ( _DT_ == DataType::F32 ) {
+        asize = sizeof(float) * number;
+    } else if ( _DT_ == DataType::I32 ) {
+        asize = sizeof(int) * number;
+    } else if ( _DT_ == DataType::F16 ) {
+        asize = sizeof(unsigned short) * number;
+    } else if ( _DT_ == DataType::BF16 ) {
+        asize = sizeof(unsigned short) * number;
+    } else {
+        vt_fatal_error();
+    }
+    const_cast<size_t>(size_) = asize;
+}
+
+template<DataType _DT_>
 ComputingReturn CUDATensor<_DT_>::io_load(ComputingContext* ctx, tensor_t self, const char* fileName) {
     std::vector<unsigned char> src;
     read_data(fileName, src);
@@ -135,6 +154,11 @@ std::variant<ComputingReturn, size_t> CUDATensor<_DT_>::op_sizeof(ComputingConte
     return size_;
 }
 
+template <DataType _DT_>
+std::variant<ComputingReturn, void *> CUDATensor<_DT_>::op_data(ComputingContext* ctx, tensor_t self) {
+    return mem_;
+}
+
 template<DataType _DT_>
 ComputingReturn CUDATensor<_DT_>::op_zero(ComputingContext* ctx, tensor_t self) {
     if ( (_DT_ == DataType::F32) || (_DT_ == DataType::I32) || (_DT_ == DataType::F16) || (_DT_ == DataType::BF16) ) {
@@ -192,7 +216,126 @@ ComputingReturn CUDATensor<_DT_>::op_causal_mask(ComputingContext* ctx, tensor_t
         */
         return OP_OK;
     }
-    return OP_OUTPUT_ERROR;
+    return OP_TODO_ERROR;
+}
+
+template<DataType _DT_>
+ComputingReturn CUDATensor<_DT_>::op_copy_from(ComputingContext* ctx, tensor_t self, tensor_t src) {
+    if ( !src->is_host() ) {
+        return OP_TODO_ERROR;
+    }
+    auto stream = ctx->cuda_stream;
+    void* from = std::get<1>( src->op_data(ctx, src) );
+    CUDA_CHECK(cudaMemcpyAsync(data(), from, size_, cudaMemcpyHostToDevice, stream));
+}
+
+template<DataType _DT_>
+ComputingReturn CUDATensor<_DT_>::op_copy_to(ComputingContext* ctx, tensor_t self,  tensor_t dst) {
+    if ( !dst->is_host() ) {
+        return OP_TODO_ERROR;
+    }
+    auto stream = ctx->cuda_stream;
+    void* to = std::get<1>( dst->op_data(ctx, dst) );
+    CUDA_CHECK(cudaMemcpyAsync(to, data(), size_, cudaMemcpyHostToDevice, stream));
+    return OP_TODO_ERROR;
+}
+
+template<DataType _DT_>
+ComputingReturn CUDATensor<_DT_>::op_convert(ComputingContext* ctx, tensor_t self, tensor_t src) {    
+    return OP_TODO_ERROR;
+}
+
+template<DataType _DT_>
+std::variant<ComputingReturn, tensor_t> CUDATensor<_DT_>::op_view(ComputingContext* ctx, tensor_t self, size_t offset, const std::vector<size_t>& newShape_) {
+    ShapeType newShape(newShape_);
+    if ( _DT_ == DataType::F32 ) {
+        void *newData = (char *)data() + offset * sizeof(float);
+        auto* newCudaTensor = new CUDATensor<DataType::F32>(newShape, newData);
+        return std::make_shared<TensorType>(newCudaTensor, newShape);
+    }
+    if ( _DT_ == DataType::I32 ) {
+        void *newData = (char *)data() + offset * sizeof(int);
+        auto* newCudaTensor = new CUDATensor<DataType::I32>(newShape, newData);
+        return std::make_shared<TensorType>(newCudaTensor, newShape);
+    }
+    if ( _DT_ == DataType::F16 ) {
+        void *newData = (char *)data() + offset * sizeof(local_fp16_t);
+        auto* newCudaTensor = new CUDATensor<DataType::F16>(newShape, newData);
+        return std::make_shared<TensorType>(newCudaTensor, newShape);
+    }
+    if ( _DT_ == DataType::BF16 ) {
+        void *newData = (char *)data() + offset * sizeof(local_bf16_t);
+        auto* newCudaTensor = new CUDATensor<DataType::BF16>(newShape, newData);
+        return std::make_shared<TensorType>(newCudaTensor, newShape);
+    }
+    return OP_TODO_ERROR;
+}
+
+template<DataType _DT_>
+std::variant<ComputingReturn, tensor_t> CUDATensor<_DT_>::op_view_as(ComputingContext* ctx, tensor_t self, size_t offset, const std::vector<size_t>& newShape_, const char* dtype) {
+    DataType DT = DataType_from(dtype);
+
+    ShapeType newShape(newShape_);
+
+    void *newData = nullptr;
+    if ( _DT_ == DataType::F32 ) {
+        newData = (char *)data() + offset * sizeof(float);
+    } else if ( _DT_ == DataType::I32 ) {
+        newData = (char *)data() + offset * sizeof(int);
+    } else if ( _DT_ == DataType::F16 ) {
+        newData = (char *)data() + offset * sizeof(local_fp16_t);
+    } else if ( _DT_ == DataType::BF16 ) {
+        newData = (char *)data() + offset * sizeof(local_bf16_t);
+    } else {
+        return OP_TODO_ERROR;
+    }
+
+    if ( DT == DataType::F32 ) {
+        auto* newCudaTensor = new CUDATensor<DataType::F32>(newShape, newData);
+        return std::make_shared<TensorType>(newCudaTensor, newShape);
+    }
+    if ( DT == DataType::I32 ) {
+        auto* newCudaTensor = new CUDATensor<DataType::I32>(newShape, newData);
+        return std::make_shared<TensorType>(newCudaTensor, newShape);
+    }
+    if ( DT == DataType::F16 ) {
+        auto* newCudaTensor = new CUDATensor<DataType::F16>(newShape, newData);
+        return std::make_shared<TensorType>(newCudaTensor, newShape);
+    }
+    if ( DT == DataType::BF16 ) {
+        auto* newCudaTensor = new CUDATensor<DataType::BF16>(newShape, newData);
+        return std::make_shared<TensorType>(newCudaTensor, newShape);
+    }
+    return OP_TODO_ERROR;
+}
+
+template<DataType _DT_>
+ComputingReturn CUDATensor<_DT_>::op_reshape(ComputingContext* ctx, tensor_t self, size_t offset, const std::vector<size_t>& newShape_) {
+    ShapeType newShape(newShape_);
+    if ( owner_ == true ) {
+        return OP_INPUT_ERROR;
+    }
+    if ( newShape.numel() + offset > self->items()  ) {
+        return OP_INPUT_ERROR;
+    }
+
+    if ( _DT_ == DataType::F32 ) {
+        mem_  = (char *)data() + offset * sizeof(float);
+        return OP_OK;
+    }
+    if ( _DT_ == DataType::I32 ) {
+        mem_  = (char *)data() + offset * sizeof(int);
+        return OP_OK;
+    }
+    if ( _DT_ == DataType::F16 ) {
+        mem_  = (char *)data() + offset * sizeof(local_fp16_t);
+        return OP_OK;
+    }
+    if ( _DT_ == DataType::BF16 ) {
+        mem_  = (char *)data() + offset * sizeof(local_bf16_t);
+        return OP_OK;
+    }
+    return OP_TODO_ERROR;
 }
 
 }
