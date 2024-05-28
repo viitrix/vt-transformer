@@ -2,8 +2,11 @@
 #include "common.hpp"
 #include "context.hpp"
 #include "host_tensor.hpp"
+#include "cuda_kernels.hpp"
 
 namespace vt {
+
+using device_fp16_t = __half;
 
 void copy_to_local(std::vector<unsigned char> dst, void* src, size_t length, cudaStream_t stream) {
     dst.clear();
@@ -203,17 +206,13 @@ ComputingReturn CUDATensor<_DT_>::op_causal_mask(ComputingContext* ctx, tensor_t
 
     int* mask  = (int *)data();
     if ( out->dtype() == DataType::F32 ) {
-        /*
         float* dst = (float *)out->cuda_f32()->data();
-        cuda::causal_mask<float>(mask, dst, batch, new_tokens, full_tokens, stream);
-        */
+        cuda::kr_causal_mask<float>(mask, dst, batch, new_tokens, full_tokens, stream);
         return OP_OK;
     }
     if ( out->dtype() == DataType::F16 ) {
-        /*
-        device_fp16_t* dst = (device_fp16_t *)out->cuda_fp16()->data();
-        cuda::causal_mask<device_fp16_t>(mask, dst, batch, new_tokens, full_tokens, stream);
-        */
+        device_fp16_t* dst = (device_fp16_t *)out->cuda_f16()->data();
+        cuda::kr_causal_mask<device_fp16_t>(mask, dst, batch, new_tokens, full_tokens, stream);
         return OP_OK;
     }
     return OP_TODO_ERROR;
