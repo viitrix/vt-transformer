@@ -11,7 +11,9 @@ set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 project(cuda_kernels LANGUAGES CUDA CXX)
 
 set(cuda_kernel_files
+    lt_sgemm.cu
     causal_mask.cu
+    convert.cu
     )
 
 

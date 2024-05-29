@@ -1,10 +1,56 @@
 #ifndef _CUDA_KERNELS_HPP_
 #define _CUDA_KERNELS_HPP_
 
+#include <cuda.h>
+#include <cuda_runtime.h>
+#include <cublas_v2.h>
+#include <cublasLt.h>
+#include <cudnn.h>
+
 namespace vt { namespace cuda {
 
+void lt_sgemm(cublasLtHandle_t ltHandle,
+             cublasOperation_t transa,
+             cublasOperation_t transb,
+             int m,
+             int n,
+             int k,
+             const float *alpha, /* host pointer */
+             const void *A, cudaDataType_t at,
+             int lda,
+             const void *B, cudaDataType_t bt,
+             int ldb,
+             const float *beta, /* host pointer */
+             void *C, cudaDataType_t ct,
+             int ldc,
+             void *workspace,
+             size_t workspaceSize);
+
+void lt_sgemm_batched(cublasLtHandle_t ltHandle,
+             cublasOperation_t transa,
+             cublasOperation_t transb,
+             int m,
+             int n,
+             int k,
+             const float *alpha, /* host pointer */
+             const void *A, cudaDataType_t at,
+             int lda,
+             const void *B, cudaDataType_t bt,
+             int ldb,
+             const float *beta, /* host pointer */
+             void *C, cudaDataType_t ct,
+             int ldc,
+             int batchCount,
+             void *workspace,
+             size_t workspaceSize);
+
+
 template <typename T>
-int kr_causal_mask(const int *mask, T *out, const int batch, const int new_tokens, const int full_tokens, cudaStream_t stream);
+int kr_causal_mask(const int *mask, T *out, const size_t batch, const size_t new_tokens, const size_t full_tokens, cudaStream_t stream);
+
+template <typename TF, typename TT>
+int kr_convert(const TF* src, TT* out, size_t items, cudaStream_t stream);
+
 
 
 }}

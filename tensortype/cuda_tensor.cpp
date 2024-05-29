@@ -14,7 +14,7 @@ void copy_to_local(std::vector<unsigned char> dst, void* src, size_t length, cud
     CUDA_CHECK(cudaMemcpyAsync(dst.data(), src, length, cudaMemcpyDeviceToHost, stream));
 }
 
-template<DataType _DT_> 
+template<DataType _DT_>
 cudnnTensorDescriptor_t create_cudnn_td_with(std::vector<size_t> shape) {
     cudnnTensorFormat_t  format = CUDNN_TENSOR_NCHW;
     cudnnDataType_t dtype;
@@ -25,7 +25,7 @@ cudnnTensorDescriptor_t create_cudnn_td_with(std::vector<size_t> shape) {
     } else if ( _DT_ == DataType::F16 ) {
         dtype = CUDNN_DATA_HALF;
     } else if ( _DT_ == DataType::BF16 ) {
-        dtype = CUDNN_DATA_BFLOAT16;    
+        dtype = CUDNN_DATA_BFLOAT16;
     } else if ( _DT_ == DataType::I32 ) {
         dtype = CUDNN_DATA_INT32;
     } else {
@@ -115,7 +115,7 @@ ComputingReturn CUDATensor<_DT_>::io_dump(ComputingContext* ctx, tensor_t self) 
         SIMPLE_DUMP(d);
         d = (float *)data() + self->items() - first8;
         copy_to_local(localData, d, first8 * sizeof(float), ctx->cuda_stream);
-        d = (float *)localData.data();         
+        d = (float *)localData.data();
         SIMPLE_DUMP(d);
         return OP_OK;
     }
@@ -125,7 +125,7 @@ ComputingReturn CUDATensor<_DT_>::io_dump(ComputingContext* ctx, tensor_t self) 
         SIMPLE_DUMP(d);
         d = (int *)data() + self->items() - first8;
         copy_to_local(localData, d, first8 * sizeof(int), ctx->cuda_stream);
-        d = (int *)localData.data();         
+        d = (int *)localData.data();
         SIMPLE_DUMP(d);
         return OP_OK;
     }
@@ -135,9 +135,9 @@ ComputingReturn CUDATensor<_DT_>::io_dump(ComputingContext* ctx, tensor_t self) 
         SIMPLE_DUMP_WITH(d, fp16_to_fp32);
         d = (local_fp16_t *)data() + self->items() - first8;
         copy_to_local(localData, d, first8 * sizeof(local_fp16_t), ctx->cuda_stream);
-        d = (local_fp16_t *)localData.data();         
+        d = (local_fp16_t *)localData.data();
         SIMPLE_DUMP_WITH(d, fp16_to_fp32);
-        return OP_OK;        
+        return OP_OK;
     }
     if ( _DT_ == DataType::BF16 ) {
         copy_to_local(localData, mem_, first8 * sizeof(local_bf16_t), ctx->cuda_stream);
@@ -145,7 +145,7 @@ ComputingReturn CUDATensor<_DT_>::io_dump(ComputingContext* ctx, tensor_t self) 
         SIMPLE_DUMP_WITH(d, bf16_to_fp32);
         d = (local_bf16_t *)mem_ + self->items() - first8;
         copy_to_local(localData, d, first8 * sizeof(local_bf16_t), ctx->cuda_stream);
-        d = (local_bf16_t *)localData.data();         
+        d = (local_bf16_t *)localData.data();
         SIMPLE_DUMP_WITH(d, bf16_to_fp32);
         return OP_OK;
     }
@@ -167,7 +167,7 @@ ComputingReturn CUDATensor<_DT_>::op_zero(ComputingContext* ctx, tensor_t self) 
     if ( (_DT_ == DataType::F32) || (_DT_ == DataType::I32) || (_DT_ == DataType::F16) || (_DT_ == DataType::BF16) ) {
         CUDA_CHECK( cudaMemset(data(), 0, size_) );
         return OP_OK;
-    } 
+    }
     return OP_TODO_ERROR;
 }
 
@@ -177,7 +177,7 @@ ComputingReturn CUDATensor<_DT_>::op_fill(ComputingContext* ctx, tensor_t self, 
         auto desc = create_cudnn_td_with<_DT_>( {self->items()} );
         CUDNN_CHECK( cudnnSetTensor( ctx->cudnn_handle, desc, data(), &value) );
         return OP_OK;
-    }    
+    }
     return OP_TODO_ERROR;
 }
 
@@ -193,7 +193,7 @@ ComputingReturn CUDATensor<_DT_>::op_rotary_cache(ComputingContext* ctx, tensor_
         auto stream = ctx->cuda_stream;
         CUDA_CHECK(cudaMemcpyAsync( data(), cos_sin.data(), self->items() * sizeof(float), cudaMemcpyHostToDevice, stream));
         return OP_OK;
-    } 
+    }
     return OP_TODO_ERROR;
 }
 
@@ -236,12 +236,25 @@ ComputingReturn CUDATensor<_DT_>::op_copy_to(ComputingContext* ctx, tensor_t sel
     }
     auto stream = ctx->cuda_stream;
     void* to = std::get<1>( dst->op_data(ctx, dst) );
-    CUDA_CHECK(cudaMemcpyAsync(to, data(), size_, cudaMemcpyHostToDevice, stream));
-    return OP_TODO_ERROR;
+    CUDA_CHECK(cudaMemcpyAsync(to, data(), size_, cudaMemcpyDeviceToHost, stream));
+    return OP_OK;
 }
 
 template<DataType _DT_>
-ComputingReturn CUDATensor<_DT_>::op_convert(ComputingContext* ctx, tensor_t self, tensor_t src) {    
+ComputingReturn CUDATensor<_DT_>::op_convert(ComputingContext* ctx, tensor_t self, tensor_t src) {
+    if ( _DT_ == DataType::F16 && src->dtype() == DataType::F32) {
+        auto stream = ctx->cuda_stream;
+        device_fp16_t* to = (device_fp16_t*)data();
+        float* from = (float  *) std::get<1>(src->op_data(ctx, src));
+        cuda::kr_convert<float, device_fp16_t>(from, to, self->items(), stream);
+    }
+    if ( _DT_ == DataType::F32 && src->dtype() == DataType::F16) {
+        auto stream = ctx->cuda_stream;
+        float* to = (float *)data();
+        device_fp16_t* from = (device_fp16_t  *) std::get<1>(src->op_data(ctx, src));
+        cuda::kr_convert<device_fp16_t, float>(from, to, self->items(), stream);
+    }
+
     return OP_TODO_ERROR;
 }
 
@@ -338,6 +351,150 @@ ComputingReturn CUDATensor<_DT_>::op_reshape(ComputingContext* ctx, tensor_t sel
     return OP_TODO_ERROR;
 }
 
+template<DataType _DT_>
+ComputingReturn CUDATensor<_DT_>::op_quantize(ComputingContext* ctx, tensor_t self, tensor_t out) {
+    return OP_TODO_ERROR;
+}
+
+template<DataType _DT_>
+ComputingReturn CUDATensor<_DT_>::op_dequantize(ComputingContext* ctx, tensor_t self, tensor_t out) {
+    return OP_TODO_ERROR;
+}
+
+template<DataType _DT_>
+ComputingReturn CUDATensor<_DT_>::op_embed(ComputingContext* ctx, tensor_t self, tensor_t table, tensor_t output) {
+    return OP_TODO_ERROR;
+}
+
+template<DataType _DT_>
+ComputingReturn CUDATensor<_DT_>::op_add(ComputingContext* ctx, tensor_t self, tensor_t b, tensor_t c) {
+    float alpha = 1.0;
+    float beta = 0.0;
+    cudnnOpTensorDescriptor_t opTensorDesc;
+    cudnnTensorDescriptor_t adesc, bdesc, cdesc;
+    void* data_a = data();
+    void* data_b = std::get<1>(b->op_data(ctx, b));
+    void* data_c = std::get<1>(c->op_data(ctx, c));
+
+    CUDNN_CHECK( cudnnCreateOpTensorDescriptor(&opTensorDesc) );
+    if ( _DT_ == DataType::F32 ) {
+        adesc = create_cudnn_td_with<DataType::F32>( self->shape().vec() );
+        bdesc = create_cudnn_td_with<DataType::F32>( b->shape().vec() );
+        cdesc = create_cudnn_td_with<DataType::F32>( c->shape().vec() );
+    } else if ( _DT_ == DataType::F16 ) {
+        adesc = create_cudnn_td_with<DataType::F16>( self->shape().vec() );
+        bdesc = create_cudnn_td_with<DataType::F16>( b->shape().vec() );
+        cdesc = create_cudnn_td_with<DataType::F16>( c->shape().vec() );
+    } else {
+        return OP_TODO_ERROR;
+    }
+
+    CUDNN_CHECK( cudnnSetOpTensorDescriptor(opTensorDesc, CUDNN_OP_TENSOR_ADD, CUDNN_DATA_FLOAT, CUDNN_PROPAGATE_NAN) );
+    CUDNN_CHECK( cudnnOpTensor(ctx->cudnn_handle,
+                                opTensorDesc,
+                                &alpha, adesc, data_a,
+                                &alpha, bdesc, data_b,
+                                &beta,  cdesc, data_c) );
+
+    CUDNN_CHECK( cudnnDestroyOpTensorDescriptor(opTensorDesc) );
+    return OP_OK;
+}
+
+template<DataType _DT_>
+ComputingReturn CUDATensor<_DT_>::op_mul(ComputingContext* ctx, tensor_t self, tensor_t b, tensor_t c) {
+    float alpha = 1.0;
+    float beta = 0.0;
+    cudnnOpTensorDescriptor_t opTensorDesc;
+    cudnnTensorDescriptor_t adesc, bdesc, cdesc;
+    void* data_a = data();
+    void* data_b = std::get<1>(b->op_data(ctx, b));
+    void* data_c = std::get<1>(c->op_data(ctx, c));
+
+    CUDNN_CHECK( cudnnCreateOpTensorDescriptor(&opTensorDesc) );
+    if ( _DT_ == DataType::F32 ) {
+        adesc = create_cudnn_td_with<DataType::F32>( self->shape().vec() );
+        bdesc = create_cudnn_td_with<DataType::F32>( b->shape().vec() );
+        cdesc = create_cudnn_td_with<DataType::F32>( c->shape().vec() );
+    } else if ( _DT_ == DataType::F16 ) {
+        adesc = create_cudnn_td_with<DataType::F16>( self->shape().vec() );
+        bdesc = create_cudnn_td_with<DataType::F16>( b->shape().vec() );
+        cdesc = create_cudnn_td_with<DataType::F16>( c->shape().vec() );
+    } else {
+        return OP_TODO_ERROR;
+    }
+
+    CUDNN_CHECK( cudnnSetOpTensorDescriptor(opTensorDesc, CUDNN_OP_TENSOR_MUL, CUDNN_DATA_FLOAT, CUDNN_PROPAGATE_NAN) );
+    CUDNN_CHECK( cudnnOpTensor(ctx->cudnn_handle,
+                                opTensorDesc,
+                                &alpha, adesc, data_a,
+                                &alpha, bdesc, data_b,
+                                &beta,  cdesc, data_c) );
+
+    CUDNN_CHECK( cudnnDestroyOpTensorDescriptor(opTensorDesc) );
+    return OP_OK;
+}
+
+template<DataType _DT_>
+ComputingReturn CUDATensor<_DT_>::op_linear(ComputingContext* ctx, tensor_t self, tensor_t w_, tensor_t b_, tensor_t y_) {
+    size_t batch = self->shape()[0];
+    size_t tokens = self->shape()[1];
+    size_t inSize = self->shape()[2];
+    size_t outSize = w_->shape()[0];
+
+    float alpha = 1.0;
+    float beta = 0.0;
+    int m = outSize;
+    int n = batch * tokens;
+    int k = inSize;
+
+    void* A = std::get<1>(w_->op_data(ctx, w_));
+    void* B = data();
+    void* C = std::get<1>(y_->op_data(ctx, y_));
+
+    if ( _DT_ == DataType::F32 && w_->dtype() == DataType::F32 ) {
+        cuda::lt_sgemm(ctx->cublasLt_handle,
+                CUBLAS_OP_T, CUBLAS_OP_N,
+                m, n, k,
+                &alpha, A, CUDA_R_32F, k,
+                B, CUDA_R_32F, k, &beta,
+                C, CUDA_R_32F, m,
+                ctx->cuda_workspace,
+                ctx->workspace_size);
+
+        if ( b_ != nullptr ) {
+            auto ydesc = create_cudnn_td_with<DataType::F32>({batch, 1, tokens, outSize});
+            auto bdesc = create_cudnn_td_with<DataType::F32>({1, 1, 1, outSize});
+            void* bias = std::get<1>(b_->op_data(ctx, b_));
+
+            beta = 1.0;
+            CUDNN_CHECK( cudnnAddTensor(ctx->cudnn_handle,
+                                        &alpha, bdesc, bias,
+                                        &beta, ydesc, C));
+        }
+    }
+    if ( _DT_ == DataType::F16 && w_->dtype() == DataType::F16 ) {
+        cuda::lt_sgemm(ctx->cublasLt_handle,
+                CUBLAS_OP_T, CUBLAS_OP_N,
+                m, n, k,
+                &alpha, A, CUDA_R_16F, k,
+                B, CUDA_R_16F, k, &beta,
+                C, CUDA_R_16F, m,
+                ctx->cuda_workspace,
+                ctx->workspace_size);
+
+        if ( b_ != nullptr ) {
+            auto ydesc = create_cudnn_td_with<DataType::F16>({batch, 1, tokens, outSize});
+            auto bdesc = create_cudnn_td_with<DataType::F16>({1, 1, 1, outSize});
+            void* bias = std::get<1>(b_->op_data(ctx, b_));
+
+            beta = 1.0;
+            CUDNN_CHECK( cudnnAddTensor(ctx->cudnn_handle,
+                                        &alpha, bdesc, bias,
+                                        &beta, ydesc, C));
+        }
+    }
+    return OP_OK;
+}
 
 tensor_t create_cuda_f32(std::vector<size_t>& shape_) {
     ShapeType shape(shape_);

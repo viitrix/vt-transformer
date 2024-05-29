@@ -37,7 +37,7 @@ __global__ void mask_float( const int *mask, float *out, const float minv,
 
 template <>
 int kr_causal_mask<float>(const int *mask, float *out,
-                          const int batch, const int new_tokens, const int full_tokens,
+                          const size_t batch, const size_t new_tokens, const size_t full_tokens,
                           cudaStream_t stream) {
 
     int len = batch * new_tokens;
@@ -86,7 +86,7 @@ __global__ void mask_fp16( const int *mask, __half *out,
 
 template <>
 int kr_causal_mask<__half>(const int *mask, __half *out,
-                           const int batch, const int new_tokens,const int full_tokens,
+                           const size_t batch, const size_t new_tokens,const size_t full_tokens,
                            cudaStream_t stream) {
 
     int len = batch * new_tokens;
