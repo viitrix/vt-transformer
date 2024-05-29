@@ -14,6 +14,7 @@ set(cuda_kernel_files
     lt_sgemm.cu
     causal_mask.cu
     convert.cu
+    layernorm.cu
     )
 
 

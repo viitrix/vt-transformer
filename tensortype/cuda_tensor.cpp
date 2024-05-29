@@ -496,6 +496,35 @@ ComputingReturn CUDATensor<_DT_>::op_linear(ComputingContext* ctx, tensor_t self
     return OP_OK;
 }
 
+template<DataType _DT_>
+ComputingReturn CUDATensor<_DT_>::op_layernorm(ComputingContext* ctx, tensor_t self, tensor_t mean, tensor_t var, tensor_t scale, tensor_t bias, tensor_t y, float eps) {
+     auto x = this;
+    size_t batch = self->shape()[0] * self->shape()[1];
+    size_t hidden = self->shape()[2];
+
+    auto m = std::get<1>(mean->op_data(ctx, mean));
+    auto v = std::get<1>(var->op_data(ctx, var));
+    auto s = std::get<1>(scale->op_data(ctx, scale));
+    auto b = std::get<1>(bias->op_data(ctx, bias));
+    auto out = std::get<1>(y->op_data(ctx, y));
+
+    auto stream = ctx->cuda_stream;
+    if ( _DT_ == DataType::F32 ) {
+        cuda::kr_layernorm<float>((float *)out, (float *)v, (float *)m,
+                              (float *)x, (float *)s, (float *)b, batch, hidden, eps, stream);
+
+        return OP_OK;
+    }
+    if ( _DT_ == DataType::F16 ) {
+        cuda::kr_layernorm<device_fp16_t>((device_fp16_t *)out, (device_fp16_t *)v, (device_fp16_t *)m,
+                              (device_fp16_t *)x, (device_fp16_t *)s, (device_fp16_t *)b, batch, hidden, eps, stream);
+
+        return OP_OK;
+    }
+
+    return OP_TODO_ERROR;
+}
+
 tensor_t create_cuda_f32(std::vector<size_t>& shape_) {
     ShapeType shape(shape_);
     CUDATensor<DataType::F32>* tensor = new CUDATensor<DataType::F32>(shape);

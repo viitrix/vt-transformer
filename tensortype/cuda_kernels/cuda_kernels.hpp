@@ -51,6 +51,12 @@ int kr_causal_mask(const int *mask, T *out, const size_t batch, const size_t new
 template <typename TF, typename TT>
 int kr_convert(const TF* src, TT* out, size_t items, cudaStream_t stream);
 
+template <typename T>
+int kr_layernorm(T *ln_res, T *vars, T *means,
+                 const T *inp, const T *scale,
+                 const T *bias, size_t batch_size, size_t hidden_dim, float eps,
+                 cudaStream_t stream);
+
 
 
 }}
