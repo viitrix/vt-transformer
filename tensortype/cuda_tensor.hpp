@@ -46,6 +46,10 @@ public:
     ComputingReturn op_transpose_0213(ComputingContext* ctx, tensor_t self, tensor_t y) override;
     ComputingReturn op_transpose_0213_repeated(ComputingContext* ctx, tensor_t self, tensor_t y) override;
     ComputingReturn op_qk(ComputingContext* ctx, tensor_t self, tensor_t k, tensor_t qk) override;
+    ComputingReturn op_softmax(ComputingContext* ctx, tensor_t self, tensor_t out) override ;
+    ComputingReturn op_attn(ComputingContext* ctx, tensor_t self, tensor_t v, tensor_t attn) override;
+    ComputingReturn op_gelu(ComputingContext* ctx, tensor_t self, tensor_t dst) override ;
+    ComputingReturn op_silu_product(ComputingContext* ctx, tensor_t self, tensor_t up, tensor_t dst) override;
     
 protected:
     inline void* data() {
