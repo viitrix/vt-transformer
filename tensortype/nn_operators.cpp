@@ -3,15 +3,6 @@
 #include "context.hpp"
 #include "dag.hpp"
 
-#define NWORD_CREATOR_DEFINE_CTX(CLS)                \
-ComputingContext* ctx_;                             \
-CLS(vt::Enviroment& env) : ctx_(env.ctx()) {   \
-}                                                   \
-static NativeWord* creator(vt::Enviroment& env) {   \
-    vt::NativeWord* wd = new CLS(env);                \
-    return wd;                                 \
-}
-
 namespace vt {
 
 namespace op {

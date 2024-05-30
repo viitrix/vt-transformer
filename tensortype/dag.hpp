@@ -496,6 +496,15 @@ static NativeWord* creator(vt::Enviroment& env) {   \
     return wd;                                 \
 }
 
+#define NWORD_CREATOR_DEFINE_CTX(CLS)                \
+ComputingContext* ctx_;                             \
+CLS(vt::Enviroment& env) : ctx_(env.ctx()) {   \
+}                                                   \
+static NativeWord* creator(vt::Enviroment& env) {   \
+    vt::NativeWord* wd = new CLS(env);                \
+    return wd;                                 \
+}
+
 } // end of namespace
 #endif
 
