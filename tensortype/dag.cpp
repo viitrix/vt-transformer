@@ -651,7 +651,7 @@ extern void load_nn_kvcache(Enviroment& env);
 Enviroment::Enviroment(ComputingContext* ctx) : ctx_(ctx) {
     load_base_words();
     load_nn_operators(*this);
-    //load_nn_kvcache(*this);
+    load_nn_kvcache(*this);
 }
 void Enviroment::load_base_words() {
     // base words
