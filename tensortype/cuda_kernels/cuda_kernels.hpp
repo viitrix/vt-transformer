@@ -71,5 +71,8 @@ int kr_rotary_embed(const T *in, const float *cos_sin,const int* pos, T* out, co
 template <typename T>
 int kr_transpose_0213(const T* src, T* target, size_t a, size_t b, size_t c ,size_t d, cudaStream_t stream);
 
+template <typename T>
+int kr_transpose_0213_repeated(const T* src, T* target, size_t a, size_t b, size_t cf , size_t ct, size_t d, cudaStream_t stream);
+
 }}
 #endif

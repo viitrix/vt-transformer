@@ -88,5 +88,58 @@ int kr_transpose_0213<__half>(const __half* src, __half* target, size_t a, size_
     return 0;
 }
 
+template <typename T>
+__global__ void kr_transpose_0213_repeated(const T *input, T *output, int sz0, int sz1, int sz2_f, int sz2_t, int sz3) {
+  int repeate = sz2_t / sz2_f;
+  int offset = blockIdx.x * blockDim.x + threadIdx.x;
+  int num_all = sz0 * sz2_t * sz1 * sz3;
+  if (offset >= num_all) {
+    return;
+  }
+
+  int id0, id1, id2, id3;
+  decompose_4dim(offset, sz2_t, sz1, sz3, &id0, &id1, &id2, &id3);
+  id1 = id1 / repeate;
+
+  int trg_offset = flat_4dim(id0, id2, id1, id3, sz1, sz2_f, sz3);
+  output[offset] = input[trg_offset];
+}
+
+template <>
+int kr_transpose_0213_repeated<float>(const float* src, float* target, size_t a, size_t b, size_t cf, size_t ct, size_t d, cudaStream_t stream) {
+    int nElementNumber = a * b * ct * d;
+
+    dim3 block_size(256);
+	dim3 num_of_blocks((nElementNumber + block_size.x - 1) / block_size.x);
+
+    kr_transpose_0213_repeated<float> <<< num_of_blocks, block_size, 0, stream >>> (src, target, a, b, cf, ct, d);
+
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        fprintf(stderr, "Failed to launch transpose_0213 kernel (error code %s)!\n", cudaGetErrorString(err));
+        exit(-1);
+    }
+    return 0;
+}
+
+template <>
+int kr_transpose_0213_repeated<__half>(const __half* src, __half* target, size_t a, size_t b, size_t cf, size_t ct, size_t d, cudaStream_t stream) {
+    int nElementNumber = a * b * ct * d;
+
+    dim3 block_size(256);
+	dim3 num_of_blocks((nElementNumber + block_size.x - 1) / block_size.x);
+
+    kr_transpose_0213_repeated<__half> <<< num_of_blocks, block_size, 0, stream >>> (src, target, a, b, cf, ct, d);
+
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        fprintf(stderr, "Failed to launch transpose_0213 kernel (error code %s)!\n", cudaGetErrorString(err));
+        exit(-1);
+    }
+    return 0;
+}
+
+
+
 
 }}

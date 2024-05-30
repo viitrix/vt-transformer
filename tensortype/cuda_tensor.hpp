@@ -44,7 +44,8 @@ public:
     ComputingReturn op_rmsnorm(ComputingContext* ctx, tensor_t self, tensor_t scale, tensor_t norm2, tensor_t y, float eps) override;
     ComputingReturn op_rotary_embed(ComputingContext* ctx, tensor_t self, tensor_t cached, tensor_t pos, tensor_t y) override;
     ComputingReturn op_transpose_0213(ComputingContext* ctx, tensor_t self, tensor_t y) override;
-
+    ComputingReturn op_transpose_0213_repeated(ComputingContext* ctx, tensor_t self, tensor_t y) override;
+    
 protected:
     inline void* data() {
         return mem_;
