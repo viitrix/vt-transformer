@@ -222,24 +222,35 @@ ComputingReturn CUDATensor<_DT_>::op_causal_mask(ComputingContext* ctx, tensor_t
 
 template<DataType _DT_>
 ComputingReturn CUDATensor<_DT_>::op_copy_from(ComputingContext* ctx, tensor_t self, tensor_t src) {
-    if ( !src->is_host() ) {
-        return OP_TODO_ERROR;
+    if ( src->is_host() ) {
+        auto stream = ctx->cuda_stream;
+        void* from = std::get<1>( src->op_data(ctx, src) );
+        CUDA_CHECK(cudaMemcpyAsync(data(), from, size_, cudaMemcpyHostToDevice, stream));
+        return OP_OK;
     }
-    auto stream = ctx->cuda_stream;
-    void* from = std::get<1>( src->op_data(ctx, src) );
-    CUDA_CHECK(cudaMemcpyAsync(data(), from, size_, cudaMemcpyHostToDevice, stream));
-    return OP_OK;
+    if ( src->is_cuda() ) {
+        auto stream = ctx->cuda_stream;
+        void* from = std::get<1>( src->op_data(ctx, src) );
+        CUDA_CHECK(cudaMemcpyAsync(data(), from, size_, cudaMemcpyDeviceToDevice, stream));
+        return OP_OK;
+    }
+    return OP_TODO_ERROR;
 }
-
 template<DataType _DT_>
 ComputingReturn CUDATensor<_DT_>::op_copy_to(ComputingContext* ctx, tensor_t self,  tensor_t dst) {
-    if ( !dst->is_host() ) {
-        return OP_TODO_ERROR;
+    if ( dst->is_host() ) {
+        auto stream = ctx->cuda_stream;
+        void* to = std::get<1>( dst->op_data(ctx, dst) );
+        CUDA_CHECK(cudaMemcpyAsync(to, data(), size_, cudaMemcpyDeviceToHost, stream));
+        return OP_OK;
     }
-    auto stream = ctx->cuda_stream;
-    void* to = std::get<1>( dst->op_data(ctx, dst) );
-    CUDA_CHECK(cudaMemcpyAsync(to, data(), size_, cudaMemcpyDeviceToHost, stream));
-    return OP_OK;
+    if ( dst->is_cuda() ) {
+        auto stream = ctx->cuda_stream;
+        void* to = std::get<1>( dst->op_data(ctx, dst) );
+        CUDA_CHECK(cudaMemcpyAsync(to, data(), size_, cudaMemcpyDeviceToDevice, stream));
+        return OP_OK;
+    }
+    return OP_TODO_ERROR;
 }
 
 template<DataType _DT_>
