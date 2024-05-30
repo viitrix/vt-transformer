@@ -96,7 +96,7 @@ namespace op {
                 } else if ( dtype == vt::F16 ) {
                     t = vt::create_host_f16(shape);
                 } else if ( dtype == vt::BF16 ) {
-                    t = vt::create_host_bf16(shape);                    
+                    t = vt::create_host_bf16(shape);
                 } else if ( dtype == vt::I32 ) {
                     t = vt::create_host_i32(shape);
                 } else if ( dtype == vt::Q8 ) {
@@ -500,6 +500,8 @@ void load_nn_operators(Enviroment& env) {
     env.insert_native_word("io.dump", io::Dump::creator );
     env.insert_native_word("io.load", io::Load::creator );
     env.insert_native_word("io.save", io::Save::creator );
+    env.insert_native_word("io.pipe.read", io::PipeRead::creator );
+    env.insert_native_word("io.pipe.write", io::PipeWrite::creator );
 
     env.insert_native_word("op.check", op::CheckPoint::creator );
     env.insert_native_word("op.get_shape", op::Shape::creator);
@@ -519,7 +521,7 @@ void load_nn_operators(Enviroment& env) {
     env.insert_native_word("op.embed", op::Embed::creator );
     env.insert_native_word("op.copy", op::CopyFrom::creator );
     env.insert_native_word("op.copy_from", op::CopyFrom::creator );
-    env.insert_native_word("op.copy_to", op::CopyTo::creator );    
+    env.insert_native_word("op.copy_to", op::CopyTo::creator );
     env.insert_native_word("op.convert", op::Convert::creator );
     env.insert_native_word("op.linear", op::Linear::creator );
     env.insert_native_word("op.layernorm", op::Layernorm::creator );

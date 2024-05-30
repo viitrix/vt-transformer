@@ -1,4 +1,5 @@
 #include <iostream>
+#include <fstream>
 #include <chrono>
 #include <tuple>
 #include <list>
@@ -10,10 +11,26 @@
 
 #include "memory.hpp"
 
-const size_t MEM_CTX_SIZE = 4 * 1024 * 1024 * 1024l;
+inline std::string fileToString(const char* filename) {
+    std::ifstream t(filename);
+    if ( ! t.is_open() ) {
+        std::cout << "Can't open " << filename << std::endl;
+        vt_panic("Can't open file");
+    }
+
+    std::string str;
+    t.seekg(0, std::ios::end);
+    str.reserve(t.tellg());
+    t.seekg(0, std::ios::beg);
+
+    str.assign((std::istreambuf_iterator<char>(t)),
+        std::istreambuf_iterator<char>());
+
+    return str;
+}
 
 struct ChatApplication {
-    ChatApplication() {
+    ChatApplication(vt::ComputingContext* ctx): ctx_(ctx) {
         tokenizer_ = vt::build_tokenizer_qwen("./qwen.tiktoken");
     }
     ~ChatApplication() {
@@ -21,12 +38,12 @@ struct ChatApplication {
     }
 
     void write_all(const void* buf, size_t nbyte) {
-        vt_assert( vt::CollectiveContext::pipe_write(1, buf, nbyte) > 0, "write_all error");
+        vt_assert( ctx_->pipe_write(1, buf, nbyte) > 0, "write_all error");
     }
 
     void wait_all_ready() {
         int dummy = -1;
-        vt::CollectiveContext::pipe_read(&dummy, sizeof(int));
+        ctx_->pipe_read(&dummy, sizeof(int));
         vt_assert(dummy == 1, "wait_all_ready error");
     }
 
@@ -76,7 +93,7 @@ struct ChatApplication {
                 write_all(mask.data(), mask.size() * sizeof(int));
 
                 next = -1;
-                vt::CollectiveContext::pipe_read(&next, sizeof(int));
+                ctx_->pipe_read(&next, sizeof(int));
                 if ( next == tokenizer_->token_eos() ) {
                     break;
                 }
@@ -129,43 +146,39 @@ struct ChatApplication {
 
 private:
     vt::Tokenizer* tokenizer_;
+    vt::ComputingContext* ctx_;
 };
 
 void do_inference(vt::Enviroment* env, const char* dag_file) {
     const char* init_cmd = "gpu_init";
     const char* main_cmd = "gpu_main";
     {
-        std::string all_code = vt::fileToString(dag_file);
+        std::string all_code = fileToString(dag_file);
 
         vt::DaG* init_bin = env->build(all_code);
 #ifdef _USING_DEVICE_CUDA_
         env->stack().push_string("cuda");
 #endif
-#ifdef _USING_DEVICE_DCU_
-        env->stack().push_string("dcu");
-#endif
-#ifdef _USING_DEVICE_COREX_
-        env->stack().push_string("corex");
-#endif
         env->run(init_bin);
         delete init_bin;
     }
+
     env->execute(init_cmd);
 
     int ok = 1;
-    vt_assert( vt::CollectiveContext::pipe_write(0, &ok, sizeof(int)) > 0, "pipe_write error");
+    vt_assert( env->ctx()->pipe_write(0, &ok, sizeof(int)) > 0, "pipe_write error");
 
     vt::DaG* target_cmd = env->build(main_cmd);
 
     for (;;) {
         int batches = -1;
         int id = -1;
-        vt::CollectiveContext::pipe_read(&batches, sizeof(int));;
+        env->ctx()->pipe_read(&batches, sizeof(int));;
         if ( batches <= 0) {
             break;
         }
 
-        vt::CollectiveContext::pipe_read(&id, sizeof(int));;
+        env->ctx()->pipe_read(&id, sizeof(int));;
         vt_assert(id > 0, "tokens can't must more than zero!");
 
         env->stack().push_number(batches);
@@ -183,13 +196,15 @@ int main(int argc, char* argv[] ) {
         std::cout << "usage: ./chat [dag_file] " << std::endl;
         return -1;
     }
-    const char* dag_file = argv[1];
-    vt::CollectiveContext::boot_pipe(1);
+    vt::ComputingContext* ctx = new vt::ComputingContext();
+    ctx->boot_host(1);
 
-    if ( vt::CollectiveContext::pipe_rank == 0) {
-        ChatApplication* app = new ChatApplication();
+    if ( ctx->pipe_rank == 0) {
+        ChatApplication* app = new ChatApplication(ctx);
         app->run();
+
         delete app;
+        delete ctx;
 
         // wait for all child processes finished
         {
@@ -197,25 +212,16 @@ int main(int argc, char* argv[] ) {
             while ( wait(&status) != -1) {
             }
         }
-    } else if ( vt::CollectiveContext::pipe_rank == 1) {
-        vt::MemoryContext::boot( MEM_CTX_SIZE );
-#ifdef _USING_DEVICE_CUDA_
-        vt::ComputingContext::boot_cuda( 0 );
-#endif
-#ifdef _USING_DEVICE_COREX_
-        vt::ComputingContext::boot_corex( 0 );
-#endif
+    } else if ( ctx->pipe_rank == 1) {
+        ctx->boot_cuda(0);
 
-        vt::Enviroment* env = new vt::Enviroment();
+        vt::Enviroment* env = new vt::Enviroment(ctx);
         env->insert_native_word("app.mem", MemoryCounting::creator);
         env->insert_native_word("app.align", MemoryAlign::creator);
-
-        do_inference(env, dag_file);
+        do_inference(env, argv[1]);
 
         delete env;
-        vt::ComputingContext::shutdown();
-        vt::MemoryContext::shutdown();
+        delete ctx;
     }
-    vt::CollectiveContext::shutdown();
 }
 

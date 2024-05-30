@@ -31,6 +31,23 @@ HostTensor<_DT_>::HostTensor(const ShapeType& shape) : size_(0), owner_(true) {
 }
 
 template<DataType _DT_>
+HostTensor<_DT_>::HostTensor(const ShapeType& shape, void* mem) : size_(0), owner_(false), mem_(mem) {
+    size_t asize = 0;
+    size_t number = shape.numel();
+    if ( _DT_ == DataType::F32 ) {
+        asize = sizeof(float) * number;
+    } else if ( _DT_ == DataType::I32 ) {
+        asize = sizeof(int) * number;
+    } else if ( _DT_ == DataType::F16 || _DT_ == DataType::BF16 ) {
+        asize = sizeof(local_fp16_t) * number;
+    } else {
+        vt_fatal_error();
+    }
+
+    *const_cast<size_t*>(&size_) = asize;
+}
+
+template<DataType _DT_>
 ComputingReturn HostTensor<_DT_>::io_load(ComputingContext* ctx, tensor_t self, const char* fileName) {
     std::ifstream inf(fileName, std::ios::binary);
     if ( ! inf.is_open() ) {
@@ -118,6 +135,67 @@ std::variant<ComputingReturn, size_t> HostTensor<_DT_>::op_sizeof(ComputingConte
 template <DataType _DT_>
 std::variant<ComputingReturn, void *> HostTensor<_DT_>::op_data(ComputingContext* ctx, tensor_t self) {
     return mem_;
+}
+
+template <DataType _DT_>
+std::variant<ComputingReturn, tensor_t> HostTensor<_DT_>::op_view(ComputingContext* ctx, tensor_t self, size_t offset, const std::vector<size_t>& newShape_) {
+    ShapeType newShape(newShape_);
+    if ( _DT_ == DataType::F32 ) {
+        void *newData = (char *)mem_ + offset * sizeof(float);
+        auto* newHostTensor = new HostTensor<DataType::F32>(newShape, newData);
+        return std::make_shared<TensorType>(newHostTensor, newShape);
+    }
+    if ( _DT_ == DataType::I32 ) {
+        void *newData = (char *)mem_ + offset * sizeof(int);
+        auto* newHostTensor = new HostTensor<DataType::I32>(newShape, newData);
+        return std::make_shared<TensorType>(newHostTensor, newShape);
+    }
+    if ( _DT_ == DataType::F16 ) {
+        void *newData = (char *)mem_ + offset * sizeof(local_fp16_t);
+        auto* newHostTensor = new HostTensor<DataType::F16>(newShape, newData);
+        return std::make_shared<TensorType>(newHostTensor, newShape);
+    }
+    if ( _DT_ == DataType::BF16 ) {
+        void *newData = (char *)mem_ + offset * sizeof(local_bf16_t);
+        auto* newHostTensor = new HostTensor<DataType::BF16>(newShape, newData);
+        return std::make_shared<TensorType>(newHostTensor, newShape);
+    }
+    return OP_TODO_ERROR;
+}
+
+template <DataType _DT_>
+ComputingReturn HostTensor<_DT_>::op_embed(ComputingContext* ctx, tensor_t self, tensor_t table, tensor_t output) {
+    const size_t feature_size = table->shape().vec().back();
+    const int items = self->items();
+    int* tokens = (int * ) mem_;
+
+    std::string odev = output->device_name();
+    if(  odev != "host" ) {
+        vt_panic("Can't do op_embed on output's device!");
+    }
+
+    if ( table->dtype() == DataType::F32 && output->dtype() == DataType::F32 ) {
+        float* dst = (float *) std::get<1>( output->op_data(ctx, output) );
+        float* src = (float *) std::get<1>( table->op_data(ctx, table) );
+        for ( int i = 0; i < items; i++) {
+            float* emb = &src[ tokens[i] * feature_size ];
+            memcpy(dst, emb, sizeof(float)*feature_size);
+            dst += feature_size;
+        }
+        return OP_OK;
+    }
+    if ( table->dtype() == DataType::F16 && output->dtype() == DataType::F16) {
+        local_fp16_t* dst = (local_fp16_t *) std::get<1>( output->op_data(ctx, output) );
+        local_fp16_t* src = (local_fp16_t *) std::get<1>( table->op_data(ctx, table) );
+        for ( int i = 0; i < items; i++) {
+            local_fp16_t* emb = &src[ tokens[i] * feature_size ];
+            memcpy(dst, emb, sizeof(local_fp16_t)*feature_size);
+            dst += feature_size;
+        }
+        return OP_OK;
+    }
+
+    return OP_TODO_ERROR;
 }
 
 

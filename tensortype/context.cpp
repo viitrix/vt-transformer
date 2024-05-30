@@ -18,30 +18,29 @@ ComputingContext::ComputingContext() {
     host_workspace = nullptr;
     pipe_world = 0;
     pipe_rank = -1;
+
 #ifdef _USING_DEVICE_CUDA_
     cuda_device = -1;
 #endif
 }
 
 void ComputingContext::boot_host(int rks) {
-    if ( rks >= 1) {
-        pipe_world = rks + 1;
-        pipe_rank = 0;
-        pipe_fds.resize((rks + 1) * 2, -1);
-        for (int i = 0; i < rks; i++) {
-            int* fds = pipe_fds.data() + i * 2;
-            vt_assert( pipe(fds) >= 0, "Can't create pipe between parent and child process!");
-        }
+    pipe_world = rks + 1;
+    pipe_rank = 0;
+    pipe_fds.resize((rks + 1) * 2, -1);
+    for (int i = 0; i < rks + 1; i++) {
+        int* fds = pipe_fds.data() + i * 2;
+        vt_assert( pipe(fds) >= 0, "Can't create pipe between parent and child process!");
+    }
 
-        for (int i = 0; i < rks; i++) {
-            int n = fork();
-            if ( n == 0 ) {
-                pipe_rank = i + 1;
-                break;
-            }
+    for (int i = 0; i < rks; i++) {
+        int n = fork();
+        if ( n == 0 ) {
+            pipe_rank = i + 1;
+            break;
         }
     }
-    
+
     host_workspace = malloc( workspace_size );
     rng = new std::mt19937(1979);
 }
@@ -76,7 +75,7 @@ void ComputingContext::shutdown() {
         CUDA_CHECK( cudaStreamDestroy(cuda_stream) );
     }
 #endif
-    
+
     // host shutdown
     for (size_t i = 0; i < pipe_fds.size(); i++) {
         close( pipe_fds[i]);

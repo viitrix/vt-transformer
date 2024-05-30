@@ -31,7 +31,7 @@ inline DataType DataType_from(const char* dtype) {
     if ( strcmp(dtype, "i32") == 0) {
         return DataType::I32;
     }
-    if ( strcmp(dtype, "fp16") == 0) {
+    if ( strcmp(dtype, "f16") == 0) {
         return DataType::F16;
     }
     if ( strcmp(dtype, "bf16") == 0) {
@@ -288,6 +288,8 @@ public:
     TransformerComputing* impl() {
         _CONVERT_(HOST_F32)
         _CONVERT_(HOST_I32)
+        _CONVERT_(HOST_F16)
+        _CONVERT_(HOST_BF16)
         _CONVERT_(HOST_Q8)
         _CONVERT_(HOST_Q4)
         _CONVERT_(HOST_PQ)

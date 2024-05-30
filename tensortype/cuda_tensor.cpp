@@ -8,10 +8,11 @@ namespace vt {
 
 using device_fp16_t = __half;
 
-void copy_to_local(std::vector<unsigned char> dst, void* src, size_t length, cudaStream_t stream) {
+void copy_to_local(std::vector<unsigned char>& dst, void* src, size_t length, cudaStream_t stream) {
     dst.clear();
     dst.resize( length);
     CUDA_CHECK(cudaMemcpyAsync(dst.data(), src, length, cudaMemcpyDeviceToHost, stream));
+    CUDA_CHECK(cudaStreamSynchronize(stream));
 }
 
 template<DataType _DT_>
@@ -113,6 +114,7 @@ ComputingReturn CUDATensor<_DT_>::io_dump(ComputingContext* ctx, tensor_t self) 
         copy_to_local(localData, data(), first8 * sizeof(float), ctx->cuda_stream);
         float* d = (float *)localData.data();
         SIMPLE_DUMP(d);
+
         d = (float *)data() + self->items() - first8;
         copy_to_local(localData, d, first8 * sizeof(float), ctx->cuda_stream);
         d = (float *)localData.data();
@@ -627,7 +629,7 @@ ComputingReturn CUDATensor<_DT_>::op_transpose_0213_repeated(ComputingContext* c
 
 template<DataType _DT_>
 ComputingReturn CUDATensor<_DT_>::op_qk(ComputingContext* ctx, tensor_t self, tensor_t k_, tensor_t qk_) {
-    /* 
+    /*
         // none batched reference code
         int HnT = hhidden * ntokens ;
         int HfT = hhidden * ftokens ;
@@ -646,7 +648,7 @@ ComputingReturn CUDATensor<_DT_>::op_qk(ComputingContext* ctx, tensor_t self, te
                     ctx->workspace_size);
         }
     */
-    
+
     auto shape_ = self->shape().vec();
     int batch = shape_[0];
     int heads = shape_[1];
@@ -675,7 +677,7 @@ ComputingReturn CUDATensor<_DT_>::op_qk(ComputingContext* ctx, tensor_t self, te
                 ctx->workspace_size);
         return OP_OK;
     }
-    if ( _DT_ == DataType::F16 && qk_->dtype() == DataType::F32 ) {        
+    if ( _DT_ == DataType::F16 && qk_->dtype() == DataType::F32 ) {
         device_fp16_t* B = (device_fp16_t *)data();
         device_fp16_t* A = (device_fp16_t *)(k_->cuda_f16()->data());
         float* C = (float *)(qk_->cuda_f32()->data());
@@ -687,7 +689,7 @@ ComputingReturn CUDATensor<_DT_>::op_qk(ComputingContext* ctx, tensor_t self, te
                 C, CUDA_R_32F, m, batch * heads,
                 ctx->cuda_workspace,
                 ctx->workspace_size);
-        return OP_OK;        
+        return OP_OK;
     }
      if ( _DT_ == DataType::F16 && qk_->dtype() == DataType::F16 ) {
         device_fp16_t* B = (device_fp16_t *)data();
@@ -701,7 +703,7 @@ ComputingReturn CUDATensor<_DT_>::op_qk(ComputingContext* ctx, tensor_t self, te
                 C, CUDA_R_16F, m, batch * heads,
                 ctx->cuda_workspace,
                 ctx->workspace_size);
-        return OP_OK;        
+        return OP_OK;
     }
     return OP_TODO_ERROR;
 }
@@ -796,7 +798,7 @@ ComputingReturn CUDATensor<_DT_>::op_attn(ComputingContext* ctx, tensor_t self, 
                 C, CUDA_R_32F, m, batch * heads,
                 ctx->cuda_workspace,
                 ctx->workspace_size);
-        return OP_OK;        
+        return OP_OK;
     } else if ( value_->dtype() == DataType::F16 && value_->dtype() == DataType::F16 ) {
         auto* B = (device_fp16_t *)data();
         auto* A = (device_fp16_t *)(value_->cuda_f16()->data());
@@ -973,8 +975,8 @@ std::variant<ComputingReturn, tensor_t> CUDATensor<_DT_>::op_sampling_top3(Compu
     } else {
         float* logits = (float *) data();
         cuda::kr_sampling_top3<float>(logits, out, batch, vocab_size, temp, randx, stream);
-    } 
-    
+    }
+
     CUDA_CHECK(cudaMemcpyAsync(std::get<1>(ret->op_data(ctx, ret)), out, batch * sizeof(int), cudaMemcpyDeviceToHost, stream));
     return ret;
 }
