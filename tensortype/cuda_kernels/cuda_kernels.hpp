@@ -60,13 +60,16 @@ int kr_layernorm(T *ln_res, T *vars, T *means,
 template <typename T>
 int kr_rmsnorm(const T *feature, const T *w,
              T *out, T *norm2,
-             const int batch,
-             const int dim,
+             const size_t batch,
+             const size_t dim,
              const float eps,
              cudaStream_t stream);
 
 template <typename T>
-int kr_transpose_0213(const T* src, T* target, int a, int b, int c ,int d, cudaStream_t stream);
+int kr_rotary_embed(const T *in, const float *cos_sin,const int* pos, T* out, const size_t bs, const size_t hnum, const size_t len, const size_t dims, cudaStream_t stream);
+
+template <typename T>
+int kr_transpose_0213(const T* src, T* target, size_t a, size_t b, size_t c ,size_t d, cudaStream_t stream);
 
 }}
 #endif

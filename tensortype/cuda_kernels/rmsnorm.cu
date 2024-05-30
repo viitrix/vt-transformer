@@ -50,7 +50,7 @@ __global__ void rms_norm_kernel(const T *feature, const T *w,
  
 template<>
 int kr_rmsnorm<__half>(const __half* feature, const __half *w, __half *out, __half *norm2, 
-                     const int batch, const int dim, const float eps, cudaStream_t stream) {
+                     const size_t batch, const size_t dim, const float eps, cudaStream_t stream) {
     dim3 num_of_blocks(batch);
     dim3 block_size(256);
     
@@ -71,7 +71,7 @@ int kr_rmsnorm<__half>(const __half* feature, const __half *w, __half *out, __ha
 
 template<>
 int kr_rmsnorm<float>(const float* feature, const float *w, float *out, float *norm2,
-                     const int batch, const int dim, const float eps, cudaStream_t stream) {
+                     const size_t batch, const size_t dim, const float eps, cudaStream_t stream) {
     dim3 num_of_blocks(batch);
     dim3 block_size(256);
 

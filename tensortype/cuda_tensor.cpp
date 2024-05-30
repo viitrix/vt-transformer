@@ -551,6 +551,34 @@ ComputingReturn CUDATensor<_DT_>::op_rmsnorm(ComputingContext* ctx, tensor_t sel
 }
 
 template<DataType _DT_>
+ComputingReturn CUDATensor<_DT_>::op_rotary_embed(ComputingContext* ctx, tensor_t self, tensor_t cached, tensor_t pos_, tensor_t y) {
+    size_t batch = self->shape()[0];
+    size_t tokens = self->shape()[1];
+    size_t heads = self->shape()[2];
+    size_t hidden = self->shape()[3];
+
+    vt_assert(hidden == cached->shape()[1], "heads number must be same with cache");
+
+    int* pos = (int*) pos_->cuda_i32()->data();
+    float* cos_sin = (float *)cached->cuda_f32()->data();
+    auto stream = ctx->cuda_stream;
+
+    if ( _DT_ == DataType::F32 ) {
+        float* in = (float *)data();
+        float* out = (float *)y->cuda_f32()->data();
+        cuda::kr_rotary_embed<float>(in, cos_sin, pos, out, batch, heads, tokens, hidden, stream);
+        return OP_OK;
+    }
+    if ( _DT_ == DataType::F16 ) {
+        device_fp16_t* in = (device_fp16_t *)data();
+        device_fp16_t* out = (device_fp16_t *)y->cuda_f16()->data();
+        cuda::kr_rotary_embed<device_fp16_t>(in, cos_sin, pos, out, batch, heads, tokens, hidden, stream);
+        return OP_OK;
+    }
+    return OP_TODO_ERROR;
+}
+
+template<DataType _DT_>
 ComputingReturn CUDATensor<_DT_>::op_transpose_0213(ComputingContext* ctx, tensor_t self, tensor_t y) {
     auto stream = ctx->cuda_stream;
 

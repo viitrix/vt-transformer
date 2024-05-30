@@ -16,6 +16,7 @@ set(cuda_kernel_files
     convert.cu
     layernorm.cu
     rmsnorm.cu
+    rotary_embed.cu
     transpose_0213.cu
     )
 

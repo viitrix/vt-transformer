@@ -55,7 +55,7 @@ __global__ void transpose_0213(const T *input, T *output, int sz0, int sz1, int 
 }
 
 template <>
-int kr_transpose_0213<float>(const float* src, float* target, int a, int b, int c, int d, cudaStream_t stream) {
+int kr_transpose_0213<float>(const float* src, float* target, size_t a, size_t b, size_t c, size_t d, cudaStream_t stream) {
     int nElementNumber = a * b * c * d;
 
     dim3 block_size(256);
@@ -72,7 +72,7 @@ int kr_transpose_0213<float>(const float* src, float* target, int a, int b, int 
 }
 
 template <>
-int kr_transpose_0213<__half>(const __half* src, __half* target, int a, int b, int c, int d, cudaStream_t stream) {
+int kr_transpose_0213<__half>(const __half* src, __half* target, size_t a, size_t b, size_t c, size_t d, cudaStream_t stream) {
     int nElementNumber = a * b * c * d;
 
     dim3 block_size(256);
