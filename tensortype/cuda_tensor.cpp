@@ -550,6 +550,29 @@ ComputingReturn CUDATensor<_DT_>::op_rmsnorm(ComputingContext* ctx, tensor_t sel
     return OP_TODO_ERROR;
 }
 
+template<DataType _DT_>
+ComputingReturn CUDATensor<_DT_>::op_transpose_0213(ComputingContext* ctx, tensor_t self, tensor_t y) {
+    auto stream = ctx->cuda_stream;
+
+    int sz0 = self->shape()[0];
+    int sz1 = self->shape()[1];
+    int sz2 = self->shape()[2];
+    int sz3 = self->shape()[3];
+
+    void* x = data();
+    void* out = std::get<1>( y->op_data(ctx, y) );
+    if ( _DT_ == DataType::F32 ) {
+        vt::cuda::kr_transpose_0213<float>((float *)x, (float *)out, sz0, sz1, sz2, sz3, stream);
+        return OP_OK;
+    }
+    if ( _DT_ == DataType::F16 ) {
+        vt::cuda::kr_transpose_0213<device_fp16_t>((device_fp16_t *)x, (device_fp16_t *)out, sz0, sz1, sz2, sz3, stream);
+        return OP_OK;
+    }
+
+    return OP_TODO_ERROR;
+}
+
 tensor_t create_cuda_f32(std::vector<size_t>& shape_) {
     ShapeType shape(shape_);
     CUDATensor<DataType::F32>* tensor = new CUDATensor<DataType::F32>(shape);

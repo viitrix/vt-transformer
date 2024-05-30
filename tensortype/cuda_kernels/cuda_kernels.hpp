@@ -65,5 +65,8 @@ int kr_rmsnorm(const T *feature, const T *w,
              const float eps,
              cudaStream_t stream);
 
+template <typename T>
+int kr_transpose_0213(const T* src, T* target, int a, int b, int c ,int d, cudaStream_t stream);
+
 }}
 #endif
