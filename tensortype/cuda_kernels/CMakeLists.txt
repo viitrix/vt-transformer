@@ -15,6 +15,7 @@ set(cuda_kernel_files
     causal_mask.cu
     convert.cu
     layernorm.cu
+    rmsnorm.cu
     )
 
 

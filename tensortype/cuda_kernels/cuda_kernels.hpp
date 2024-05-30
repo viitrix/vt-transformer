@@ -57,7 +57,13 @@ int kr_layernorm(T *ln_res, T *vars, T *means,
                  const T *bias, size_t batch_size, size_t hidden_dim, float eps,
                  cudaStream_t stream);
 
-
+template <typename T>
+int kr_rmsnorm(const T *feature, const T *w,
+             T *out, T *norm2,
+             const int batch,
+             const int dim,
+             const float eps,
+             cudaStream_t stream);
 
 }}
 #endif

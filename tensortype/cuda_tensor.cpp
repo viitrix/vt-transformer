@@ -498,10 +498,10 @@ ComputingReturn CUDATensor<_DT_>::op_linear(ComputingContext* ctx, tensor_t self
 
 template<DataType _DT_>
 ComputingReturn CUDATensor<_DT_>::op_layernorm(ComputingContext* ctx, tensor_t self, tensor_t mean, tensor_t var, tensor_t scale, tensor_t bias, tensor_t y, float eps) {
-     auto x = this;
     size_t batch = self->shape()[0] * self->shape()[1];
     size_t hidden = self->shape()[2];
 
+    auto x = data();
     auto m = std::get<1>(mean->op_data(ctx, mean));
     auto v = std::get<1>(var->op_data(ctx, var));
     auto s = std::get<1>(scale->op_data(ctx, scale));
@@ -519,6 +519,31 @@ ComputingReturn CUDATensor<_DT_>::op_layernorm(ComputingContext* ctx, tensor_t s
         cuda::kr_layernorm<device_fp16_t>((device_fp16_t *)out, (device_fp16_t *)v, (device_fp16_t *)m,
                               (device_fp16_t *)x, (device_fp16_t *)s, (device_fp16_t *)b, batch, hidden, eps, stream);
 
+        return OP_OK;
+    }
+
+    return OP_TODO_ERROR;
+}
+
+template<DataType _DT_>
+ComputingReturn CUDATensor<_DT_>::op_rmsnorm(ComputingContext* ctx, tensor_t self, tensor_t scale, tensor_t norm2, tensor_t y, float eps) {
+    size_t batch = self->shape()[0];
+    size_t tokens = self->shape()[1];
+    size_t hidden = self->shape()[2];
+
+    void* norm2_ = std::get<1>(norm2->op_data(ctx, norm2));
+    void* feature = data();
+    void* w = std::get<1>(scale->op_data(ctx, scale));
+    void* out = std::get<1>(y->op_data(ctx, y));
+
+    auto stream = ctx->cuda_stream;
+    if ( _DT_ == DataType::F32) {
+        cuda::kr_rmsnorm<float>((float *)feature, (float *)w, (float *)out, (float *)norm2_, batch * tokens, hidden, eps, stream);
+        return OP_OK;
+    }
+
+    if ( _DT_ == DataType::F16 ) {
+        cuda::kr_rmsnorm<device_fp16_t>((device_fp16_t *)feature, (device_fp16_t *)w, (device_fp16_t *)out, (device_fp16_t *)norm2_, batch * tokens, hidden, eps, stream);
         return OP_OK;
     }
 
