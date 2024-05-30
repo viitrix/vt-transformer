@@ -754,8 +754,8 @@ ComputingReturn CUDATensor<_DT_>::op_attn(ComputingContext* ctx, tensor_t self, 
         int TT = ftokens * ntokens;
         for (int i = 0; i < batch * heads; i++) {
             float* B_ = (float *)data() + i * TT;
-            auto* A = (device_fp16_t *)(value_->cuda_fp16()->data()) + i * HfT;
-            auto* C = (device_fp16_t *)(out_->cuda_fp16()->data()) + i * HnT;
+            auto* A = (device_fp16_t *)(value_->cuda_f16()->data()) + i * HfT;
+            auto* C = (device_fp16_t *)(out_->cuda_f16()->data()) + i * HnT;
 
             cuda::float_to_half(B_, half_B, TT, stream);
             cuda::LtSgemm(ComputingContext::cublasLt_handle,
@@ -830,6 +830,29 @@ ComputingReturn CUDATensor<_DT_>::op_gelu(ComputingContext* ctx, tensor_t self, 
         cuda::kr_gelu<device_fp16_t>((device_fp16_t *)src, (device_fp16_t *)dst, self->items(), stream);
         return OP_OK;
     }
+    return OP_TODO_ERROR;
+}
+
+template<DataType _DT_>
+ComputingReturn CUDATensor<_DT_>::op_silu_product(ComputingContext* ctx, tensor_t self, tensor_t in, tensor_t out) {
+    auto stream = ctx->cuda_stream;
+    if ( _DT_ == DataType::F32 ) {
+        float* src = (float *)data();
+        float* in_ = (float *)in->cuda_f32()->data();
+        float* dst = (float *)out->cuda_f32()->data();
+
+        cuda::kr_silu_product(src, in_, dst, self->items(), stream);
+        return OP_OK;
+    }
+    if ( _DT_ == DataType::F16 ) {
+        auto* src = (device_fp16_t *)data();
+        auto* in_ = (device_fp16_t *)in->cuda_f16()->data();
+        auto* dst = (device_fp16_t *)out->cuda_f16()->data();
+
+        cuda::kr_silu_product(src, in_, dst, self->items(), stream);
+        return OP_OK;
+    }
+
     return OP_TODO_ERROR;
 }
 

@@ -77,5 +77,8 @@ int kr_transpose_0213_repeated(const T* src, T* target, size_t a, size_t b, size
 template <typename T>
 int kr_gelu(const T* src, T* target, size_t items, cudaStream_t stream);
 
+template <typename T>
+int kr_silu_product(const T* src, const T* in, T* target, size_t items, cudaStream_t stream);
+
 }}
 #endif

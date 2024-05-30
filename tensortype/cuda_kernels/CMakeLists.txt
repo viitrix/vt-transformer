@@ -19,6 +19,7 @@ set(cuda_kernel_files
     rotary_embed.cu
     transpose_0213.cu
     gelu.cu
+    silu_product.cu
     )
 
 
