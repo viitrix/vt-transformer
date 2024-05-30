@@ -45,6 +45,7 @@ public:
     ComputingReturn op_rotary_embed(ComputingContext* ctx, tensor_t self, tensor_t cached, tensor_t pos, tensor_t y) override;
     ComputingReturn op_transpose_0213(ComputingContext* ctx, tensor_t self, tensor_t y) override;
     ComputingReturn op_transpose_0213_repeated(ComputingContext* ctx, tensor_t self, tensor_t y) override;
+    ComputingReturn op_qk(ComputingContext* ctx, tensor_t self, tensor_t k, tensor_t qk) override;
     
 protected:
     inline void* data() {

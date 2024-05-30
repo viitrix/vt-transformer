@@ -626,6 +626,88 @@ ComputingReturn CUDATensor<_DT_>::op_transpose_0213_repeated(ComputingContext* c
 }
 
 
+template<DataType _DT_>
+ComputingReturn CUDATensor<_DT_>::op_qk(ComputingContext* ctx, tensor_t self, tensor_t k_, tensor_t qk_) {
+    /* 
+        // none batched reference code
+        int HnT = hhidden * ntokens ;
+        int HfT = hhidden * ftokens ;
+        int TT = ftokens * ntokens;
+        for (int i = 0; i < batch * heads; i++) {
+            float* B = (float *)data() + i * HnT;
+            float* A = (float *)(k_->cuda_f32()->data()) + i * HfT;
+            float* C = (float *)(qk_->cuda_f32()->data()) + i * TT;
+            cuda::LtSgemm(ComputingContext::cublasLt_handle,
+                    CUBLAS_OP_T, CUBLAS_OP_N,
+                    m, n, k,
+                    &alpha, A, CUDA_R_32F, k,
+                    B, CUDA_R_32F, k, &beta,
+                    C, CUDA_R_32F, m,
+                    ComputingContext::cuda_workspace,
+                    ComputingContext::workspace_size);
+        }
+    */
+    
+    auto shape_ = self->shape().vec();
+    int batch = shape_[0];
+    int heads = shape_[1];
+    int ntokens = shape_[2];
+    int hhidden = shape_[3];
+    int ftokens = k_->shape()[2];
+
+    int m = ftokens;
+    int n = ntokens;
+    int k = hhidden;
+
+    float alpha = 1.0 / sqrt(hhidden);
+    float beta = 0.0;
+
+    if ( _DT_ == DataType::F32 ) {
+        float* B = (float *)data();
+        float* A = (float *)(k_->cuda_f32()->data());
+        float* C = (float *)(qk_->cuda_f32()->data());
+        cuda::lt_sgemm_batched(ctx->cublasLt_handle,
+                CUBLAS_OP_T, CUBLAS_OP_N,
+                m, n, k,
+                &alpha, A, CUDA_R_32F, k,
+                B, CUDA_R_32F, k, &beta,
+                C, CUDA_R_32F, m, batch*heads,
+                ctx->cuda_workspace,
+                ctx->workspace_size);
+        return OP_OK;
+    }
+    if ( _DT_ == DataType::F16 && qk_->dtype() == DataType::F32 ) {        
+        device_fp16_t* B = (device_fp16_t *)data();
+        device_fp16_t* A = (device_fp16_t *)(k_->cuda_f16()->data());
+        float* C = (float *)(qk_->cuda_f32()->data());
+        cuda::lt_sgemm_batched(ctx->cublasLt_handle,
+                CUBLAS_OP_T, CUBLAS_OP_N,
+                m, n, k,
+                &alpha, A, CUDA_R_16F, k,
+                B, CUDA_R_16F, k, &beta,
+                C, CUDA_R_32F, m, batch * heads,
+                ctx->cuda_workspace,
+                ctx->workspace_size);
+        return OP_OK;        
+    }
+     if ( _DT_ == DataType::F16 && qk_->dtype() == DataType::F16 ) {
+        device_fp16_t* B = (device_fp16_t *)data();
+        device_fp16_t* A = (device_fp16_t *)(k_->cuda_f16()->data());
+        device_fp16_t* C = (device_fp16_t *)(qk_->cuda_f16()->data());
+        cuda::lt_sgemm_batched(ctx->cublasLt_handle,
+                CUBLAS_OP_T, CUBLAS_OP_N,
+                m, n, k,
+                &alpha, A, CUDA_R_16F, k,
+                B, CUDA_R_16F, k, &beta,
+                C, CUDA_R_16F, m, batch * heads,
+                ctx->cuda_workspace,
+                ctx->workspace_size);
+        return OP_OK;        
+    }
+    return OP_TODO_ERROR;
+}
+
+
 tensor_t create_cuda_f32(std::vector<size_t>& shape_) {
     ShapeType shape(shape_);
     CUDATensor<DataType::F32>* tensor = new CUDATensor<DataType::F32>(shape);
