@@ -758,7 +758,7 @@ ComputingReturn CUDATensor<_DT_>::op_attn(ComputingContext* ctx, tensor_t self, 
             auto* C = (device_fp16_t *)(out_->cuda_f16()->data()) + i * HnT;
 
             cuda::float_to_half(B_, half_B, TT, stream);
-            cuda::LtSgemm(ComputingContext::cublasLt_handle,
+            cuda::LtSgemm(ctx->cublasLt_handle,
                     CUBLAS_OP_N, CUBLAS_OP_N,
                     m, n, k,
                     &alpha, A, CUDA_R_16F, m,
@@ -854,6 +854,129 @@ ComputingReturn CUDATensor<_DT_>::op_silu_product(ComputingContext* ctx, tensor_
     }
 
     return OP_TODO_ERROR;
+}
+
+template<DataType _DT_>
+std::variant<ComputingReturn, int> CUDATensor<_DT_>::op_all_logits(ComputingContext* ctx, tensor_t self, tensor_t mask_, tensor_t lm_head, tensor_t output ) {
+    int batch = self->shape()[0];
+    int new_tokens = self->shape()[1];
+    int hidden_size = self->shape()[2];
+    int full_tokens = mask_->shape()[1];
+
+    int vocab_size = lm_head->shape()[0];
+
+    int m = vocab_size;
+    int n = 1;
+    int k = hidden_size;
+
+    float alpha = 1.0;
+    float beta = 0.0;
+
+    int* mask = (int *)std::get<1>(mask_->op_data(ctx, mask_));
+    int pred = 0;
+    for (int b = 0;  b < batch; b++) {
+        int* mk = &mask[b * full_tokens];
+        for ( int i = 0; i < new_tokens ; i++) {
+            int ii = full_tokens - new_tokens + i;
+            if ( mk[ii] != 2 ) {
+                continue;
+            }
+            int target = i;
+
+            if ( _DT_ == DataType::F32 ) {
+                float* dst = (float *)output->cuda_f32()->data() + pred * vocab_size;
+                float* x = (float *)data() + b * new_tokens * hidden_size + target * hidden_size;
+
+                float* A = (float *)lm_head->cuda_f32()->data();
+                float* B = x;
+                float* C = dst;
+
+                cuda::lt_sgemm(ctx->cublasLt_handle,
+                    CUBLAS_OP_T, CUBLAS_OP_N,
+                    m, n, k,
+                    &alpha, A, CUDA_R_32F, k,
+                    B, CUDA_R_32F, k, &beta,
+                    C, CUDA_R_32F, m,
+                    ctx->cuda_workspace,
+                    ctx->workspace_size);
+            } else if ( _DT_ == DataType::F16 ) {
+                auto* dst = (device_fp16_t *)output->cuda_f16()->data() + pred * vocab_size;
+                auto* x = (device_fp16_t *)data() + b * new_tokens * hidden_size + target * hidden_size;
+
+                auto* A = (device_fp16_t *)lm_head->cuda_f16()->data();
+                auto* B = x;
+                auto* C = dst;
+
+                cuda::lt_sgemm(ctx->cublasLt_handle,
+                    CUBLAS_OP_T, CUBLAS_OP_N,
+                    m, n, k,
+                    &alpha, A, CUDA_R_16F, k,
+                    B, CUDA_R_16F, k, &beta,
+                    C, CUDA_R_16F, m,
+                    ctx->cuda_workspace,
+                    ctx->workspace_size);
+            } else {
+                return OP_TODO_ERROR;
+            }
+            pred ++;
+        }
+    }
+    return pred;
+}
+
+template<DataType _DT_>
+std::variant<ComputingReturn, tensor_t> CUDATensor<_DT_>::op_sampling_top1(ComputingContext* ctx, tensor_t self) {
+    if ( _DT_ != DataType::F32 && _DT_ != DataType::F16 ) {
+        return OP_INPUT_ERROR;
+    }
+
+    size_t batch = self->shape()[0];
+    size_t vocab_size = self->shape()[1];
+
+    std::vector<size_t> ret_shape{ (size_t)batch};
+    tensor_t ret = vt::create_host_i32( ret_shape );
+
+    auto stream = ctx->cuda_stream;
+    int* out = (int *)ctx->cuda_workspace;
+
+    if ( _DT_ == DataType::F16 ) {
+        device_fp16_t* logits = (device_fp16_t *) data();
+        cuda::kr_sampling_top1<device_fp16_t>(logits, out, batch, vocab_size, stream);
+    } else {
+        float* logits = (float *) data();
+        cuda::kr_sampling_top1<float>(logits, out, batch, vocab_size, stream);
+    }
+
+    CUDA_CHECK(cudaMemcpyAsync(std::get<1>(ret->op_data(ctx, ret)), out, batch * sizeof(int), cudaMemcpyDeviceToHost, stream));
+    return ret;
+}
+
+template<DataType _DT_>
+std::variant<ComputingReturn, tensor_t> CUDATensor<_DT_>::op_sampling_top3(ComputingContext* ctx, tensor_t self, float temp) {
+       if ( _DT_ != DataType::F32 && _DT_ != DataType::F16 ) {
+        return OP_INPUT_ERROR;
+    }
+    size_t batch = self->shape()[0];
+    size_t vocab_size = self->shape()[1];
+
+    std::vector<size_t> ret_shape{ (size_t)batch};
+    tensor_t ret = vt::create_host_i32( ret_shape );
+
+    auto stream = ctx->cuda_stream;
+    int* out = (int *)ctx->cuda_workspace;
+    std::uniform_real_distribution<> dist(0.0, 1.0);
+    float randx = dist( *ctx->rng );
+
+    if ( _DT_ == DataType::F16 ) {
+        device_fp16_t* logits = (device_fp16_t *) data();
+        cuda::kr_sampling_top3<device_fp16_t>(logits, out, batch, vocab_size, temp, randx, stream);
+    } else {
+        float* logits = (float *) data();
+        cuda::kr_sampling_top3<float>(logits, out, batch, vocab_size, temp, randx, stream);
+    } 
+    
+    CUDA_CHECK(cudaMemcpyAsync(std::get<1>(ret->op_data(ctx, ret)), out, batch * sizeof(int), cudaMemcpyDeviceToHost, stream));
+    return ret;
 }
 
 tensor_t create_cuda_f32(std::vector<size_t>& shape_) {

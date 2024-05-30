@@ -20,6 +20,7 @@ set(cuda_kernel_files
     transpose_0213.cu
     gelu.cu
     silu_product.cu
+    easy_sampling.cu
     )
 
 

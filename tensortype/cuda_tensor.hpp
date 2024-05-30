@@ -7,7 +7,6 @@
 
 namespace vt {
 
-
 template <DataType _DTYPE_>
 struct CUDATensor : public TransformerComputing {
     virtual ~CUDATensor();
@@ -50,6 +49,9 @@ public:
     ComputingReturn op_attn(ComputingContext* ctx, tensor_t self, tensor_t v, tensor_t attn) override;
     ComputingReturn op_gelu(ComputingContext* ctx, tensor_t self, tensor_t dst) override ;
     ComputingReturn op_silu_product(ComputingContext* ctx, tensor_t self, tensor_t up, tensor_t dst) override;
+    std::variant<ComputingReturn, int> op_all_logits(ComputingContext* ctx, tensor_t self, tensor_t mask, tensor_t lm_head, tensor_t output ) override;
+    std::variant<ComputingReturn, tensor_t> op_sampling_top1(ComputingContext* ctx, tensor_t self) override;
+    std::variant<ComputingReturn, tensor_t> op_sampling_top3(ComputingContext* ctx, tensor_t self, float temp) override;
     
 protected:
     inline void* data() {

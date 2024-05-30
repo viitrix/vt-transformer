@@ -80,5 +80,12 @@ int kr_gelu(const T* src, T* target, size_t items, cudaStream_t stream);
 template <typename T>
 int kr_silu_product(const T* src, const T* in, T* target, size_t items, cudaStream_t stream);
 
+template <typename T>
+int kr_sampling_top1(const T *logits, int *out, const size_t batch, const size_t vocab_size, cudaStream_t stream);
+
+template <typename T>
+int kr_sampling_top3(const T *logits, int *out, const size_t batch, const size_t vocab_size, const float temperature, const float randx, cudaStream_t stream);
+
+
 }}
 #endif
