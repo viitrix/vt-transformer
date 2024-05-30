@@ -816,6 +816,23 @@ ComputingReturn CUDATensor<_DT_>::op_attn(ComputingContext* ctx, tensor_t self, 
     return OP_OUTPUT_ERROR;
 }
 
+template<DataType _DT_>
+ComputingReturn CUDATensor<_DT_>::op_gelu(ComputingContext* ctx, tensor_t self, tensor_t out) {
+    auto stream = ctx->cuda_stream;
+    void* src = data();
+    void* dst = std::get<1>(out->op_data(ctx, out) );
+
+    if ( _DT_ == DataType::F32 ) {
+        cuda::kr_gelu<float>((float *)src, (float *)dst, self->items(), stream);
+        return OP_OK;
+    }
+    if ( _DT_ == DataType::F16 ) {
+        cuda::kr_gelu<device_fp16_t>((device_fp16_t *)src, (device_fp16_t *)dst, self->items(), stream);
+        return OP_OK;
+    }
+    return OP_TODO_ERROR;
+}
+
 tensor_t create_cuda_f32(std::vector<size_t>& shape_) {
     ShapeType shape(shape_);
     CUDATensor<DataType::F32>* tensor = new CUDATensor<DataType::F32>(shape);
