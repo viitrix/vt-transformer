@@ -293,8 +293,6 @@
         "cache_man" @ "_kcache_" @ "xc" @ "xfb" @ $L @ nn.ezkv_update
         "yfb" @ "zfa" @ op.transpose_0213
        
-        "zfa" @ io.dump ^
-
         ;; get query@key
         "xa" @ "attn.query.weight" @ "attn.query.bias" @ "xc" @ op.linear
         "yc" @ "rotary_cache" @ $pos @ "yb" @  op.rotary_embed
@@ -304,7 +302,7 @@
         "zc" @  "zfa" @  "xll" @ op.querykey
         "xll" @ "causal_mask" @ "xll" @ op.add
         "xll" @ "xll" @ op.softmax
-        
+       
         ;; get value for new tokens, combing cached tokens 
         "xa" @ "attn.value.weight" @ "attn.value.bias" @ "xb" @ op.linear
         "cache_man" @ "_vcache_" @ "xb" @ "xfa" @ $L @ nn.ezkv_update
@@ -336,7 +334,7 @@
         ;; residual
         "xa" @ "xb" @ "xinput" @ op.add
     }
-    
+   
     $pos !!
     $L !!
 %end
@@ -386,7 +384,7 @@
 
     ;; sampling using tempture & top_p
     
-    ;;"all_logits" @ "TEMPERATURE" @ op.sampling_top3
+    ;"all_logits" @ "TEMPERATURE" @ op.sampling_top3
     "all_logits" @ op.sampling_top1
     
     0 io.pipe.write
