@@ -41,7 +41,7 @@ def save_weight(w, wfile):
     w32.tofile(ofile_name);
     '''
 
-pretrain = "./";  ## "Qwen/Qwen1.5-0.5B-Chat"
+pretrain = "./";  ## shenzhi-wang/Llama3-8B-Chinese-Chat
 model = AutoModelForCausalLM.from_pretrained(pretrain, device_map="cpu").eval()
 
 ## wte & lm_head & ln_f

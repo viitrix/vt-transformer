@@ -5,7 +5,6 @@
 #include <map>
 
 #include <vt.hpp>
-#include <context.hpp>
 
 #include "tokenizers_c.h"
 #include "tokenizer_combo.hpp"
