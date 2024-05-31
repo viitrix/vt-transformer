@@ -796,7 +796,7 @@ ComputingReturn CUDATensor<_DT_>::op_attn(ComputingContext* ctx, tensor_t self, 
     int n = ntokens;
     int k = ftokens;
 
-    if ( value_->dtype() == DataType::F32 && value_->dtype() == DataType::F32 ) {
+    if ( value_->dtype() == DataType::F32 && self->dtype() == DataType::F32 ) {
         float* A = (float *)(value_->cuda_f32()->data()) ;
         float* B = (float *)data() ;
         float* C = (float *)(out_->cuda_f32()->data());
@@ -810,7 +810,7 @@ ComputingReturn CUDATensor<_DT_>::op_attn(ComputingContext* ctx, tensor_t self, 
                 ctx->cuda_workspace,
                 ctx->workspace_size);
         return OP_OK;
-    } else if ( value_->dtype() == DataType::F16 && value_->dtype() == DataType::F16 ) {
+    } else if ( value_->dtype() == DataType::F16 && self->dtype() == DataType::F16 ) {
         auto* B = (device_fp16_t *)data();
         auto* A = (device_fp16_t *)(value_->cuda_f16()->data());
         auto* C = (device_fp16_t *)(out_->cuda_f16()->data());

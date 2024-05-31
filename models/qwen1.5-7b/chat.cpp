@@ -213,7 +213,9 @@ int main(int argc, char* argv[] ) {
             }
         }
     } else if ( ctx->pipe_rank == 1) {
+#ifdef _USING_DEVICE_CUDA_
         ctx->boot_cuda(0);
+#endif
 
         vt::Enviroment* env = new vt::Enviroment(ctx);
         env->insert_native_word("app.mem", MemoryCounting::creator);

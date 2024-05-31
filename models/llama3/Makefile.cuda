@@ -1,35 +1,25 @@
 .PHONY: all
 
-FLAGS = -Wall -O3 -fopenmp -D_USING_DEVICE_CUDA_ -D_USING_DEVICE_DNNL_ 
+FLAGS = -Wall -O3 -D_USING_DEVICE_CUDA_ 
 INC = -I../../install/include \
-	  -I${DNNL_DIR}/include \
 	  -I${CUDA_DIR}/include \
-	  -I${NCCL_DIR}/include \
 	  -I${CUDNN_DIR}/include 
 
 LINK = -L../../install/lib \
-	   -L${DNNL_DIR}/lib \
 	   -L${CUDA_DIR}/lib64 \
-       -L${NCCL_DIR}/lib \
-	   -L${CUDA_DIR}/lib \
+	   -L${CUDNN_DIR}/lib \
 	   -L/usr/lib/x86_64-linux-gnu \
 	   -ltokenizer_combo -ltokenizers_c \
 	   -lssl -lcrypto \
-	   -ltensortype -ldnnl -lcuda_kernels -lnccl -lcudnn -lcudart -lcublas -lcublasLt 
+	   -ltensortype -lcuda_kernels -lcudnn -lcudart -lcublas -lcublasLt 
 
 all: chat
 
-chat: chat.cpp memory.hpp
-	g++ $(FLAGS) -o $@ $< $(INC) $(LINK)
-
-bench: bench.cpp memory.hpp
+chat: chat.cpp memory.hpp ../../install/lib/libtensortype.a 
 	g++ $(FLAGS) -o $@ $< $(INC) $(LINK)
 
 run16: chat 
-	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${DNNL_DIR}/lib:${CUDA_DIR}/lib64:${NCCL_DIR}/lib:${CUDNN_DIR}/lib:${VT_SOURCE}/install/lib ./chat ./inference_fp16.dag
-
-run32: chat 
-	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${DNNL_DIR}/lib:${CUDA_DIR}/lib64:${NCCL_DIR}/lib:${CUDNN_DIR}/lib:${VT_SOURCE}/install/lib ./chat ./inference_fp32.dag
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}::${CUDA_DIR}/lib64:${CUDNN_DIR}/lib:${VT_SOURCE}/install/lib ./chat ./inference_fp16.dag
 
 clean:
-	rm -f chat bech 
+	rm -f chat 

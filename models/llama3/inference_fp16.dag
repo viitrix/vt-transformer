@@ -18,24 +18,24 @@
     $DEVICE !
 
     ;; local host xinput var 
-    "MAX_CONTEXT" @ "MAX_BATCH" @ "HIDDEN_SIZE" @ * * 1 "host" "fp16" op.create "_xinput~" !
+    "MAX_CONTEXT" @ "MAX_BATCH" @ "HIDDEN_SIZE" @ * * 1 "host" "f16" op.create "_xinput~" !
 
     ;; activity memory
-    "MAX_BATCH" @ "MAX_CONTEXT" @ app.mem 1 $DEVICE @ "fp16" op.create  "_var_"  !
+    "MAX_BATCH" @ "MAX_CONTEXT" @ app.mem 1 $DEVICE @ "f16" op.create  "_var_"  !
     
     ;; kv cached memroy
-    32 "MAX_BATCH" @ "MAX_CONTEXT" @ 16 + "KV_PROJ" @ 4 $DEVICE @  "fp16" op.create dup "_kcache_"  !
-    32 "MAX_BATCH" @ "MAX_CONTEXT" @ 16 + "KV_PROJ" @ 4 $DEVICE @  "fp16" op.create dup "_vcache_"  !
+    32 "MAX_BATCH" @ "MAX_CONTEXT" @ 16 + "KV_PROJ" @ 4 $DEVICE @  "f16" op.create dup "_kcache_"  !
+    32 "MAX_BATCH" @ "MAX_CONTEXT" @ 16 + "KV_PROJ" @ 4 $DEVICE @  "f16" op.create dup "_vcache_"  !
     nn.ezkv_init "cache_man" !
 
     "MAX_CONTEXT" @ "MAX_BATCH" @ * dup dup dup 
-    1 "host"     "int"  op.create  "_ids~"     !
-    1 "host"     "int"  op.create  "_maks~"    !
-    1 $DEVICE @  "int"  op.create  "_ids"      !
-    1 $DEVICE @  "int"  op.create  "_mask"     !
-    "MAX_CONTEXT" @ 1 $DEVICE @  "int" op.create "_position" !
+    1 "host"     "i32"  op.create  "_ids~"     !
+    1 "host"     "i32"  op.create  "_maks~"    !
+    1 $DEVICE @  "i32"  op.create  "_ids"      !
+    1 $DEVICE @  "i32"  op.create  "_mask"     !
+    "MAX_CONTEXT" @ 1 $DEVICE @  "i32" op.create "_position" !
    
-    10000 "HEAD_HIDDEN" @ 2 3 $DEVICE @  "float" op.create dup 
+    10000 "HEAD_HIDDEN" @ 2 3 $DEVICE @  "f32" op.create dup 
     "ROPE_THETA" @ op.rotary_cache 
     "rotary_cache" !
     
@@ -45,7 +45,7 @@
 %def create_input_weight
     $DEVICE !
 
-    "VOCAB_SIZE" @ "HIDDEN_SIZE" @ 2 $DEVICE @ "fp16" op.create "wte.weight"  !
+    "VOCAB_SIZE" @ "HIDDEN_SIZE" @ 2 $DEVICE @ "f16" op.create "wte.weight"  !
 
     $DEVICE !!
 %end
@@ -53,8 +53,8 @@
 %def create_output_weight
     $DEVICE !
 
-    1 1 "HIDDEN_SIZE" @ 3 $DEVICE @ "fp16"  op.create  "ln_f.weight"  !
-    "VOCAB_SIZE" @ "HIDDEN_SIZE" @ 2 $DEVICE @ "fp16" op.create "lm_head.weight" !
+    1 1 "HIDDEN_SIZE" @ 3 $DEVICE @ "f16"  op.create  "ln_f.weight"  !
+    "VOCAB_SIZE" @ "HIDDEN_SIZE" @ 2 $DEVICE @ "f16" op.create "lm_head.weight" !
 
     $DEVICE !!
 %end
@@ -63,18 +63,18 @@
     $L !
     $DEVICE !
 
-    (1 1 "HIDDEN_SIZE" @  3 $DEVICE @ "fp16")  op.create  $L @ "ln_1.weight" | !
-    (1 1 "HIDDEN_SIZE" @  3 $DEVICE @ "fp16")  op.create  $L @ "ln_2.weight"  | !
+    (1 1 "HIDDEN_SIZE" @  3 $DEVICE @ "f16")  op.create  $L @ "ln_1.weight" | !
+    (1 1 "HIDDEN_SIZE" @  3 $DEVICE @ "f16")  op.create  $L @ "ln_2.weight"  | !
 
-    ("HIDDEN_SIZE" @ "HIDDEN_SIZE" @ 2 $DEVICE @  "fp16" )  op.create  $L @  "attn.query.weight" | !
-    ("KV_PROJ" @     "HIDDEN_SIZE" @ 2 $DEVICE @  "fp16" )  op.create  $L @  "attn.key.weight" | !
-    ("KV_PROJ" @     "HIDDEN_SIZE" @ 2 $DEVICE @  "fp16" )  op.create  $L @  "attn.value.weight" | !
+    ("HIDDEN_SIZE" @ "HIDDEN_SIZE" @ 2 $DEVICE @  "f16" )  op.create  $L @  "attn.query.weight" | !
+    ("KV_PROJ" @     "HIDDEN_SIZE" @ 2 $DEVICE @  "f16" )  op.create  $L @  "attn.key.weight" | !
+    ("KV_PROJ" @     "HIDDEN_SIZE" @ 2 $DEVICE @  "f16" )  op.create  $L @  "attn.value.weight" | !
     
-    ("HIDDEN_SIZE" @  "HIDDEN_SIZE" @ 2 $DEVICE @  "fp16")  op.create   $L @ "attn.o_proj.weight" |  !
+    ("HIDDEN_SIZE" @  "HIDDEN_SIZE" @ 2 $DEVICE @  "f16")  op.create   $L @ "attn.o_proj.weight" |  !
 
-    ("INTERMEDIATE_SIZE" @  "HIDDEN_SIZE" @ 2 $DEVICE @  "fp16")  op.create  $L @  "mlp.w1.weight"  | !
-    ("INTERMEDIATE_SIZE" @  "HIDDEN_SIZE" @ 2 $DEVICE @  "fp16")  op.create  $L @  "mlp.w2.weight"  | !
-    ("HIDDEN_SIZE" @  "INTERMEDIATE_SIZE" @ 2 $DEVICE @  "fp16")  op.create  $L @  "mlp.o_proj.weight" | !
+    ("INTERMEDIATE_SIZE" @  "HIDDEN_SIZE" @ 2 $DEVICE @  "f16")  op.create  $L @  "mlp.w1.weight"  | !
+    ("INTERMEDIATE_SIZE" @  "HIDDEN_SIZE" @ 2 $DEVICE @  "f16")  op.create  $L @  "mlp.w2.weight"  | !
+    ("HIDDEN_SIZE" @  "INTERMEDIATE_SIZE" @ 2 $DEVICE @  "f16")  op.create  $L @  "mlp.o_proj.weight" | !
 
     $L !!
     $DEVICE !!
@@ -165,7 +165,7 @@
     ;; causal mask, norm2 in GPU, extend to aligen address
     {
         dup
-        "_var_" @ swap $batch @ 1 $tokens @  $full_tokens @ 4 "float" op.view_as  "causal_mask"  !
+        "_var_" @ swap $batch @ 1 $tokens @  $full_tokens @ 4 "f16" op.view_as  "causal_mask"  !
         $batch @ $tokens @ $full_tokens @ 2 * * * +
 
         dup
@@ -217,8 +217,9 @@
         "xfb" @ 0 $batch @ $full_tokens @ "KV_HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "yfb_kv" !
         "xfb" @ 0 $batch @ $full_tokens @ "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "yfb" !
         "xfb" @ 0 $batch @ "HEADS_NUM" @ $full_tokens @ "HEAD_HIDDEN" @ 4 op.view "zfb" !
-
-        "_var_" @ swap $batch @ "HEADS_NUM" @ $tokens @ $full_tokens @ 4 "float" op.view_as "xll" !
+        
+        dup
+        "_var_" @ swap $batch @ "HEADS_NUM" @ $tokens @ $full_tokens @ 4 "f16" op.view_as "xll" !
     }  
     dup
     {
@@ -260,8 +261,9 @@
     {
         "_maks~" @ 0 "mask" @ op.get_shape op.view "mask~" !
         "_ids~" @ 0 "ids" @ op.get_shape op.view "ids~" !
-        "mask~" @ "mask" @ op.copy
-        "ids~" @ "ids" @ op.copy
+        
+        "mask" @ "mask~" @ op.copy_to
+        "ids" @ "ids~" @  op.copy_to
     }
 
     {
@@ -285,12 +287,12 @@
         "yb_kv" @ "rotary_cache" @ $pos @ "yc_kv" @  op.rotary_embed 
         "cache_man" @ "_kcache_" @ "xc_kv" @ "xfb_kv" @ $L @ nn.ezkv_update
         "yfb_kv" @ "zfa" @ op.transpose_0213_repeated
-       
+
         ;; get query@key
         "xa" @ "attn.query.weight" @ op.null "xc" @ op.linear
         "yc" @ "rotary_cache" @ $pos @ "yb" @  op.rotary_embed
         "yb" @ "zc" @ op.transpose_0213
-        
+       
         ;; query@key + apply causal_mask + softmax
         "zc" @  "zfa" @  "xll" @ op.querykey
         "xll" @ "causal_mask" @ "xll" @ op.add
@@ -305,11 +307,9 @@
         "xll" @ "zfb" @ "zb" @ op.attn          
         "zb" @ "ya" @ op.transpose_0213          ;; attn->ya 
     }
-    
-    ;; do dense & residual
     "xa" @ "attn.o_proj.weight" @  op.null "xb" @ op.linear
     "xb" @ "xinput" @ "xa" @ op.add
-
+    
     ;; post layer norm
     "xa" @ "ln_2.weight" @ "norm2" @ "xb" @ "RMS_EPS" @ op.rmsnorm
 
@@ -319,14 +319,14 @@
         ;; xb passed post layernorm
         "xb" @ "mlp.w2.weight" @ op.null "x4a" @ op.linear
         "xb" @ "mlp.w1.weight" @ op.null "x4b" @ op.linear
-        
+    
         "x4b" @ "x4a" @ "x4a" @ op.silu_product
         "x4a" @ "mlp.o_proj.weight" @ op.null "xb" @ op.linear
-        
+
         ;; residual
         "xa" @ "xb" @ "xinput" @ op.add
     }
-   
+ 
     $pos !!
     $L !!
 %end
@@ -364,6 +364,7 @@
     %for 0 31
         "L%%."   sync_layer_clone %% layer_forward 
     %endf
+
 
     ;; ln & output    
     {

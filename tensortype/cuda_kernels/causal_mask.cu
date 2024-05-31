@@ -59,7 +59,7 @@ int kr_causal_mask<float>(const int *mask, float *out,
 __global__ void mask_fp16( const int *mask, __half *out, 
                         const int batch, const int new_tokens, const int full_tokens) {
     
-    const __half minv = __ushort_as_half((unsigned short)0xFC00U);
+    const __half minv = -65504;
 
     int e = blockIdx.x * blockDim.x + threadIdx.x;
     if ( e >= batch * new_tokens ) {
