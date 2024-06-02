@@ -497,7 +497,7 @@ static NativeWord* creator(vt::Enviroment& env) {   \
 }
 
 #define NWORD_CREATOR_DEFINE_CTX(CLS)                \
-ComputingContext* ctx_;                             \
+vt::ComputingContext* ctx_;                             \
 CLS(vt::Enviroment& env) : ctx_(env.ctx()) {   \
 }                                                   \
 static NativeWord* creator(vt::Enviroment& env) {   \

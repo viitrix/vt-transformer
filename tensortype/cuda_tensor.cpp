@@ -992,6 +992,40 @@ std::variant<ComputingReturn, tensor_t> CUDATensor<_DT_>::op_sampling_top3(Compu
     return ret;
 }
 
+template<DataType _DT_>
+ComputingReturn CUDATensor<_DT_>::op_conv2d(ComputingContext* ctx, tensor_t self, tensor_t weight, tensor_t bias, tensor_t dst, int stride, int padding) {
+
+    if ( _DT_ == DataType::F32 ) {
+        // 0. create and setup desc
+        cudnnConvolutionDescriptor_t convDesc;
+        cudnnCreateConvolutionDescriptor(&convDesc);
+        cudnnSetConvolution2dDescriptor(convDesc, padding, padding, weight->shape()[2], weight->shape()[3], 1, 1, CUDNN_CONVOLUTION, CUDNN_DATA_FLOAT);
+
+        cudnnFilterDescriptor_t wDesc;
+        cudnnCreateFilterDescriptor(&wDesc);
+        cudnnSetFilter4dDescriptor(wDesc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW, weight->shape()[0], weight->shape()[1],  weight->shape()[2], weight->shape()[3]);
+
+        // 1. init parameters
+        float alpha = 1.0;
+        float beta = 0.0;
+
+        cudnnTensorDescriptor_t xDesc = create_cudnn_td_with<DataType::F32>( self->shape().vec() );
+        void* x = data();
+        void* w = weight->cuda_f32()->data();
+        cudnnTensorDescriptor_t yDesc = create_cudnn_td_with<DataType::F32>( dst->shape().vec() );
+        void* y = dst->cuda_f32()->data();
+
+        // 2. make call
+        cudnnConvolutionForward(ctx->cudnn_handle, &alpha, xDesc, x, wDesc, w, convDesc,
+                CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM, ctx->cuda_workspace, ctx->workspace_size, &beta, yDesc, y);
+
+        // x. release resouce
+        cudnnDestroyConvolutionDescriptor(convDesc);
+        cudnnDestroyFilterDescriptor(wDesc);
+    }
+    return OP_TODO_ERROR;
+}
+
 tensor_t create_cuda_f32(std::vector<size_t>& shape_) {
     ShapeType shape(shape_);
     CUDATensor<DataType::F32>* tensor = new CUDATensor<DataType::F32>(shape);

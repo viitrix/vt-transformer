@@ -189,8 +189,6 @@ void do_inference(vt::Enviroment* env, const char* dag_file) {
     delete target_cmd;
 }
 
-
-
 int main(int argc, char* argv[] ) {
     if ( argc < 2 ) {
         std::cout << "usage: ./chat [dag_file] " << std::endl;

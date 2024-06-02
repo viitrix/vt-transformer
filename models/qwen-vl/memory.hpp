@@ -3,7 +3,6 @@
 #include <sys/ipc.h>
 #include <sys/shm.h>
 
-
 const int VOCAB_SIZE = 151936;
 const int HIDDEN_SIZE = 4096;
 const int INTERMEDIATE_SIZE = 11008;
@@ -34,10 +33,14 @@ struct MemoryFill : public vt::NativeWord {
 
 
         auto tensor = stack.pop_tensor();
-        void* dst = tensor->dnnl_float()->data();
-        memcpy(dst, src, shsize);
+        void* dst = std::get<1>(tensor->op_data(ctx_, tensor));
+        size_t s = std::get<1>(tensor->op_sizeof(ctx_, tensor));
+#ifdef _USING_DEVICE_CUDA_
+        CUDA_CHECK(cudaMemcpyAsync(dst, src, s, cudaMemcpyHostToDevice, ctx_->cuda_stream));
+        CUDA_CHECK(cudaStreamSynchronize(ctx_->cuda_stream));
+#endif
     }
-    NWORD_CREATOR_DEFINE_LR(MemoryFill)
+    NWORD_CREATOR_DEFINE_CTX(MemoryFill)
 };
 
 struct InsertImage : public vt::NativeWord {
@@ -46,21 +49,21 @@ struct InsertImage : public vt::NativeWord {
         auto image = stack.pop_tensor();
         auto embed = stack.pop_tensor();
 
-        int* tokens = (int *)ids->device_data();
+        int* tokens = (int *)std::get<1>(ids->op_data(ctx_, ids));
         for (int i = 0; i < (int)ids->items(); i++) {
             if ( tokens[i] >= IMAGE_PAD_BEGIN ) {
                 vt_assert(i + 256 < (int)ids->items() - 1, "Token's length error for image");
                 vt_assert(tokens[i + 256] == IMAGE_END, "Token's image format error!");
 
-                auto ret = embed->op_view(embed, i * HIDDEN_SIZE, {1, 256, 4096});
+                auto ret = embed->op_view(ctx_, embed, i * HIDDEN_SIZE, {1, 256, 4096});
                 auto target = std::get<1>(ret);
 
-                target->op_copy(target, image);
+                target->op_copy_from(ctx_, target, image);
                 break;
             }
         }
     }
-    NWORD_CREATOR_DEFINE_LR(InsertImage)
+    NWORD_CREATOR_DEFINE_CTX(InsertImage)
 };
 
 struct MemoryAlign : public vt::NativeWord {
@@ -71,7 +74,7 @@ struct MemoryAlign : public vt::NativeWord {
         offset = offset - ( offset % align );
         stack.push_number(offset);
     }
-    NWORD_CREATOR_DEFINE_LR(MemoryAlign)
+    NWORD_CREATOR_DEFINE_CTX(MemoryAlign)
 };
 
 struct MemoryCounting : public vt::NativeWord {
@@ -116,7 +119,7 @@ struct MemoryCounting : public vt::NativeWord {
         std::cout << "Allocating " << kv * 2.0 / oneG << " GB for kv caches memory." << std::endl;
         stack.push_number(all);
     }
-    NWORD_CREATOR_DEFINE_LR(MemoryCounting)
+    NWORD_CREATOR_DEFINE_CTX(MemoryCounting)
 };
 
 
