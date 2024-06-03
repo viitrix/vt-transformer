@@ -1001,7 +1001,7 @@ ComputingReturn CUDATensor<_DT_>::op_conv2d(ComputingContext* ctx, tensor_t self
         // 0. create and setup desc
         cudnnConvolutionDescriptor_t convDesc;
         cudnnCreateConvolutionDescriptor(&convDesc);
-        cudnnSetConvolution2dDescriptor(convDesc, padding, padding, weight->shape()[2], weight->shape()[3], 1, 1, CUDNN_CONVOLUTION, CUDNN_DATA_FLOAT);
+        cudnnSetConvolution2dDescriptor(convDesc, padding, padding, weight->shape()[2], weight->shape()[3], 1, 1, CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT);
 
         cudnnFilterDescriptor_t wDesc;
         cudnnCreateFilterDescriptor(&wDesc);
@@ -1014,6 +1014,7 @@ ComputingReturn CUDATensor<_DT_>::op_conv2d(ComputingContext* ctx, tensor_t self
         cudnnTensorDescriptor_t xDesc = create_cudnn_td_with<DataType::F32>( self->shape().vec() );
         void* x = data();
         void* w = weight->cuda_f32()->data();
+
         cudnnTensorDescriptor_t yDesc = create_cudnn_td_with<DataType::F32>( dst->shape().vec() );
         void* y = dst->cuda_f32()->data();
 
