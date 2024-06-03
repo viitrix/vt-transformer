@@ -8,58 +8,58 @@
 448     "IMAGE_WIDTH"               !
 
 %def visual_create_weights
-    "CONV_CHANNELS" @ 3 14 14 4 "dnnl" "float" op.create "v.conv1.weight~" !
+    "CONV_CHANNELS" @ 3 14 14 4 "G_DEVICE" @ "f32" op.create "v.conv1.weight~" !
 
-    1 1024 "CONV_CHANNELS" @ 3 "G_DEVICE" @ "fp16" op.create "v.pos_emb" !
+    1 1024 "CONV_CHANNELS" @ 3 "G_DEVICE" @ "f16" op.create "v.pos_emb" !
 
-    "HIDDEN_SIZE"   @ 1 "G_DEVICE" @ "fp16" op.create "v.mean_h" !
-    "HIDDEN_SIZE"   @ 1 "G_DEVICE" @ "fp16" op.create "v.var_h" !
-    "CONV_CHANNELS" @ 1 "G_DEVICE" @ "fp16" op.create "v.mean_c" !
-    "CONV_CHANNELS" @ 1 "G_DEVICE" @ "fp16" op.create "v.var_c" !
+    "HIDDEN_SIZE"   @ 1 "G_DEVICE" @ "f16" op.create "v.mean_h" !
+    "HIDDEN_SIZE"   @ 1 "G_DEVICE" @ "f16" op.create "v.var_h" !
+    "CONV_CHANNELS" @ 1 "G_DEVICE" @ "f16" op.create "v.mean_c" !
+    "CONV_CHANNELS" @ 1 "G_DEVICE" @ "f16" op.create "v.var_c" !
 
-    "CONV_CHANNELS" @ 1         "G_DEVICE" @ "fp16" op.create "v.ln_pre.weight" !
-    "CONV_CHANNELS" @ 1         "G_DEVICE" @ "fp16" op.create "v.ln_pre.bias" !
-    "HIDDEN_SIZE" @ 1           "G_DEVICE" @ "fp16" op.create "v.ln_post.weight" !
-    "HIDDEN_SIZE" @ 1           "G_DEVICE" @ "fp16" op.create "v.ln_post.bias" !
-    "HIDDEN_SIZE" @ "HIDDEN_SIZE" @ 2     "G_DEVICE" @ "fp16" op.create "v.proj.weight" !
+    "CONV_CHANNELS" @ 1         "G_DEVICE" @ "f16" op.create "v.ln_pre.weight" !
+    "CONV_CHANNELS" @ 1         "G_DEVICE" @ "f16" op.create "v.ln_pre.bias" !
+    "HIDDEN_SIZE" @ 1           "G_DEVICE" @ "f16" op.create "v.ln_post.weight" !
+    "HIDDEN_SIZE" @ 1           "G_DEVICE" @ "f16" op.create "v.ln_post.bias" !
+    "HIDDEN_SIZE" @ "HIDDEN_SIZE" @ 2     "G_DEVICE" @ "f16" op.create "v.proj.weight" !
 
-    "HIDDEN_SIZE" @ "CONV_CHANNELS" @ 2   "G_DEVICE" @ "fp16" op.create "v.pool.kv_proj.weight" ! 
-    "HIDDEN_SIZE" @ "HIDDEN_SIZE" @ 2     "G_DEVICE" @ "fp16" op.create "v.pool.out_proj.weight" !
-    "HIDDEN_SIZE" @ 1                     "G_DEVICE" @ "fp16" op.create "v.pool.out_proj.bias" !
-    "HIDDEN_SIZE" @ 1                     "G_DEVICE" @ "fp16" op.create "v.pool.ln_kv.weight" !
-    "HIDDEN_SIZE" @ 1                     "G_DEVICE" @ "fp16" op.create "v.pool.ln_kv.bias" !
-    1 1024 "HIDDEN_SIZE" @ 3              "G_DEVICE" @ "fp16" op.create "v.pool.pos_emb" !
-    1 256 "HIDDEN_SIZE" @ 3               "G_DEVICE" @ "fp16" op.create "v.pool.query" !
+    "HIDDEN_SIZE" @ "CONV_CHANNELS" @ 2   "G_DEVICE" @ "f16" op.create "v.pool.kv_proj.weight" ! 
+    "HIDDEN_SIZE" @ "HIDDEN_SIZE" @ 2     "G_DEVICE" @ "f16" op.create "v.pool.out_proj.weight" !
+    "HIDDEN_SIZE" @ 1                     "G_DEVICE" @ "f16" op.create "v.pool.out_proj.bias" !
+    "HIDDEN_SIZE" @ 1                     "G_DEVICE" @ "f16" op.create "v.pool.ln_kv.weight" !
+    "HIDDEN_SIZE" @ 1                     "G_DEVICE" @ "f16" op.create "v.pool.ln_kv.bias" !
+    1 1024 "HIDDEN_SIZE" @ 3              "G_DEVICE" @ "f16" op.create "v.pool.pos_emb" !
+    1 256 "HIDDEN_SIZE" @ 3               "G_DEVICE" @ "f16" op.create "v.pool.query" !
 
-    "HIDDEN_SIZE" @ "HIDDEN_SIZE" @ 2     "G_DEVICE" @ "fp16" op.create "v.pool.attn.out.weight" !
-    "HIDDEN_SIZE" @ 1                     "G_DEVICE" @ "fp16" op.create "v.pool.attn.out.bias" !
-    "HIDDEN_SIZE" @ "HIDDEN_SIZE" @ 2     "G_DEVICE" @ "fp16" op.create "v.pool.attn.in_q.weight" !
-    "HIDDEN_SIZE" @ 1                     "G_DEVICE" @ "fp16" op.create "v.pool.attn.in_q.bias" !
-    "HIDDEN_SIZE" @ "HIDDEN_SIZE" @ 2     "G_DEVICE" @ "fp16" op.create "v.pool.attn.in_k.weight" !
-    "HIDDEN_SIZE" @ 1                     "G_DEVICE" @ "fp16" op.create "v.pool.attn.in_k.bias" !
-    "HIDDEN_SIZE" @ "HIDDEN_SIZE" @ 2     "G_DEVICE" @ "fp16" op.create "v.pool.attn.in_v.weight" !
-    "HIDDEN_SIZE" @ 1                     "G_DEVICE" @ "fp16" op.create "v.pool.attn.in_v.bias" !
+    "HIDDEN_SIZE" @ "HIDDEN_SIZE" @ 2     "G_DEVICE" @ "f16" op.create "v.pool.attn.out.weight" !
+    "HIDDEN_SIZE" @ 1                     "G_DEVICE" @ "f16" op.create "v.pool.attn.out.bias" !
+    "HIDDEN_SIZE" @ "HIDDEN_SIZE" @ 2     "G_DEVICE" @ "f16" op.create "v.pool.attn.in_q.weight" !
+    "HIDDEN_SIZE" @ 1                     "G_DEVICE" @ "f16" op.create "v.pool.attn.in_q.bias" !
+    "HIDDEN_SIZE" @ "HIDDEN_SIZE" @ 2     "G_DEVICE" @ "f16" op.create "v.pool.attn.in_k.weight" !
+    "HIDDEN_SIZE" @ 1                     "G_DEVICE" @ "f16" op.create "v.pool.attn.in_k.bias" !
+    "HIDDEN_SIZE" @ "HIDDEN_SIZE" @ 2     "G_DEVICE" @ "f16" op.create "v.pool.attn.in_v.weight" !
+    "HIDDEN_SIZE" @ 1                     "G_DEVICE" @ "f16" op.create "v.pool.attn.in_v.bias" !
     
     %for 0 47
-        "CONV_CHANNELS" @ 1                   "G_DEVICE" @ "fp16" op.create "v.b_%%.ln_1.weight" !
-        "CONV_CHANNELS" @ 1                   "G_DEVICE" @ "fp16" op.create "v.b_%%.ln_1.bias" !
-        "CONV_CHANNELS" @ 1                   "G_DEVICE" @ "fp16" op.create "v.b_%%.ln_2.weight" !
-        "CONV_CHANNELS" @ 1                   "G_DEVICE" @ "fp16" op.create "v.b_%%.ln_2.bias" !
+        "CONV_CHANNELS" @ 1                   "G_DEVICE" @ "f16" op.create "v.b_%%.ln_1.weight" !
+        "CONV_CHANNELS" @ 1                   "G_DEVICE" @ "f16" op.create "v.b_%%.ln_1.bias" !
+        "CONV_CHANNELS" @ 1                   "G_DEVICE" @ "f16" op.create "v.b_%%.ln_2.weight" !
+        "CONV_CHANNELS" @ 1                   "G_DEVICE" @ "f16" op.create "v.b_%%.ln_2.bias" !
 
-        "CONV_CHANNELS" @ "CONV_CHANNELS" @ 2   "G_DEVICE" @ "fp16" op.create "v.b_%%.attn.in_proj_q.weight" !
-        "CONV_CHANNELS" @ 1                     "G_DEVICE" @ "fp16" op.create "v.b_%%.attn.in_proj_q.bias" !
-        "CONV_CHANNELS" @ "CONV_CHANNELS" @ 2   "G_DEVICE" @ "fp16" op.create "v.b_%%.attn.in_proj_k.weight" !
-        "CONV_CHANNELS" @ 1                     "G_DEVICE" @ "fp16" op.create "v.b_%%.attn.in_proj_k.bias" !
-        "CONV_CHANNELS" @ "CONV_CHANNELS" @ 2   "G_DEVICE" @ "fp16" op.create "v.b_%%.attn.in_proj_v.weight" !
-        "CONV_CHANNELS" @ 1                     "G_DEVICE" @ "fp16" op.create "v.b_%%.attn.in_proj_v.bias" !
+        "CONV_CHANNELS" @ "CONV_CHANNELS" @ 2   "G_DEVICE" @ "f16" op.create "v.b_%%.attn.in_proj_q.weight" !
+        "CONV_CHANNELS" @ 1                     "G_DEVICE" @ "f16" op.create "v.b_%%.attn.in_proj_q.bias" !
+        "CONV_CHANNELS" @ "CONV_CHANNELS" @ 2   "G_DEVICE" @ "f16" op.create "v.b_%%.attn.in_proj_k.weight" !
+        "CONV_CHANNELS" @ 1                     "G_DEVICE" @ "f16" op.create "v.b_%%.attn.in_proj_k.bias" !
+        "CONV_CHANNELS" @ "CONV_CHANNELS" @ 2   "G_DEVICE" @ "f16" op.create "v.b_%%.attn.in_proj_v.weight" !
+        "CONV_CHANNELS" @ 1                     "G_DEVICE" @ "f16" op.create "v.b_%%.attn.in_proj_v.bias" !
 
-        "CONV_CHANNELS" @ "CONV_CHANNELS" @ 2        "G_DEVICE" @ "fp16" op.create "v.b_%%.attn.out_proj.weight" !
-        "CONV_CHANNELS" @ 1                          "G_DEVICE" @ "fp16" op.create "v.b_%%.attn.out_proj.bias" !
+        "CONV_CHANNELS" @ "CONV_CHANNELS" @ 2        "G_DEVICE" @ "f16" op.create "v.b_%%.attn.out_proj.weight" !
+        "CONV_CHANNELS" @ 1                          "G_DEVICE" @ "f16" op.create "v.b_%%.attn.out_proj.bias" !
         
-        "VISUAL_MLP_INTERNAL" @ "CONV_CHANNELS" @ 2  "G_DEVICE" @ "fp16" op.create "v.b_%%.mlp.c_fc.weight" !
-        "VISUAL_MLP_INTERNAL" @ 1                    "G_DEVICE" @ "fp16" op.create "v.b_%%.mlp.c_fc.bias" !
-        "CONV_CHANNELS" @ "VISUAL_MLP_INTERNAL" @ 2  "G_DEVICE" @ "fp16" op.create "v.b_%%.mlp.c_proj.weight" !
-        "CONV_CHANNELS" @ 1                          "G_DEVICE" @ "fp16" op.create "v.b_%%.mlp.c_proj.bias" !
+        "VISUAL_MLP_INTERNAL" @ "CONV_CHANNELS" @ 2  "G_DEVICE" @ "f16" op.create "v.b_%%.mlp.c_fc.weight" !
+        "VISUAL_MLP_INTERNAL" @ 1                    "G_DEVICE" @ "f16" op.create "v.b_%%.mlp.c_fc.bias" !
+        "CONV_CHANNELS" @ "VISUAL_MLP_INTERNAL" @ 2  "G_DEVICE" @ "f16" op.create "v.b_%%.mlp.c_proj.weight" !
+        "CONV_CHANNELS" @ 1                          "G_DEVICE" @ "f16" op.create "v.b_%%.mlp.c_proj.bias" !
     %endf
 %end
 
@@ -121,17 +121,17 @@
     visual_create_weights
     visual_load_weights
 
-    ; variable for conv in dnnl tensor
-    1 3 "IMAGE_WIDTH" @ dup   4   "dnnl" "float" op.create "v_img~" !
-    1 "CONV_CHANNELS" @ 32 32 4   "dnnl" "float" op.create "v_imgx~" !
-    1 "CONV_CHANNELS" @ 32 32 4   "dnnl" "fp16" op.create "v_imgx_half~" !
+    ; variable for conv in Device tensor
+    1 3 "IMAGE_WIDTH" @ dup   4   "G_DEVICE" @ "f32" op.create "v_img~" !
+    1 "CONV_CHANNELS" @ 32 32 4   "G_DEVICE" @ "f32" op.create "v_imgx~" !
+    1 "CONV_CHANNELS" @ 32 32 4   "G_DEVICE" @ "f16" op.create "v_imgx_half~" !
     
     ; working memroy in device
-    1 1024 "CONV_CHANNELS" @ 3 "G_DEVICE" @ "fp16" op.create "v_xinput" !
-    1 1024 "CONV_CHANNELS" @ 3 "G_DEVICE" @ "fp16" op.create "v_xa" !
-    1 1024 "CONV_CHANNELS" @ 3 "G_DEVICE" @ "fp16" op.create "v_xb" !
-    1 1024 "CONV_CHANNELS" @ 3 "G_DEVICE" @ "fp16" op.create "v_xc" !
-    1 1024 "CONV_CHANNELS" @ 3 "G_DEVICE" @ "fp16" op.create "v_xd" !
+    1 1024 "CONV_CHANNELS" @ 3 "G_DEVICE" @ "f16" op.create "v_xinput" !
+    1 1024 "CONV_CHANNELS" @ 3 "G_DEVICE" @ "f16" op.create "v_xa" !
+    1 1024 "CONV_CHANNELS" @ 3 "G_DEVICE" @ "f16" op.create "v_xb" !
+    1 1024 "CONV_CHANNELS" @ 3 "G_DEVICE" @ "f16" op.create "v_xc" !
+    1 1024 "CONV_CHANNELS" @ 3 "G_DEVICE" @ "f16" op.create "v_xd" !
 
     "v_xa" @ 0 1 1024 "VISUAL_HEAD_NUM" @  "VISUAL_HEAD_LEN" @ 4 op.view "v_ya" !
     "v_xb" @ 0 1 1024 "VISUAL_HEAD_NUM" @  "VISUAL_HEAD_LEN" @ 4 op.view "v_yb" !
@@ -143,15 +143,15 @@
     "v_xc" @ 0 1 "VISUAL_HEAD_NUM" @ 1024  "VISUAL_HEAD_LEN" @ 4 op.view "v_zc" !
     "v_xd" @ 0 1 "VISUAL_HEAD_NUM" @ 1024  "VISUAL_HEAD_LEN" @ 4 op.view "v_zd" !
 
-    1 "VISUAL_HEAD_NUM" @ 1024 1024 4 "G_DEVICE" @ "fp16" op.create "v_xll" !
-    1 1024 "VISUAL_MLP_INTERNAL" @ 3 "G_DEVICE" @ "fp16" op.create "v_xmlp" !
+    1 "VISUAL_HEAD_NUM" @ 1024 1024 4 "G_DEVICE" @ "f16" op.create "v_xll" !
+    1 1024 "VISUAL_MLP_INTERNAL" @ 3 "G_DEVICE" @ "f16" op.create "v_xmlp" !
         
     ;; used for pool resampler
-    1 1024 "HIDDEN_SIZE" @   3 "G_DEVICE" @ "fp16" op.create "v_xpa"  !
-    1 1024 "HIDDEN_SIZE" @   3 "G_DEVICE" @ "fp16" op.create "v_xpb"  !
-    1 1024 "HIDDEN_SIZE" @   3 "G_DEVICE" @ "fp16" op.create "v_xpc"  !
-    1 256 "HIDDEN_SIZE" @   3 "G_DEVICE" @ "fp16" op.create "v_xpd"  !
-    1 256 "HIDDEN_SIZE" @   3 "G_DEVICE" @ "fp16" op.create "v_xpe"  !
+    1 1024 "HIDDEN_SIZE" @   3 "G_DEVICE" @ "f16" op.create "v_xpa"  !
+    1 1024 "HIDDEN_SIZE" @   3 "G_DEVICE" @ "f16" op.create "v_xpb"  !
+    1 1024 "HIDDEN_SIZE" @   3 "G_DEVICE" @ "f16" op.create "v_xpc"  !
+    1 256 "HIDDEN_SIZE" @   3 "G_DEVICE" @ "f16" op.create "v_xpd"  !
+    1 256 "HIDDEN_SIZE" @   3 "G_DEVICE" @ "f16" op.create "v_xpe"  !
 
     "v_xpa" @ 0 1 1024 32 128 4 op.view "v_ypa" !
     "v_xpb" @ 0 1 1024 32 128 4 op.view "v_ypb" !
@@ -165,7 +165,7 @@
     "v_xpd" @ 0 1 32 256  128 4 op.view "v_zpd" !
     "v_xpe" @ 0 1 32 256  128 4 op.view "v_zpe" !
 
-    [1 32 256 1024]               "G_DEVICE" @ "fp16" op.create "v_xpll" !
+    [1 32 256 1024]               "G_DEVICE" @ "f16" op.create "v_xpll" !
 
 %end
 

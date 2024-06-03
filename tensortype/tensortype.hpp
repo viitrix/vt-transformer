@@ -46,6 +46,7 @@ inline DataType DataType_from(const char* dtype) {
     if ( strcmp(dtype, "pq") == 0) {
         return DataType::PQ;
     }
+    std::cout << ">>>>>>>>>>>>" << dtype << std::endl;
     vt_fatal_error();
     return DataType::UDF;
 }

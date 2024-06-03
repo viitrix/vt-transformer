@@ -15,7 +15,7 @@ LINK = -L../../install/lib \
 
 all: chat
 
-chat: chat.cpp memory.hpp
+chat: chat.cpp memory.hpp ../../install/lib/libtensortype.a 
 	g++ $(FLAGS) -o $@ $< $(INC) $(LINK)
 
 http: http.cpp memory.hpp
