@@ -260,12 +260,14 @@ ComputingReturn CUDATensor<_DT_>::op_convert(ComputingContext* ctx, tensor_t sel
         device_fp16_t* to = (device_fp16_t*)data();
         float* from = (float  *) std::get<1>(src->op_data(ctx, src));
         cuda::kr_convert<float, device_fp16_t>(from, to, self->items(), stream);
+        return OP_OK;
     }
     if ( _DT_ == DataType::F32 && src->dtype() == DataType::F16) {
         auto stream = ctx->cuda_stream;
         float* to = (float *)data();
         device_fp16_t* from = (device_fp16_t  *) std::get<1>(src->op_data(ctx, src));
         cuda::kr_convert<device_fp16_t, float>(from, to, self->items(), stream);
+        return OP_OK;
     }
 
     return OP_TODO_ERROR;
@@ -1022,6 +1024,8 @@ ComputingReturn CUDATensor<_DT_>::op_conv2d(ComputingContext* ctx, tensor_t self
         // x. release resouce
         cudnnDestroyConvolutionDescriptor(convDesc);
         cudnnDestroyFilterDescriptor(wDesc);
+
+        return OP_OK;
     }
     return OP_TODO_ERROR;
 }

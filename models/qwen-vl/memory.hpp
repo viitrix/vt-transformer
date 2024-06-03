@@ -36,8 +36,10 @@ struct MemoryFill : public vt::NativeWord {
         void* dst = std::get<1>(tensor->op_data(ctx_, tensor));
         size_t s = std::get<1>(tensor->op_sizeof(ctx_, tensor));
 #ifdef _USING_DEVICE_CUDA_
-        CUDA_CHECK(cudaMemcpyAsync(dst, src, s, cudaMemcpyHostToDevice, ctx_->cuda_stream));
-        CUDA_CHECK(cudaStreamSynchronize(ctx_->cuda_stream));
+        if ( tensor->is_cuda() ) {
+            CUDA_CHECK(cudaMemcpyAsync(dst, src, s, cudaMemcpyHostToDevice, ctx_->cuda_stream));
+            CUDA_CHECK(cudaStreamSynchronize(ctx_->cuda_stream));
+        }
 #endif
     }
     NWORD_CREATOR_DEFINE_CTX(MemoryFill)
