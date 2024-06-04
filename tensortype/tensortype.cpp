@@ -348,70 +348,49 @@ ComputingReturn TensorType::op_conv2d(ComputingContext* ctx, tensor_t self, tens
         return;                               \
     }
 
+#define DELETE_DEVICE(TT)\
+    _DELETE_(TT ## _F32)\
+    _DELETE_(TT ## _I32)\
+    _DELETE_(TT ## _F16)\
+    _DELETE_(TT ## _BF16)\
+    _DELETE_(TT ## _Q8)\
+    _DELETE_(TT ## _Q4)\
+    _DELETE_(TT ## _PQ)
+
 TensorType::~TensorType() {
-    _DELETE_(HOST_F32)
-    _DELETE_(HOST_I32)
-    _DELETE_(HOST_F16)
-    _DELETE_(HOST_BF16)
-    _DELETE_(HOST_Q8)
-    _DELETE_(HOST_Q4)
-    _DELETE_(HOST_PQ)
+    DELETE_DEVICE(HOST)
 
 #ifdef _USING_DEVICE_CUDA_
-    _DELETE_(CUDA_F32)
-    _DELETE_(CUDA_I32)
-    _DELETE_(CUDA_F16)
-    _DELETE_(CUDA_BF16)
-    _DELETE_(CUDA_Q8)
-    _DELETE_(CUDA_Q4)
-    _DELETE_(CUDA_PQ)
+    DELETE_DEVICE(CUDA)
 #endif
-
-}
-TensorType::TensorType(host_f32_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::F32) {
-    impl_ = tensor;
-}
-TensorType::TensorType(host_i32_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::I32) {
-    impl_ = tensor;
-}
-TensorType::TensorType(host_f16_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::F16) {
-    impl_ = tensor;
-}
-TensorType::TensorType(host_bf16_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::BF16) {
-    impl_ = tensor;
-}
-TensorType::TensorType(host_q8_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Q8) {
-    impl_ = tensor;
-}
-TensorType::TensorType(host_q4_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Q4) {
-    impl_ = tensor;
-}
-TensorType::TensorType(host_pq_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::PQ) {
-    impl_ = tensor;
 }
 
+#define LIST_DEVICE_CONSTRUCTOR_IMPL(T) \
+TensorType::TensorType(T ## _f32_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::F32) {\
+    impl_ = tensor;\
+}\
+TensorType::TensorType(T ## _i32_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::I32) {\
+    impl_ = tensor;\
+}\
+TensorType::TensorType(T ## _f16_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::F16) {\
+    impl_ = tensor;\
+}\
+TensorType::TensorType(T ## _bf16_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::BF16) {\
+    impl_ = tensor;\
+}\
+TensorType::TensorType(T ## _q8_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Q8) {\
+    impl_ = tensor;\
+}\
+TensorType::TensorType(T ## _q4_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Q4) {\
+    impl_ = tensor;\
+}\
+TensorType::TensorType(T ## _pq_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::PQ) {\
+    impl_ = tensor;\
+}
+
+LIST_DEVICE_CONSTRUCTOR_IMPL(host)
 #ifdef _USING_DEVICE_CUDA_
-TensorType::TensorType(cuda_f32_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::F32) {
-    impl_ = tensor;
-}
-TensorType::TensorType(cuda_i32_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::I32) {
-    impl_ = tensor;
-}
-TensorType::TensorType(cuda_f16_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::F16) {
-    impl_ = tensor;
-}
-TensorType::TensorType(cuda_bf16_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::BF16) {
-    impl_ = tensor;
-}
-TensorType::TensorType(cuda_q8_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Q8) {
-    impl_ = tensor;
-}
-TensorType::TensorType(cuda_q4_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::Q4) {
-    impl_ = tensor;
-}
-TensorType::TensorType(cuda_pq_t* tensor, const ShapeType& shape) : shape_(shape), dtype_(DataType::PQ) {
-    impl_ = tensor;
-}
+LIST_DEVICE_CONSTRUCTOR_IMPL(cuda)
 #endif
 
 

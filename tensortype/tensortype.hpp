@@ -46,7 +46,6 @@ inline DataType DataType_from(const char* dtype) {
     if ( strcmp(dtype, "pq") == 0) {
         return DataType::PQ;
     }
-    std::cout << ">>>>>>>>>>>>" << dtype << std::endl;
     vt_fatal_error();
     return DataType::UDF;
 }
@@ -151,25 +150,24 @@ private:
     mutable size_t numel_;
 };
 
-// forward declare
-template <DataType _DTYPE_> struct HostTensor;
-using host_f32_t = HostTensor<DataType::F32>;
-using host_i32_t = HostTensor<DataType::I32>;
-using host_f16_t = HostTensor<DataType::F16>;
-using host_bf16_t = HostTensor<DataType::BF16>;
-using host_q8_t = HostTensor<DataType::Q8>;
-using host_q4_t = HostTensor<DataType::Q4>;
-using host_pq_t = HostTensor<DataType::PQ>;
+// declare likes:
+// template <DataType _DTYPE_> struct HostTensor;
+// using host_f32_t = HostTensor<DataType::F32>;
+// using cuda_f32_t = CUDATensor<DataType::F32>;
+#define USING_DEVICE_DECLARE(T, TT) \
+template <DataType _DTYPE_> struct TT;\
+using T ## _f32_t =  TT<DataType::F32>;\
+using T ## _i32_t =  TT<DataType::I32>;\
+using T ## _f16_t =  TT<DataType::F16>;\
+using T ## _bf16_t =  TT<DataType::BF16>;\
+using T ## _q8_t =  TT<DataType::Q8>;\
+using T ## _q4_t =  TT<DataType::Q4>;\
+using T ## _pq_t =  TT<DataType::PQ>;
+
+USING_DEVICE_DECLARE(host, HostTensor)
 
 #ifdef _USING_DEVICE_CUDA_
-template <DataType _DTYPE_> struct CUDATensor;
-using cuda_f32_t = CUDATensor<DataType::F32>;
-using cuda_i32_t = CUDATensor<DataType::I32>;
-using cuda_f16_t = CUDATensor<DataType::F16>;
-using cuda_bf16_t = CUDATensor<DataType::BF16>;
-using cuda_q8_t = CUDATensor<DataType::Q8>;
-using cuda_q4_t = CUDATensor<DataType::Q4>;
-using cuda_pq_t = CUDATensor<DataType::PQ>;
+USING_DEVICE_DECLARE(cuda, CUDATensor)
 #endif
 
 // TensorType is all you need
@@ -179,22 +177,23 @@ public:
     virtual ~TensorType();
     TensorType() = delete;
 
-    TensorType(host_f32_t* tensor, const ShapeType& shape);
-    TensorType(host_i32_t* tensor, const ShapeType& shape);
-    TensorType(host_f16_t* tensor, const ShapeType& shape);
-    TensorType(host_bf16_t* tensor, const ShapeType& shape);
-    TensorType(host_q8_t* tensor, const ShapeType& shape);
-    TensorType(host_q4_t* tensor, const ShapeType& shape);
-    TensorType(host_pq_t* tensor, const ShapeType& shape);
+// something likes:
+// TensorType(host_f32_t* tensor, const ShapeType& shape);
+// TensorType(cuda_f32_t* tensor, const ShapeType& shape);
+#define LIST_DEVICE_CONSTRUCTOR(T) \
+    TensorType(T ## _f32_t* tensor, const ShapeType& shape);\
+    TensorType(T ## _i32_t* tensor, const ShapeType& shape);\
+    TensorType(T ## _f16_t* tensor, const ShapeType& shape);\
+    TensorType(T ## _bf16_t* tensor, const ShapeType& shape);\
+    TensorType(T ## _q8_t* tensor, const ShapeType& shape);\
+    TensorType(T ## _q4_t* tensor, const ShapeType& shape);\
+    TensorType(T ## _pq_t* tensor, const ShapeType& shape);
+
+    LIST_DEVICE_CONSTRUCTOR(host)
 #ifdef _USING_DEVICE_CUDA_
-    TensorType(cuda_f32_t* tensor, const ShapeType& shape);
-    TensorType(cuda_i32_t* tensor, const ShapeType& shape);
-    TensorType(cuda_f16_t* tensor, const ShapeType& shape);
-    TensorType(cuda_bf16_t* tensor, const ShapeType& shape);
-    TensorType(cuda_q8_t* tensor, const ShapeType& shape);
-    TensorType(cuda_q4_t* tensor, const ShapeType& shape);
-    TensorType(cuda_pq_t* tensor, const ShapeType& shape);
+    LIST_DEVICE_CONSTRUCTOR(cuda)
 #endif
+
 
 public:
     ComputingReturn io_load(ComputingContext* ctx, tensor_t self, const char* fileName) override;
@@ -284,25 +283,23 @@ public:
 #define _CONVERT_(TT) \
         if ( impl_.index() == ImplType::TT ) { \
             return (TransformerComputing *)std::get<ImplType::TT>(impl_); \
-        }
+        } \
+
+
+#define CONVERT_DEVICE(T) \
+        _CONVERT_(T##_F32) \
+        _CONVERT_(T##_I32) \
+        _CONVERT_(T##_F16) \
+        _CONVERT_(T##_BF16) \
+        _CONVERT_(T##_Q8) \
+        _CONVERT_(T##_Q4) \
+        _CONVERT_(T##_PQ) \
+
 
     TransformerComputing* impl() {
-        _CONVERT_(HOST_F32)
-        _CONVERT_(HOST_I32)
-        _CONVERT_(HOST_F16)
-        _CONVERT_(HOST_BF16)
-        _CONVERT_(HOST_Q8)
-        _CONVERT_(HOST_Q4)
-        _CONVERT_(HOST_PQ)
-
+        CONVERT_DEVICE(HOST)
 #ifdef _USING_DEVICE_CUDA_
-        _CONVERT_(CUDA_F32)
-        _CONVERT_(CUDA_I32)
-        _CONVERT_(CUDA_F16)
-        _CONVERT_(CUDA_BF16)
-        _CONVERT_(CUDA_Q8)
-        _CONVERT_(CUDA_Q4)
-        _CONVERT_(CUDA_PQ)
+        CONVERT_DEVICE(CUDA)
 #endif
         vt_fatal_error();
         return nullptr;
@@ -315,22 +312,21 @@ public:
         }                               \
         vt::_M_Panic(__FILE__, __LINE__, "Can't be here!"); \
         return nullptr; \
-    }
-    _ACCESSOR_(host_f32, HOST_F32)
-    _ACCESSOR_(host_i32, HOST_I32)
-    _ACCESSOR_(host_f16, HOST_F16)
-    _ACCESSOR_(host_bf16, HOST_BF16)
-    _ACCESSOR_(host_q8,  HOST_Q8)
-    _ACCESSOR_(host_q4,  HOST_Q4)
-    _ACCESSOR_(host_pq,  HOST_PQ)
+    } \
+
+
+#define ACCESSOR_DEVICE(T, TT) \
+    _ACCESSOR_(T ## _f32, TT ## _F32) \
+    _ACCESSOR_(T ## _i32, TT ## _I32) \
+    _ACCESSOR_(T ## _f16, TT ## _F16) \
+    _ACCESSOR_(T ## _bf16, TT ## _BF16) \
+    _ACCESSOR_(T ## _q8,  TT ## _Q8) \
+    _ACCESSOR_(T ## _q4,  TT ## _Q4) \
+    _ACCESSOR_(T ## _pq,  TT ## _PQ) \
+
+    ACCESSOR_DEVICE(host, HOST)
 #ifdef _USING_DEVICE_CUDA_
-    _ACCESSOR_(cuda_f32,  CUDA_F32)
-    _ACCESSOR_(cuda_i32,  CUDA_I32)
-    _ACCESSOR_(cuda_f16,  CUDA_F16)
-    _ACCESSOR_(cuda_bf16, CUDA_BF16)
-    _ACCESSOR_(cuda_q8,   CUDA_Q8)
-    _ACCESSOR_(cuda_q4,   CUDA_Q4)
-    _ACCESSOR_(cuda_pq,   CUDA_PQ)
+     ACCESSOR_DEVICE(cuda, CUDA)
 #endif
 
     // help functions
@@ -338,11 +334,11 @@ public:
         if ( (impl_index() <= ImplType::HOST_PQ) && (impl_index() >= ImplType::HOST_F32) ) {
             return "host";
         }
-    #ifdef _USING_DEVICE_CUDA_
+#ifdef _USING_DEVICE_CUDA_
         if ( (impl_index() <= ImplType::CUDA_PQ) && (impl_index() >= ImplType::CUDA_F32) ) {
             return "cuda";
         }
-    #endif
+#endif
         vt_panic("Can't be here!");
         return "";
     }
@@ -366,64 +362,54 @@ private:
     const ShapeType shape_;
     const DataType  dtype_;
 
+#define LIST_DEVICE_IMPL(T) \
+        T ## _F32,\
+        T ## _I32,\
+        T ## _F16,\
+        T ## _BF16,\
+        T ## _Q8,\
+        T ## _Q4,\
+        T ## _PQ
+
     // ImplType enum order is same as TensorImpl's variant
     enum ImplType {
 #ifdef _USING_DEVICE_CUDA_
-        CUDA_F32,
-        CUDA_I32,
-        CUDA_F16,
-        CUDA_BF16,
-        CUDA_Q8,
-        CUDA_Q4,
-        CUDA_PQ,
+        LIST_DEVICE_IMPL(CUDA),
 #endif
-        HOST_F32,
-        HOST_I32,
-        HOST_F16,
-        HOST_BF16,
-        HOST_Q8,
-        HOST_Q4,
-        HOST_PQ
+        LIST_DEVICE_IMPL(HOST)
     };
 
+#define LIST_DEVICE_VAR(T) \
+                    T ## _f32_t*,\
+                    T ## _i32_t*,\
+                    T ## _f16_t*,\
+                    T ## _bf16_t*,\
+                    T ## _q8_t*, \
+                    T ## _q4_t*, \
+                    T ## _pq_t* 
     // internal pointer based on unique_ptr auto delete
     using TensorImpl = std::variant<
 #ifdef _USING_DEVICE_CUDA_
-                  cuda_f32_t*,
-                  cuda_i32_t*,
-                  cuda_f16_t*,
-                  cuda_bf16_t*,
-                  cuda_q8_t*,
-                  cuda_q4_t*,
-                  cuda_pq_t*,
+                LIST_DEVICE_VAR(cuda),
 #endif
-                  host_f32_t*,
-                  host_i32_t*,
-                  host_f16_t*,
-                  host_bf16_t*,
-                  host_q8_t*,
-                  host_q4_t*,
-                  host_pq_t* >;
+                LIST_DEVICE_VAR(host)
+                  >;
 
     TensorImpl impl_;
 };
 
-tensor_t create_host_f32(std::vector<size_t>& shape);
-tensor_t create_host_i32(std::vector<size_t>& shape);
-tensor_t create_host_f16(std::vector<size_t>& shape);
-tensor_t create_host_bf16(std::vector<size_t>& shape);
-tensor_t create_host_q8(std::vector<size_t>& shape);
-tensor_t create_host_q4(std::vector<size_t>& shape);
-tensor_t create_host_pq(std::vector<size_t>& shape);
+#define LIST_DEVICE_CREATOR(T) \
+tensor_t create_ ## T ## _f32(std::vector<size_t>& shape);\
+tensor_t create_ ## T ## _i32(std::vector<size_t>& shape);\
+tensor_t create_ ## T ## _f16(std::vector<size_t>& shape);\
+tensor_t create_ ## T ## _bf16(std::vector<size_t>& shape);\
+tensor_t create_ ## T ## _q8(std::vector<size_t>& shape);\
+tensor_t create_ ## T ## _q4(std::vector<size_t>& shape);\
+tensor_t create_ ## T ## _pq(std::vector<size_t>& shape);
 
+LIST_DEVICE_CREATOR(host)
 #ifdef _USING_DEVICE_CUDA_
-tensor_t create_cuda_f32(std::vector<size_t>& shape);
-tensor_t create_cuda_i32(std::vector<size_t>& shape);
-tensor_t create_cuda_f16(std::vector<size_t>& shape);
-tensor_t create_cuda_bf16(std::vector<size_t>& shape);
-tensor_t create_cuda_q8(std::vector<size_t>& shape);
-tensor_t create_cuda_q4(std::vector<size_t>& shape);
-tensor_t create_cuda_pq(std::vector<size_t>& shape);
+LIST_DEVICE_CREATOR(cuda)
 #endif
 
 }
