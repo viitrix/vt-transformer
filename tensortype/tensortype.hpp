@@ -170,6 +170,11 @@ USING_DEVICE_DECLARE(host, HostTensor)
 USING_DEVICE_DECLARE(cuda, CUDATensor)
 #endif
 
+#ifdef _USING_DEVICE_HIP_
+USING_DEVICE_DECLARE(hip, HIPTensor)
+#endif
+
+
 // TensorType is all you need
 struct TensorType: public TransformerComputing {
 public:
@@ -193,6 +198,10 @@ public:
 #ifdef _USING_DEVICE_CUDA_
     LIST_DEVICE_CONSTRUCTOR(cuda)
 #endif
+#ifdef _USING_DEVICE_HIP_
+    LIST_DEVICE_CONSTRUCTOR(cuda)
+#endif
+
 
 
 public:
@@ -267,6 +276,16 @@ public:
     }
 #endif
 
+#ifdef _USING_DEVICE_HIP_
+    bool is_hip() {
+        auto ii = impl_index();
+        if ( (ii >= HIP_F32) && (ii <= HIP_PQ) ) {
+            return true;
+        }
+        return false;
+    }
+#endif
+
     bool is_quantized() {
         if ( dtype_ == DataType::Q8 ) {
             return true;
@@ -301,6 +320,10 @@ public:
 #ifdef _USING_DEVICE_CUDA_
         CONVERT_DEVICE(CUDA)
 #endif
+#ifdef _USING_DEVICE_HIP_
+        CONVERT_DEVICE(HIP)
+#endif
+
         vt_fatal_error();
         return nullptr;
     }
@@ -328,6 +351,9 @@ public:
 #ifdef _USING_DEVICE_CUDA_
      ACCESSOR_DEVICE(cuda, CUDA)
 #endif
+#ifdef _USING_DEVICE_HIP_
+     ACCESSOR_DEVICE(hip, HIP)
+#endif
 
     // help functions
     const char* device_name() {
@@ -337,6 +363,11 @@ public:
 #ifdef _USING_DEVICE_CUDA_
         if ( (impl_index() <= ImplType::CUDA_PQ) && (impl_index() >= ImplType::CUDA_F32) ) {
             return "cuda";
+        }
+#endif
+#ifdef _USING_DEVICE_HIP_
+        if ( (impl_index() <= ImplType::HIP_PQ) && (impl_index() >= ImplType::HIP_F32) ) {
+            return "hip";
         }
 #endif
         vt_panic("Can't be here!");
@@ -376,6 +407,10 @@ private:
 #ifdef _USING_DEVICE_CUDA_
         LIST_DEVICE_IMPL(CUDA),
 #endif
+#ifdef _USING_DEVICE_HIP_
+        LIST_DEVICE_IMPL(HIP),
+#endif
+
         LIST_DEVICE_IMPL(HOST)
     };
 
@@ -386,11 +421,14 @@ private:
                     T ## _bf16_t*,\
                     T ## _q8_t*, \
                     T ## _q4_t*, \
-                    T ## _pq_t* 
+                    T ## _pq_t*
     // internal pointer based on unique_ptr auto delete
     using TensorImpl = std::variant<
 #ifdef _USING_DEVICE_CUDA_
                 LIST_DEVICE_VAR(cuda),
+#endif
+#ifdef _USING_DEVICE_HIP_
+                LIST_DEVICE_VAR(hip),
 #endif
                 LIST_DEVICE_VAR(host)
                   >;
@@ -410,6 +448,9 @@ tensor_t create_ ## T ## _pq(std::vector<size_t>& shape);
 LIST_DEVICE_CREATOR(host)
 #ifdef _USING_DEVICE_CUDA_
 LIST_DEVICE_CREATOR(cuda)
+#endif
+#ifdef _USING_DEVICE_HIP_
+LIST_DEVICE_CREATOR(hip)
 #endif
 
 }

@@ -363,6 +363,10 @@ TensorType::~TensorType() {
 #ifdef _USING_DEVICE_CUDA_
     DELETE_DEVICE(CUDA)
 #endif
+#ifdef _USING_DEVICE_DCU_
+    DELETE_DEVICE(DCU)
+#endif
+
 }
 
 #define LIST_DEVICE_CONSTRUCTOR_IMPL(T) \
@@ -388,10 +392,13 @@ TensorType::TensorType(T ## _pq_t* tensor, const ShapeType& shape) : shape_(shap
     impl_ = tensor;\
 }
 
-LIST_DEVICE_CONSTRUCTOR_IMPL(host)
 #ifdef _USING_DEVICE_CUDA_
 LIST_DEVICE_CONSTRUCTOR_IMPL(cuda)
 #endif
+#ifdef _USING_DEVICE_DCU_
+LIST_DEVICE_CONSTRUCTOR_IMPL(dcu)
+#endif
+LIST_DEVICE_CONSTRUCTOR_IMPL(host)
 
 
 }

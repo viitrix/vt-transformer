@@ -7,8 +7,8 @@ export DNNL_DIR=$HOME/opt/dnnl
 ### ACL for aarch64
 export ACL_DIR=$HOME/opt/acl
 
-### DCU 
-export DTK_DIR=$HOME/opt/dtk
+### HIP 
+export HIP_DIR=$HOME/opt/dtk
 
 ### CUDA
 export CUDA_DIR=/usr/local/cuda
