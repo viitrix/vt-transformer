@@ -90,6 +90,28 @@ namespace op {
 #else
                 vt_fatal_error();
 #endif
+            } else if ( device == "hip" ) {
+#ifdef _USING_DEVICE_HIP_
+                if ( dtype == vt::F32 ) {
+                    t = vt::create_hip_f32(shape);
+                } else if ( dtype == vt::F16 ) {
+                    t = vt::create_hip_f16(shape);
+                 } else if ( dtype == vt::BF16 ) {
+                    t = vt::create_hip_bf16(shape);
+                } else if ( dtype == vt::I32 ) {
+                    t = vt::create_hip_i32(shape);
+                } else if ( dtype == vt::Q8 ) {
+                    t = vt::create_hip_q8(shape);
+                } else if ( dtype == vt::Q4 ) {
+                    t = vt::create_hip_q4(shape);
+                } else if ( dtype == vt::PQ ) {
+                    t = vt::create_hip_pq(shape);
+                } else {
+                    vt_fatal_error();
+                }
+#else
+                vt_fatal_error();
+#endif
             } else if ( device == "host" ) {
                 if ( dtype == vt::F32 ) {
                     t = vt::create_host_f32(shape);

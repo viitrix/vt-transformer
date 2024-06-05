@@ -64,6 +64,18 @@ void ComputingContext::boot_cuda(int dev) {
 }
 #endif
 
+#ifdef _USING_DEVICE_HIP_
+void ComputingContext::boot_hip(const int cud) {
+    hip_device = cud;
+
+    HIP_CHECK( hipSetDevice(hip_device) );
+    HIP_CHECK( hipStreamCreate(&hip_stream) );
+    HIPBLAS_CHECK( hipblasCreate(&hipblas_handle) );
+    HIPBLAS_CHECK( hipblasSetStream(hipblas_handle, hip_stream) );
+    HIP_CHECK( hipMalloc(&hip_workspace, workspace_size) );
+}
+#endif
+
 void ComputingContext::shutdown() {
     // device shutdown
 #ifdef _USING_DEVICE_CUDA_

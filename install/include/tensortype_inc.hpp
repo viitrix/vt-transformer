@@ -10,6 +10,10 @@
 #include "cuda_tensor.hpp"
 #endif
 
+#ifdef _USING_DEVICE_HIP_
+#include "hip_tensor.hpp"
+#endif
+
 #include "dag.hpp"
 
 #endif

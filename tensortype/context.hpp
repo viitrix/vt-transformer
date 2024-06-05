@@ -11,6 +11,14 @@
 #include <cudnn.h>
 #endif
 
+#ifdef _USING_DEVICE_HIP_
+#define __HIP_PLATFORM_AMD__
+#define __HIP_PLATFORM_HCC__
+#include <hip/hip_runtime.h>
+#include <hip/hip_fp16.h>
+#include <hipblas/hipblas.h>
+#endif
+
 #define COMPLAIN_ERROR_AND_EXIT(what, status) \
     do { \
         printf("[%s:%d] `%s` returns error: %d.\n", __FILE__, __LINE__, \
@@ -38,6 +46,20 @@
         cudnnStatus_t  s_ = f; \
         if (s_ != CUDNN_STATUS_SUCCESS) COMPLAIN_ERROR_AND_EXIT(#f, s_); \
     } while (0)
+
+#define HIP_CHECK(f) \
+    do { \
+        hipError_t  s_ = f; \
+        if (s_ != hipSuccess) COMPLAIN_ERROR_AND_EXIT(#f, s_); \
+    } while (0)
+
+#define HIPBLAS_CHECK(f) \
+    do { \
+        hipblasStatus_t  s_ = f; \
+        if (s_ != HIPBLAS_STATUS_SUCCESS) COMPLAIN_ERROR_AND_EXIT(#f, s_); \
+    } while (0)
+
+
 
 namespace vt {
 
@@ -67,6 +89,14 @@ struct ComputingContext {
     cudnnHandle_t cudnn_handle;
     void* cuda_workspace;
     void boot_cuda(const int dev);
+#endif
+
+#ifdef _USING_DEVICE_HIP_
+    static int hip_device;
+    static hipStream_t hip_stream;
+    static hipblasHandle_t hipblas_handle;
+    static void* hip_workspace;
+    void boot_hip(const int dev);
 #endif
 
 private:
