@@ -92,10 +92,10 @@ struct ComputingContext {
 #endif
 
 #ifdef _USING_DEVICE_HIP_
-    static int hip_device;
-    static hipStream_t hip_stream;
-    static hipblasHandle_t hipblas_handle;
-    static void* hip_workspace;
+    int hip_device;
+    hipStream_t hip_stream;
+    hipblasHandle_t hipblas_handle;
+    void* hip_workspace;
     void boot_hip(const int dev);
 #endif
 

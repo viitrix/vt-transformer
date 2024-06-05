@@ -363,8 +363,8 @@ TensorType::~TensorType() {
 #ifdef _USING_DEVICE_CUDA_
     DELETE_DEVICE(CUDA)
 #endif
-#ifdef _USING_DEVICE_DCU_
-    DELETE_DEVICE(DCU)
+#ifdef _USING_DEVICE_HIP_
+    DELETE_DEVICE(HIP)
 #endif
 
 }
@@ -395,8 +395,8 @@ TensorType::TensorType(T ## _pq_t* tensor, const ShapeType& shape) : shape_(shap
 #ifdef _USING_DEVICE_CUDA_
 LIST_DEVICE_CONSTRUCTOR_IMPL(cuda)
 #endif
-#ifdef _USING_DEVICE_DCU_
-LIST_DEVICE_CONSTRUCTOR_IMPL(dcu)
+#ifdef _USING_DEVICE_HIP_
+LIST_DEVICE_CONSTRUCTOR_IMPL(hip)
 #endif
 LIST_DEVICE_CONSTRUCTOR_IMPL(host)
 

@@ -116,6 +116,23 @@ int kr_sampling_top3<__half>(const __half* logits, int *out,
     return 0;
 }
 
+template<>
+int kr_sampling_top3<float>(const float* logits, int *out,
+                         const size_t batch, const size_t vocab_size, const float temperature, const float randx,
+                         hipStream_t stream) {
+    dim3 block_size(256);
+	dim3 num_of_blocks(batch);
+
+    easy_top3<float> <<< num_of_blocks, block_size, 0, stream >>> (logits, out, batch, vocab_size, temperature, randx);
+
+    hipError_t err = hipGetLastError();
+    if (err != hipSuccess) {
+        fprintf(stderr, "Failed to launch easy_top3 kernel (error code %s)!\n", hipGetErrorString(err));
+        exit(-1);
+    }
+    return 0;
+}
+
 //=====================================================================
 
 template<typename T>
@@ -207,6 +224,22 @@ int kr_sampling_top1<__half>(const __half* logits, int *out,
 	dim3 num_of_blocks(batch);
 
     easy_top1<__half> <<< num_of_blocks, block_size, 0, stream >>> (logits, out, batch, vocab_size);
+
+    hipError_t err = hipGetLastError();
+    if (err != hipSuccess) {
+        fprintf(stderr, "Failed to launch easy_top3 kernel (error code %s)!\n", hipGetErrorString(err));
+        exit(-1);
+    }
+    return 0;
+}
+
+template<>
+int kr_sampling_top1<float>(const float* logits, int *out,
+                         const size_t batch, const size_t vocab_size, hipStream_t stream) {
+    dim3 block_size(256);
+	dim3 num_of_blocks(batch);
+
+    easy_top1<float> <<< num_of_blocks, block_size, 0, stream >>> (logits, out, batch, vocab_size);
 
     hipError_t err = hipGetLastError();
     if (err != hipSuccess) {

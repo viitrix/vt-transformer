@@ -25,7 +25,15 @@ int main(int argc, char* argv[] ) {
 
     vt::ComputingContext* ctx_ = new vt::ComputingContext();
     ctx_->boot_host(0);
+
+#ifdef _USING_DEVICE_CUDA_
     ctx_->boot_cuda(0);
+#endif
+
+#ifdef _USING_DEVICE_HIP_
+    ctx_->boot_hip(0);
+#endif
+
 
     vt::Enviroment* env_ = new vt::Enviroment(ctx_);
     env_->execute(text);
@@ -33,7 +41,7 @@ int main(int argc, char* argv[] ) {
     while( readline(">> ", code ) ) {
         env_->execute( code );
     }
-    
+
     delete env_;
     delete ctx_;
 }
