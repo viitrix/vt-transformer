@@ -1,6 +1,6 @@
 .PHONY: all
 
-FLAGS = -Wall -O3 -Wno-maybe-uninitialized -Wno-strict-aliasing -Wno-uninitialized -fopenmp \
+FLAGS = -Wall  -std=c++17 -O3 -Wno-maybe-uninitialized -Wno-strict-aliasing -Wno-uninitialized -fopenmp \
 		-D_USING_DEVICE_HIP_
 
 INC = -I. -I../install/include \
@@ -8,7 +8,7 @@ INC = -I. -I../install/include \
 
 all: libtensortype.a
 
-libtensortype.a: context.o common.o dag.o  tensortype.o  host_tensor.o cuda_tensor.o nn_operators.o nn_kvcache.o
+libtensortype.a: context.o common.o dag.o  tensortype.o  host_tensor.o hip_tensor.o nn_operators.o nn_kvcache.o
 	 ar rcs $@ $? 
 
 tensortype.o: computing.hpp common.hpp tensortype.hpp tensortype.cpp host_tensor.hpp cuda_tensor.hpp

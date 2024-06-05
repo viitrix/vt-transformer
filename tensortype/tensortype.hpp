@@ -7,6 +7,7 @@
 #include <sstream>
 #include <vector>
 #include <algorithm>
+#include <variant>
 
 #include "vt.hpp"
 #include "computing.hpp"
@@ -199,7 +200,7 @@ public:
     LIST_DEVICE_CONSTRUCTOR(cuda)
 #endif
 #ifdef _USING_DEVICE_HIP_
-    LIST_DEVICE_CONSTRUCTOR(cuda)
+    LIST_DEVICE_CONSTRUCTOR(hip)
 #endif
 
 
