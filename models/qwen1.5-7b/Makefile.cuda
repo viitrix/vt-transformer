@@ -8,7 +8,7 @@ INC = -I../../install/include \
 LINK = -L../../install/lib \
 	   -L${CUDA_DIR}/lib64 \
 	   -L${CUDNN_DIR}/lib \
-	   -L/usr/lib/x86_64-linux-gnu \
+	   -L/usr/lib/x86_64-linux-gnu -lreadline\
 	   -ltokenizer_combo -ltokenizers_c \
 	   -lssl -lcrypto \
 	   -ltensortype -lcuda_kernels -lcudnn -lcudart -lcublas -lcublasLt 

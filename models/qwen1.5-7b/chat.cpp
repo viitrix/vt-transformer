@@ -5,6 +5,9 @@
 #include <list>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <locale.h>
+#include <readline/readline.h>
+#include <readline/history.h>
 
 #include <tokenizer_combo.hpp>
 #include <tensortype_inc.hpp>
@@ -137,11 +140,14 @@ struct ChatApplication {
     }
 
     bool readline(const std::string& prop, std::string& code) {
-        std::cout << prop << std::flush;
-        if ( std::getline(std::cin, code) ) {
-            return true;
+        char *line = ::readline(prop.c_str());
+
+        if ( line == NULL ) {
+            return false;
         }
-        return false;
+        code = line;
+        free(line);
+        return true;
     }
 
 private:
@@ -196,6 +202,7 @@ void do_inference(vt::Enviroment* env, const char* dag_file) {
 }
 
 int main(int argc, char* argv[] ) {
+    setlocale(LC_ALL, "");
     if ( argc < 2 ) {
         std::cout << "usage: ./chat [dag_file] " << std::endl;
         return -1;
@@ -222,7 +229,7 @@ int main(int argc, char* argv[] ) {
 #endif
 
 #ifdef _USING_DEVICE_HIP_
-        ctx->boot_hip(0);
+        ctx->boot_hip(1);
 #endif
 
         vt::Enviroment* env = new vt::Enviroment(ctx);

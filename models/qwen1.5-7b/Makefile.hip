@@ -6,7 +6,7 @@ INC = -I../../install/include \
 
 LINK = -L../../install/lib \
 	   -L${HIP_DIR}/lib \
-	   -L/usr/lib/x86_64-linux-gnu \
+	   -L/usr/lib/x86_64-linux-gnu -lreadline \
 	   -ltokenizer_combo -ltokenizers_c \
        -ltensortype -lhip_kernels -lgalaxyhip -lhipblas
 
