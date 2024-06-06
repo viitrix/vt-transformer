@@ -744,14 +744,14 @@ ComputingReturn HIPTensor<_DT_>::op_qk(ComputingContext* ctx, tensor_t self, ten
         return OP_OK;
     }
 
-    if ( _DT_ == DataType::F16 && qk_->dtype() == DataType::F32 ) {
+    if ( _DT_ == DataType::F16 && qk_->dtype() == DataType::F16 ) {
         std::vector<void*> As;
         std::vector<void*> Bs;
         std::vector<void*> Cs;
         for (int i = 0; i < batch * heads; i++) {
             device_fp16_t* B = (device_fp16_t *)data() + i * HnT;
             device_fp16_t* A = (device_fp16_t *)(k_->hip_f16()->data()) + i * HfT;
-            device_fp16_t* C = (device_fp16_t *)(qk_->hip_f32()->data()) + i * TT;
+            device_fp16_t* C = (device_fp16_t *)(qk_->hip_f16()->data()) + i * TT;
             As.push_back(A);
             Bs.push_back(B);
             Cs.push_back(C);

@@ -156,9 +156,15 @@ void do_inference(vt::Enviroment* env, const char* dag_file) {
         std::string all_code = fileToString(dag_file);
 
         vt::DaG* init_bin = env->build(all_code);
+
 #ifdef _USING_DEVICE_CUDA_
         env->stack().push_string("cuda");
 #endif
+
+#ifdef _USING_DEVICE_HIP_
+        env->stack().push_string("hip");
+#endif
+
         env->run(init_bin);
         delete init_bin;
     }
@@ -213,6 +219,10 @@ int main(int argc, char* argv[] ) {
     } else if ( ctx->pipe_rank == 1) {
 #ifdef _USING_DEVICE_CUDA_
         ctx->boot_cuda(0);
+#endif
+
+#ifdef _USING_DEVICE_HIP_
+        ctx->boot_hip(0);
 #endif
 
         vt::Enviroment* env = new vt::Enviroment(ctx);

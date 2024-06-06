@@ -221,9 +221,7 @@
         "xfb" @ 0 $batch @ $full_tokens @ "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "yfb" !
         "xfb" @ 0 $batch @ "HEADS_NUM" @ $full_tokens @ "HEAD_HIDDEN" @ 4 op.view "zfb" !
 
-        dup
         "_var_" @ swap $batch @ "HEADS_NUM" @ $tokens @ $full_tokens @ 4 op.view "xll" !
-        $batch @ "HEADS_NUM" @ $tokens @ $full_tokens @ * * * +
     }  
     dup
     {
@@ -297,12 +295,12 @@
         "xa" @ "attn.query.weight" @ "attn.query.bias" @ "xc" @ op.linear
         "yc" @ "rotary_cache" @ $pos @ "yb" @  op.rotary_embed
         "yb" @ "zc" @ op.transpose_0213
-        
+     
         ;; query@key + apply causal_mask + softmax
         "zc" @  "zfa" @  "xll" @ op.querykey
         "xll" @ "causal_mask" @ "xll" @ op.add
         "xll" @ "xll" @ op.softmax
-       
+     
         ;; get value for new tokens, combing cached tokens 
         "xa" @ "attn.value.weight" @ "attn.value.bias" @ "xb" @ op.linear
         "cache_man" @ "_vcache_" @ "xb" @ "xfa" @ $L @ nn.ezkv_update
@@ -334,7 +332,7 @@
         ;; residual
         "xa" @ "xb" @ "xinput" @ op.add
     }
-   
+  
     $pos !!
     $L !!
 %end

@@ -7,13 +7,14 @@
 namespace vt { namespace hip {
 
 const int BUFSIZE = 32;
-__global__ void softmax_float(const float *in, float *out, const size_t length, const size_t hidden_size) {
+template<typename T>
+__global__ void softmax_v0(const T *in, T *out, const size_t length, const size_t hidden_size) {
     float buf[BUFSIZE];
     int i;
 
     // step 0. compute local max
     float l_max = -FLT_MAX;
-    const float *inp = in + blockIdx.x * hidden_size;
+    const T *inp = in + blockIdx.x * hidden_size;
 
     i = 0;
     for (uint idx = threadIdx.x; idx < hidden_size; idx += blockDim.x, i++) {
@@ -34,14 +35,15 @@ __global__ void softmax_float(const float *in, float *out, const size_t length, 
     blockReduceSum<float>(&l_sum);
 
     // step 3. softmax result
-    float *output = out + blockIdx.x * hidden_size;
+    T *output = out + blockIdx.x * hidden_size;
     i = 0;
     for (uint idx = threadIdx.x; idx < hidden_size; idx += blockDim.x, i++) {
         output[idx] = buf[i] / l_sum;
     }
 }
 
-__global__ void softmax_half(const __half *in, __half *out, const size_t length, const size_t hidden_size) {
+#if 0
+__global__ void softmax_v1(const __half *in, __half *out, const size_t length, const size_t hidden_size) {
     float4 buf[BUFSIZE];
     int i;
 
@@ -99,9 +101,8 @@ __global__ void softmax_half(const __half *in, __half *out, const size_t length,
         }
         output_f4[idx] = buf[i];
     }
-
-
 }
+#endif
 
 
 template <>
@@ -114,7 +115,7 @@ int kr_softmax<float>(const float *in, float *out, const size_t length, const si
     dim3 grid_dim(length);
     dim3 block_dim(nThreads);
 
-    softmax_float<<<grid_dim, block_dim, 0, stream>>>( in, out, length, hidden_dim);
+    softmax_v0<float> <<<grid_dim, block_dim, 0, stream>>>( in, out, length, hidden_dim);
 
     hipError_t err = hipGetLastError();
     if (err != hipSuccess) {
@@ -125,14 +126,8 @@ int kr_softmax<float>(const float *in, float *out, const size_t length, const si
 }
 
 template <>
-int kr_softmax<__half>(const __half *in, __half *out, const size_t length, const size_t hidden_dim_, hipStream_t stream) {
-    size_t hidden_dim = hidden_dim_;
+int kr_softmax<__half>(const __half *in, __half *out, const size_t length, const size_t hidden_dim, hipStream_t stream) {
     const int nThreads = 256;
-    if (hidden_dim % 8 != 0) {
-        throw std::runtime_error("violate hidden_dim % 4 = 0");
-    }
-    hidden_dim >>= 3;
-
     if ( hidden_dim / 256 >= BUFSIZE ) {
         throw std::runtime_error("hidden_dim is too big!");
     }
@@ -140,7 +135,7 @@ int kr_softmax<__half>(const __half *in, __half *out, const size_t length, const
     dim3 grid_dim(length);
     dim3 block_dim(nThreads);
 
-    softmax_half<<<grid_dim, block_dim, 0, stream>>>( in, out, length, hidden_dim);
+    softmax_v0<__half> <<<grid_dim, block_dim, 0, stream>>>( in, out, length, hidden_dim);
 
     hipError_t err = hipGetLastError();
     if (err != hipSuccess) {
@@ -148,6 +143,7 @@ int kr_softmax<__half>(const __half *in, __half *out, const size_t length, const
         exit(-1);
     }
     return 0;
+
 }
 
 }}
