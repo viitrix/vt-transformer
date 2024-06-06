@@ -5,6 +5,10 @@
 #include "cuda_tensor.hpp"
 #endif
 
+#ifdef _USING_DEVICE_HIP_
+#include "hip_tensor.hpp"
+#endif
+
 #define CHECK_SELF() vt_assert(self.get() == this, "can't be here!")
 
 namespace vt {
