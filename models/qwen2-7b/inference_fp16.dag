@@ -4,8 +4,10 @@
 
 152064                  "VOCAB_SIZE"            !
 3584                    "HIDDEN_SIZE"           !
+512                     "KV_PROJ"               !
 18944                   "INTERMEDIATE_SIZE"     !
 28                      "HEADS_NUM"             !
+4                       "KV_HEADS_NUM"          !
 128                     "HEAD_HIDDEN"           !
 
 1                       "MAX_BATCH"             !
@@ -22,8 +24,8 @@
     "MAX_BATCH" @ "MAX_CONTEXT" @ app.mem 1 $DEVICE @ "f16" op.create  "_var_"  !
     
     ;; kv cached memroy
-    32 "MAX_BATCH" @ "MAX_CONTEXT" @ 16 + "HIDDEN_SIZE" @ 4 $DEVICE @  "f16" op.create dup "_kcache_"  !
-    32 "MAX_BATCH" @ "MAX_CONTEXT" @ 16 + "HIDDEN_SIZE" @ 4 $DEVICE @  "f16" op.create dup "_vcache_"  !
+    28 "MAX_BATCH" @ "MAX_CONTEXT" @ 16 + "KV_PROJ" @ 4 $DEVICE @  "f16" op.create dup "_kcache_"  !
+    28 "MAX_BATCH" @ "MAX_CONTEXT" @ 16 + "KV_PROJ" @ 4 $DEVICE @  "f16" op.create dup "_vcache_"  !
     nn.ezkv_init "cache_man" !
 
     "MAX_CONTEXT" @ "MAX_BATCH" @ * dup dup dup 
@@ -64,18 +66,13 @@
     (1 1 "HIDDEN_SIZE" @  3 $DEVICE @ "f16")  op.create  $L @ "ln_1.weight" | !
     (1 1 "HIDDEN_SIZE" @  3 $DEVICE @ "f16")  op.create  $L @ "ln_2.weight"  | !
 
-    ("HIDDEN_SIZE" @ 3 * "HIDDEN_SIZE" @ 2 $DEVICE @  "f16" )  op.create  $L @  "attn.qkv_proj.weight" | !
-    ("HIDDEN_SIZE" @ 3 *                 1 $DEVICE @  "f16" )  op.create  $L @  "attn.qkv_proj.bias" | !
-    ;
-    ; dummy split to three tensors, 4096 * 4096 = 16777216
-    ;
-    ($L @ "attn.qkv_proj.weight" | @ 0                             "HIDDEN_SIZE" @ dup 2 op.view)  $L @  "attn.query.weight" | !
-    ($L @ "attn.qkv_proj.weight" | @ ("HIDDEN_SIZE" @ dup *)       "HIDDEN_SIZE" @ dup 2 op.view)  $L @  "attn.key.weight" | !
-    ($L @ "attn.qkv_proj.weight" | @ ("HIDDEN_SIZE" @ dup * 2 *)   "HIDDEN_SIZE" @ dup 2 op.view)  $L @  "attn.value.weight" | !
-    
-    ($L @ "attn.qkv_proj.bias" | @ 0                               "HIDDEN_SIZE" @ 1 op.view)  $L @  "attn.query.bias" | !
-    ($L @ "attn.qkv_proj.bias" | @ ("HIDDEN_SIZE" @ )              "HIDDEN_SIZE" @ 1 op.view)  $L @  "attn.key.bias" | !
-    ($L @ "attn.qkv_proj.bias" | @ ("HIDDEN_SIZE" @ 2 *)           "HIDDEN_SIZE" @ 1 op.view)  $L @  "attn.value.bias" | !
+    ("HIDDEN_SIZE" @ "HIDDEN_SIZE" @ 2 $DEVICE @  "f16" )  op.create  $L @  "attn.query.weight" | !
+    ("KV_PROJ" @     "HIDDEN_SIZE" @ 2 $DEVICE @  "f16" )  op.create  $L @  "attn.key.weight" | !
+    ("KV_PROJ" @     "HIDDEN_SIZE" @ 2 $DEVICE @  "f16" )  op.create  $L @  "attn.value.weight" | !
+
+    ("HIDDEN_SIZE" @ 1 $DEVICE @  "f16" )  op.create  $L @  "attn.query.bias" | !
+    ("KV_PROJ" @     1 $DEVICE @  "f16" )  op.create  $L @  "attn.key.bias" | !
+    ("KV_PROJ" @     1 $DEVICE @  "f16" )  op.create  $L @  "attn.value.bias" | !
     
     ("HIDDEN_SIZE" @  "HIDDEN_SIZE" @ 2 $DEVICE @  "f16")  op.create   $L @ "attn.o_proj.weight" |  !
 
@@ -194,12 +191,16 @@
     $batch @ $tokens @ "HIDDEN_SIZE" @  * * +
     "xa" @ 0 $batch @ $tokens @ "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "ya" !
     "xa" @ 0 $batch @ "HEADS_NUM" @ $tokens @ "HEAD_HIDDEN" @ 4 op.view "za" !
+    "xa" @ 0 $batch @ $tokens @ "KV_PROJ" @ 3  op.view "xa_kv" !
+    "xa" @ 0 $batch @ $tokens @ "KV_HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "ya_kv" !
 
     dup
     "_var_" @ swap $batch @ $tokens @ "HIDDEN_SIZE" @ 3 op.view "xb" !
     $batch @ $tokens @ "HIDDEN_SIZE" @  * * +
     "xb" @ 0 $batch @ $tokens @ "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "yb" !
     "xb" @ 0 $batch @ "HEADS_NUM" @ $tokens @ "HEAD_HIDDEN" @ 4 op.view "zb" !
+    "xb" @ 0 $batch @ $tokens @ "KV_PROJ" @ 3 op.view "xb_kv" !
+    "xb" @ 0 $batch @ $tokens @ "KV_HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "yb_kv" !
     
     dup 
     {
@@ -208,18 +209,24 @@
         $batch @ $tokens @ "HIDDEN_SIZE" @  * * +
         "xc" @ 0 $batch @ $tokens @ "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "yc" !
         "xc" @ 0 $batch @ "HEADS_NUM" @ $tokens @ "HEAD_HIDDEN" @ 4 op.view "zc" !
-      
+        "xc" @ 0 $batch @ $tokens @ "KV_PROJ" @ 3  op.view "xc_kv" !
+        "xc" @ 0 $batch @ $tokens @ "KV_HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "yc_kv" !
+       
         dup
         "_var_" @ swap $batch @ $full_tokens @ "HIDDEN_SIZE" @ 3 op.view "xfa" !
         $batch @ $full_tokens @ "HIDDEN_SIZE" @  * * +
         "xfa" @ 0 $batch @ $full_tokens @ "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "yfa" !
         "xfa" @ 0 $batch @ "HEADS_NUM" @ $full_tokens @ "HEAD_HIDDEN" @ 4 op.view "zfa" !
+        "xfa" @ 0 $batch @ $full_tokens @ "KV_PROJ" @ 3 op.view "xfa_kv" !
+        "xfa" @ 0 $batch @ $full_tokens @ "KV_HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "yfa_kv" !
 
         dup
         "_var_" @ swap $batch @ $full_tokens @ "HIDDEN_SIZE" @ 3 op.view "xfb" !
         $batch @ $full_tokens @ "HIDDEN_SIZE" @  * * +
         "xfb" @ 0 $batch @ $full_tokens @ "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "yfb" !
         "xfb" @ 0 $batch @ "HEADS_NUM" @ $full_tokens @ "HEAD_HIDDEN" @ 4 op.view "zfb" !
+        "xfb" @ 0 $batch @ $full_tokens @ "KV_PROJ" @ 3 op.view "xfb_kv" !
+        "xfb" @ 0 $batch @ $full_tokens @ "KV_HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "yfb_kv" !
 
         "_var_" @ swap $batch @ "HEADS_NUM" @ $tokens @ $full_tokens @ 4 op.view "xll" !
     }  
@@ -286,10 +293,10 @@
     ;; attention
     {
         ;; get key for new tokens, combing cached tokens, position embedding
-        "xa" @ "attn.key.weight" @ "attn.key.bias" @ "xb" @ op.linear
-        "yb" @ "rotary_cache" @ $pos @ "yc" @  op.rotary_embed
-        "cache_man" @ "_kcache_" @ "xc" @ "xfb" @ $L @ nn.ezkv_update
-        "yfb" @ "zfa" @ op.transpose_0213
+        "xa" @ "attn.key.weight" @ "attn.key.bias" @ "xb_kv" @ op.linear
+        "yb_kv" @ "rotary_cache" @ $pos @ "yc_kv" @  op.rotary_embed
+        "cache_man" @ "_kcache_" @ "xc_kv" @ "xfb_kv" @ $L @ nn.ezkv_update
+        "yfb_kv" @ "zfa" @ op.transpose_0213_repeated
        
         ;; get query@key
         "xa" @ "attn.query.weight" @ "attn.query.bias" @ "xc" @ op.linear
@@ -302,9 +309,9 @@
         "xll" @ "xll" @ op.softmax
      
         ;; get value for new tokens, combing cached tokens 
-        "xa" @ "attn.value.weight" @ "attn.value.bias" @ "xb" @ op.linear
-        "cache_man" @ "_vcache_" @ "xb" @ "xfa" @ $L @ nn.ezkv_update
-        "yfa" @ "zfb" @ op.transpose_0213
+        "xa" @ "attn.value.weight" @ "attn.value.bias" @ "xb_kv" @ op.linear
+        "cache_man" @ "_vcache_" @ "xb_kv" @ "xfa_kv" @ $L @ nn.ezkv_update
+        "yfa_kv" @ "zfb" @ op.transpose_0213_repeated
 
         ;; do attention and transpose back
         "xll" @ "zfb" @ "zb" @ op.attn          
@@ -345,14 +352,14 @@
     "host"             create_input_weight
     "G_DEVICE" @       create_output_weight
 
-    %for 0 31
+    %for 0 27
         "G_DEVICE" @    "L%%."   create_layer_weight 
     %endf
 
     "G_PATH" @ load_input_weight
     "G_PATH" @ load_output_weight
 
-    %for 0 31
+    %for 0 27
         "G_PATH" @ "h_%%."  | "L%%." load_layer_weight
     %endf
 
@@ -367,7 +374,7 @@
         "xinput" @ "xinput~" @ op.copy
     }
 
-    %for 0 28
+    %for 0 27
         "L%%."   sync_layer_clone %% layer_forward 
     %endf
 
