@@ -14,29 +14,23 @@ const int IMAGE_END = 151858;
 const int IMAGE_PAD_BEGIN = 151859;                 // <imgpad_0>
 const int IMAGE_PAD_END = IMAGE_PAD_BEGIN + 15;     // <imgpad_15>
 
-const char* shfile = "/tmp/qwen-vl";
-const int shid = 20240321;
 const size_t shsize = 448 * 448 * 3 * 4;
 
 struct MemoryFill : public vt::NativeWord {
+    static void *img_;
     static void fill(std::vector<float>& source) {
-        key_t key = ftok(shfile, shid);
-        int shmid = shmget(key, shsize, 0666 | IPC_CREAT);
-        float* out = (float*)shmat(shmid, (void*)0, 0);
-
-        memcpy(out, source.data(), source.size() * sizeof(float));
+        if ( img_ == nullptr) {
+            img_ = malloc(shsize);
+        }
+        memcpy(img_, source.data(), source.size() * sizeof(float));
     }
     void run(vt::Stack& stack) override {
-        key_t key = ftok(shfile, shid);
-        int shmid = shmget(key, shsize, 0666 | IPC_CREAT);
-        void* src  = shmat(shmid, (void*)0, 0);
-
-
         auto tensor = stack.pop_tensor();
         void* dst = std::get<1>(tensor->op_data(ctx_, tensor));
+        
 #ifdef _USING_DEVICE_CUDA_
         if ( tensor->is_cuda() ) {
-            CUDA_CHECK(cudaMemcpyAsync(dst, src, shsize, cudaMemcpyHostToDevice, ctx_->cuda_stream));
+            CUDA_CHECK(cudaMemcpyAsync(dst, img_, shsize, cudaMemcpyHostToDevice, ctx_->cuda_stream));
             CUDA_CHECK(cudaStreamSynchronize(ctx_->cuda_stream));
         }
 #endif
