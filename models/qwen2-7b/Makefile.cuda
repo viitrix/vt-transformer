@@ -13,7 +13,7 @@ LINK = -L../../install/lib \
 	   -lssl -lcrypto \
 	   -ltensortype -lcuda_kernels -lcudnn -lcudart -lcublas -lcublasLt 
 
-all: chat
+all: chat http
 
 chat: chat.cpp memory.hpp ../../install/lib/libtensortype.a 
 	g++ $(FLAGS) -o $@ $< $(INC) $(LINK)
