@@ -4,7 +4,8 @@ FLAGS = -Wall -O3 -Wno-maybe-uninitialized -Wno-strict-aliasing -Wno-uninitializ
 		-D_USING_DEVICE_CUDA_
 
 INC = -I. -I../install/include \
-	  -I${CUDA_DIR}/include 
+	  -I${CUDA_DIR}/include \
+	  -I${CUDNN_DIR}/include 
 
 all: libtensortype.a
 

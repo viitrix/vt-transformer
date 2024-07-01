@@ -26,6 +26,7 @@ set(cuda_kernel_files
 
 add_library(cuda_kernels STATIC ${cuda_kernel_files})
 
+target_include_directories(cuda_kernels PUBLIC $ENV{CUDNN_DIR}/include)
 target_link_libraries(cuda_kernels PUBLIC -lcublas)
 
 install(TARGETS cuda_kernels DESTINATION lib)
