@@ -103,6 +103,7 @@ struct ChatApplication {
         if ( text == "!" ) {
             history.clear();
             history.push_back(system_talk);
+            return 0;
         }
 
         std::string new_user = text + "<|im_end|>\n";
@@ -127,6 +128,7 @@ struct ChatApplication {
             write_all(id.data(), id.size() * sizeof(int));
             write_all(mask.data(), mask.size() * sizeof(int));
 
+            env_->stack().push_number(1);
             env_->stack().push_number(len);
             env_->run(target_code_);
 
@@ -201,8 +203,8 @@ private:
 };
 
 int main(int argc, const char* argv[] ) {
-    if ( argc < 3 ) {
-        std::cout << "usage: ./chat [dag_files] " << std::endl;
+    if ( argc < 2 ) {
+        std::cout << "usage: ./http [dag_files] " << std::endl;
         return -1;
     }
     vt::ComputingContext* ctx = new vt::ComputingContext();
