@@ -33,6 +33,7 @@
 
 install/
 tensortype/cuda_kernels/build
+tensortype/cuda_kernels/bitsandbytes/build
 example/repl/repl
 example/tokenizer/tokenizer
 tokenizers.combo/rust/Cargo.lock

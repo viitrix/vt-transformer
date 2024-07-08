@@ -126,5 +126,7 @@ if(BUILD_CUDA)
         PROPERTIES
             CUDA_SEPARABLE_COMPILATION ON
     )
+    install(TARGETS bitsandbytes DESTINATION lib)
+    install(PROGRAMS csrc/bitsandbytes.h DESTINATION include )
 endif()
 
