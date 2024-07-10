@@ -24,7 +24,7 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 # Define included source files
-set(CPP_FILES csrc/common.cpp csrc/cpu_ops.cpp csrc/pythonInterface.cpp)
+set(CPP_FILES csrc/common.cpp csrc/cpu_ops.cpp csrc/bitsandbytes.cpp)
 set(CUDA_FILES csrc/ops.cu csrc/kernels.cu)
 # C++ sources are always included
 list(APPEND SRC_FILES ${CPP_FILES})
@@ -127,6 +127,6 @@ if(BUILD_CUDA)
             CUDA_SEPARABLE_COMPILATION ON
     )
     install(TARGETS bitsandbytes DESTINATION lib)
-    install(PROGRAMS csrc/bitsandbytes.h DESTINATION include )
+    install(PROGRAMS csrc/bitsandbytes.hpp DESTINATION include )
 endif()
 

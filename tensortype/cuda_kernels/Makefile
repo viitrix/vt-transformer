@@ -7,3 +7,8 @@ all:
 	mkdir -p bitsandbytes/build
 	cd bitsandbytes/build; cmake ..  -DCMAKE_INSTALL_PREFIX=../../../../install 
 	cd bitsandbytes/build; make install -j4
+
+clean:
+	rm -rf build
+	rm -rf bitsandbytes/build
+
