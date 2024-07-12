@@ -122,10 +122,10 @@ if(BUILD_CUDA)
         target_link_libraries(bitsandbytes PUBLIC CUDA::cublasLt)
     endif()
 
-    set_target_properties(bitsandbytes
-        PROPERTIES
-            CUDA_SEPARABLE_COMPILATION ON
-    )
+    set_target_properties(bitsandbytes PROPERTIES CUDA_SEPARABLE_COMPILATION ON
+                                                  CUDA_RESOLVE_DEVICE_SYMBOLS ON
+                                                  CUDA_SEPARABLE_COMPILATION ON)
+
     install(TARGETS bitsandbytes DESTINATION lib)
     install(PROGRAMS csrc/bitsandbytes.hpp DESTINATION include )
 endif()
