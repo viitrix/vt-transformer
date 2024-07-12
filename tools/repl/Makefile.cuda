@@ -9,7 +9,7 @@ LINK = -L../../install/lib \
 	   -L${CUDA_DIR}/lib64 \
        -L${CUDNN_DIR}/lib \
 	   -L/usr/lib/x86_64-linux-gnu \
-	   -ltensortype -lcuda_kernels -lcudnn -lcudart -lcublas -lcublasLt 
+	   -ltensortype -lcuda_kernels -lbitsandbytes -lcudnn -lcudart -lcublas -lcublasLt 
 
 all: repl 
 

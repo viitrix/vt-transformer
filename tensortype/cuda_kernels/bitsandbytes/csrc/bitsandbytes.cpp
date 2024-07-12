@@ -8,13 +8,11 @@
 
 #include "bitsandbytes.hpp"
 
-namespace bnb {
+namespace vt { namespace bnb {
 
-void quantizeBlockwise_fp16(void *A, void *out, int blocksize, const int n) {
-    float* absmax = (float *)((unsigned char *) A + n / 2);
-    ::quantizeBlockwise<__half, 0, NF4>(NULL, (__half *)A, absmax, (unsigned char *)out, NULL, 0, blocksize, n);
+void quantizeBlockwise_fp16(void *A, void *out, void *amax, int blocksize, const int n) {
+    ::quantizeBlockwise<__half, 0, NF4>(NULL, (__half *)A, (float *)amax, (unsigned char *)out, NULL, 0, blocksize, n);
 }
 
 
-
-}
+}}

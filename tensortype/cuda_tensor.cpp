@@ -2,6 +2,8 @@
 #include "common.hpp"
 #include "context.hpp"
 #include "host_tensor.hpp"
+
+#include "bitsandbytes.hpp"
 #include "cuda_kernels.hpp"
 
 namespace vt {
@@ -68,6 +70,8 @@ CUDATensor<_DT_>::CUDATensor(const ShapeType& shape) : size_(0), owner_(true) {
         asize = sizeof(unsigned short) * number;
     } else if ( _DT_ == DataType::BF16 ) {
         asize = sizeof(unsigned short) * number;
+    } else if ( _DT_ == DataType::Q4 ) {
+        asize = number / 2 + number / 64 * sizeof(float);
     } else {
         vt_fatal_error();
     }
@@ -150,6 +154,9 @@ ComputingReturn CUDATensor<_DT_>::io_dump(ComputingContext* ctx, tensor_t self) 
         d = (local_bf16_t *)localData.data();
         SIMPLE_DUMP_WITH(d, bf16_to_fp32);
         return OP_OK;
+    }
+    if ( _DT_ == DataType::Q4 ) {
+        return OP_TODO_ERROR;
     }
     return OP_TODO_ERROR;
 }
@@ -368,6 +375,12 @@ ComputingReturn CUDATensor<_DT_>::op_reshape(ComputingContext* ctx, tensor_t sel
 
 template<DataType _DT_>
 ComputingReturn CUDATensor<_DT_>::op_quantize(ComputingContext* ctx, tensor_t self, tensor_t out) {
+    if ( _DT_ == DataType::F16 && out->dtype() == DataType::Q4) {
+        void* src = data();
+        void* dst = out->cuda_f16()->data();
+        void* amax = (unsigned char*)dst + self->items() / 2;
+        vt::bnb::quantizeBlockwise_fp16(src, dst, amax, 64, self->items());
+    }
     return OP_TODO_ERROR;
 }
 
