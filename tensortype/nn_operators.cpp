@@ -147,6 +147,15 @@ namespace op {
         NWORD_CREATOR_DEFINE_CTX(Null);
     };
 
+    struct Sizeof : public NativeWord {
+        void run(Stack& stack) override {
+            tensor_t x = stack.pop_tensor();
+            auto ret = x->op_sizeof(ctx_, x);
+            stack.push_number( std::get<1>(ret) );
+        }
+        NWORD_CREATOR_DEFINE_CTX(Sizeof)
+    };
+
     struct Zero : public NativeWord {
         void run(Stack& stack) override {
             tensor_t t = stack.pop_tensor();
@@ -532,6 +541,7 @@ void load_nn_operators(Enviroment& env) {
     env.insert_native_word("op.create", op::Create::creator );
     env.insert_native_word("op.null", op::Null::creator );
     env.insert_native_word("op.zero", op::Zero::creator );
+    env.insert_native_word("op.sizeof", op::Sizeof::creator);
     env.insert_native_word("op.fill", op::Fill::creator );
     env.insert_native_word("op.rotary_cache", op::RotaryCache::creator );
     env.insert_native_word("op.causal_mask", op::CausalMask::creator );

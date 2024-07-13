@@ -377,15 +377,23 @@ template<DataType _DT_>
 ComputingReturn CUDATensor<_DT_>::op_quantize(ComputingContext* ctx, tensor_t self, tensor_t out) {
     if ( _DT_ == DataType::F16 && out->dtype() == DataType::Q4) {
         void* src = data();
-        void* dst = out->cuda_f16()->data();
+        void* dst = out->cuda_q4()->data();
         void* amax = (unsigned char*)dst + self->items() / 2;
-        vt::bnb::quantizeBlockwise_fp16(src, dst, amax, 64, self->items());
+        vt::bnb::quantizeBlockwise_fp16(src, amax, dst, 64, self->items());
+        return OP_OK;
     }
     return OP_TODO_ERROR;
 }
 
 template<DataType _DT_>
 ComputingReturn CUDATensor<_DT_>::op_dequantize(ComputingContext* ctx, tensor_t self, tensor_t out) {
+    if ( _DT_ == DataType::Q4 && out->dtype() == DataType::F16) {
+        void* src = data();
+        void* amax = (unsigned char*)src + self->items() / 2;
+        void* dst = out->cuda_f16()->data();
+        vt::bnb::dequantizeBlockwise_fp16(src, amax, dst, 64, self->items());
+        return OP_OK;
+    }
     return OP_TODO_ERROR;
 }
 
