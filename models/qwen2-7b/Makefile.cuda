@@ -11,7 +11,7 @@ LINK = -L../../install/lib \
 	   -L/usr/lib/x86_64-linux-gnu \
 	   -ltokenizer_combo -ltokenizers_c -lreadline\
 	   -lssl -lcrypto \
-	   -ltensortype -lcuda_kernels -lcudnn -lcudart -lcublas -lcublasLt 
+	   -ltensortype -lcuda_kernels -lbitsandbytes -lcudnn -lcudart -lcublas -lcublasLt -lcusparse 
 
 all: chat http
 
@@ -20,6 +20,9 @@ chat: chat.cpp memory.hpp ../../install/lib/libtensortype.a
 
 http: http.cpp memory.hpp ../../install/lib/libtensortype.a 
 	g++ $(FLAGS) -o $@ $< $(INC) $(LINK)
+
+runq4: chat 
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${DNNL_DIR}/lib:${CUDA_DIR}/lib64:${NCCL_DIR}/lib:${CUDNN_DIR}/lib:${VT_SOURCE}/install/lib ./chat ./inference_q4.dag
 
 run16: chat 
 	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${DNNL_DIR}/lib:${CUDA_DIR}/lib64:${NCCL_DIR}/lib:${CUDNN_DIR}/lib:${VT_SOURCE}/install/lib ./chat ./inference_fp16.dag
