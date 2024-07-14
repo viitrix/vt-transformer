@@ -13,7 +13,7 @@
 
 namespace vt {
 
-const int Q4_BLOCK_SIZE = 128;
+const int Q4_BLOCK_SIZE = 64;
 const int Q8_BLOCK_SIZE = 1024;
 
 struct ComputingContext;

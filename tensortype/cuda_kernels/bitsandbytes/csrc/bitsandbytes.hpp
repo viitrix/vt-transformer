@@ -18,6 +18,10 @@ namespace vt { namespace bnb {
 void quantizeBlockwise_fp16(void *A, void *out, void *amax, int blocksize, const int n);
 void dequantizeBlockwise_fp16(void *A, void *out, void* amax, int blocksize, const int n);
 
+void quantizeBlockwise_bf16(void *A, void *out, void *amax, int blocksize, const int n);
+void dequantizeBlockwise_bf16(void *A, void *out, void* amax, int blocksize, const int n);
+
+
 }}
 
 #endif

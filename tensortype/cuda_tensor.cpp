@@ -71,7 +71,7 @@ CUDATensor<_DT_>::CUDATensor(const ShapeType& shape) : size_(0), owner_(true) {
     } else if ( _DT_ == DataType::BF16 ) {
         asize = sizeof(unsigned short) * number;
     } else if ( _DT_ == DataType::Q4 ) {
-        asize = number / 2 + number / 64 * sizeof(float);
+        asize = number / 2 + number / Q4_BLOCK_SIZE * sizeof(float);
     } else {
         vt_fatal_error();
     }
@@ -379,9 +379,17 @@ ComputingReturn CUDATensor<_DT_>::op_quantize(ComputingContext* ctx, tensor_t se
         void* src = data();
         void* dst = out->cuda_q4()->data();
         void* amax = (unsigned char*)dst + self->items() / 2;
-        vt::bnb::quantizeBlockwise_fp16(src, amax, dst, 64, self->items());
+        vt::bnb::quantizeBlockwise_fp16(src, amax, dst, Q4_BLOCK_SIZE, self->items());
         return OP_OK;
     }
+    if ( _DT_ == DataType::BF16 && out->dtype() == DataType::Q4) {
+        void* src = data();
+        void* dst = out->cuda_q4()->data();
+        void* amax = (unsigned char*)dst + self->items() / 2;
+        vt::bnb::quantizeBlockwise_bf16(src, amax, dst, Q4_BLOCK_SIZE, self->items());
+        return OP_OK;
+    }
+
     return OP_TODO_ERROR;
 }
 
@@ -391,9 +399,17 @@ ComputingReturn CUDATensor<_DT_>::op_dequantize(ComputingContext* ctx, tensor_t 
         void* src = data();
         void* amax = (unsigned char*)src + self->items() / 2;
         void* dst = out->cuda_f16()->data();
-        vt::bnb::dequantizeBlockwise_fp16(src, amax, dst, 64, self->items());
+        vt::bnb::dequantizeBlockwise_fp16(src, amax, dst, Q4_BLOCK_SIZE, self->items());
         return OP_OK;
     }
+    if ( _DT_ == DataType::Q4 && out->dtype() == DataType::BF16) {
+        void* src = data();
+        void* amax = (unsigned char*)src + self->items() / 2;
+        void* dst = out->cuda_bf16()->data();
+        vt::bnb::dequantizeBlockwise_bf16(src, amax, dst, Q4_BLOCK_SIZE, self->items());
+        return OP_OK;
+    }
+
     return OP_TODO_ERROR;
 }
 
