@@ -15,7 +15,7 @@ struct CUDATensor : public TransformerComputing {
 
 public:
     ComputingReturn io_load(ComputingContext* ctx, tensor_t self, const char* fileName) override;
-    //ComputingReturn io_save(ComputingContext* ctx, tensor_t self, const char* fileName) override;
+    ComputingReturn io_save(ComputingContext* ctx, tensor_t self, const char* fileName) override;
     ComputingReturn io_dump(ComputingContext* ctx, tensor_t self) override;
     std::variant<ComputingReturn, size_t> op_sizeof(ComputingContext* ctx, tensor_t self) override;
     std::variant<ComputingReturn, void *> op_data(ComputingContext* ctx, tensor_t self) override;

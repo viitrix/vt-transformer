@@ -110,6 +110,23 @@ ComputingReturn CUDATensor<_DT_>::io_load(ComputingContext* ctx, tensor_t self, 
     return OP_OK;
 }
 
+template<DataType _DT_>
+ComputingReturn CUDATensor<_DT_>::io_save(ComputingContext* ctx, tensor_t self, const char* fileName) {
+    std::vector<unsigned char> dst;
+    dst.resize(size_);
+
+    vt_assert(dst.size() == size_, "saved data must has same size");
+
+    auto stream = ctx->cuda_stream;
+    CUDA_CHECK(cudaMemcpyAsync((void *)dst.data(), data(),  size_, cudaMemcpyDeviceToHost, stream));
+
+    std::ofstream wf(fileName, std::ios::out | std::ios::binary);
+    wf.write((const char *)dst.data(), size_);
+    wf.close();
+    return OP_OK;
+}
+
+
 template <DataType _DT_>
 ComputingReturn CUDATensor<_DT_>::io_dump(ComputingContext* ctx, tensor_t self) {
     size_t first8 = std::min(self->shape().vec().back(), (size_t)8);
