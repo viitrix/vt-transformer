@@ -5,6 +5,7 @@ const int HIDDEN_SIZE = 8192;
 const int INTERMEDIATE_SIZE = 29568;
 const int HEADS_NUM = 64;
 const int HEAD_HIDDEN = 128;
+const int TOTAL_LAYERS = 80;
 
 struct MemoryAlign : public vt::NativeWord {
     void run(vt::Stack& stack) override {
@@ -54,7 +55,7 @@ struct MemoryCounting : public vt::NativeWord {
         all = (all + 1024*1024) - all % (1024 * 1024);
 
         size_t oneG = 1024 * 1024 * 1024;
-        size_t kv = 32 * batch * tokens * HIDDEN_SIZE * 2;
+        size_t kv =  TOTAL_LAYERS * batch * tokens * HIDDEN_SIZE * 2;
         std::cout << "Allocating " << all * 2.0 / oneG << " GB for internal memory." << std::endl;
         std::cout << "Allocating " << kv * 2.0 / oneG << " GB for kv caches memory." << std::endl;
         stack.push_number(all);

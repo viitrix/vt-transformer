@@ -22,6 +22,8 @@ HostTensor<_DT_>::HostTensor(const ShapeType& shape) : size_(0), owner_(true) {
         asize = sizeof(int) * number;
     } else if ( _DT_ == DataType::F16 || _DT_ == DataType::BF16 ) {
         asize = sizeof(local_fp16_t) * number;
+    } else if ( _DT_ == DataType::Q4 ) {
+        asize = number / 2 + number / Q4_BLOCK_SIZE * sizeof(float);
     } else {
         vt_fatal_error();
     }

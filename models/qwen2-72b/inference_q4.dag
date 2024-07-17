@@ -31,8 +31,8 @@
     "_w_" @  0 ("HIDDEN_SIZE" @        "INTERMEDIATE_SIZE" @ 2) op.view  "_HI_" !
 
     ;; kv cached memroy
-    28 "MAX_BATCH" @ "MAX_CONTEXT" @ 16 + "KV_PROJ" @ 4 $DEVICE @  "f16" op.create dup "_kcache_"  !
-    28 "MAX_BATCH" @ "MAX_CONTEXT" @ 16 + "KV_PROJ" @ 4 $DEVICE @  "f16" op.create dup "_vcache_"  !
+    80 "MAX_BATCH" @ "MAX_CONTEXT" @ 16 + "KV_PROJ" @ 4 $DEVICE @  "f16" op.create dup "_kcache_"  !
+    80 "MAX_BATCH" @ "MAX_CONTEXT" @ 16 + "KV_PROJ" @ 4 $DEVICE @  "f16" op.create dup "_vcache_"  !
     nn.ezkv_init "cache_man" !
 
     "MAX_CONTEXT" @ "MAX_BATCH" @ * dup dup dup 
@@ -63,6 +63,9 @@
     1 1 "HIDDEN_SIZE" @ 3 $DEVICE @ "f16"  op.create  "ln_f.weight"  !
     "VOCAB_SIZE" @ "HIDDEN_SIZE" @ 2 $DEVICE @ "f16" op.create "lm_head.weight" !
 
+    ("INTERMEDIATE_SIZE" @  "HIDDEN_SIZE" @ 2 $DEVICE @  "q4")  op.create  "mlp.w1.weight"  !
+    ("INTERMEDIATE_SIZE" @  "HIDDEN_SIZE" @ 2 $DEVICE @  "q4")  op.create  "mlp.w2.weight"  !
+
     $DEVICE !!
 %end
 
@@ -80,11 +83,17 @@
     ("HIDDEN_SIZE" @ 1 $DEVICE @  "f16" )  op.create  $L @  "attn.query.bias" | !
     ("KV_PROJ" @     1 $DEVICE @  "f16" )  op.create  $L @  "attn.key.bias" | !
     ("KV_PROJ" @     1 $DEVICE @  "f16" )  op.create  $L @  "attn.value.bias" | !
-    
+
     ("HIDDEN_SIZE" @  "HIDDEN_SIZE" @ 2 $DEVICE @  "q4")  op.create   $L @ "attn.o_proj.weight" |  !
 
+    /*
     ("INTERMEDIATE_SIZE" @  "HIDDEN_SIZE" @ 2 $DEVICE @  "q4")  op.create  $L @  "mlp.w1.weight"  | !
     ("INTERMEDIATE_SIZE" @  "HIDDEN_SIZE" @ 2 $DEVICE @  "q4")  op.create  $L @  "mlp.w2.weight"  | !
+    */
+    ("INTERMEDIATE_SIZE" @  "HIDDEN_SIZE" @ 2 "host"  "q4")  op.create  $L @  "mlp.w1.weight"  | !
+    ("INTERMEDIATE_SIZE" @  "HIDDEN_SIZE" @ 2 "host"  "q4")  op.create  $L @  "mlp.w2.weight"  | !
+   
+
     ("HIDDEN_SIZE" @  "INTERMEDIATE_SIZE" @ 2 $DEVICE @  "q4")  op.create  $L @  "mlp.o_proj.weight" | !
 
     $L !!
@@ -129,8 +138,8 @@
     
     "Loading... " $weights_path @ | ?
     
-    $L @ "ln_1.weight"                     | @ $weights_path @  "ln_1.weight.fp16"                | io.load
-    $L @ "ln_2.weight"                     | @ $weights_path @  "ln_2.weight.fp16"                | io.load
+    $L @ "ln_1.weight"                     | @ $weights_path @  "ln1.fp16"                        | io.load
+    $L @ "ln_2.weight"                     | @ $weights_path @  "ln2.fp16"                        | io.load
     $L @ "attn.query.weight"               | @ $weights_path @  "attn.query.weight.q4"            | io.load
     $L @ "attn.query.bias"                 | @ $weights_path @  "attn.query.bias.fp16"            | io.load
     $L @ "attn.key.weight"                 | @ $weights_path @  "attn.key.weight.q4"              | io.load
@@ -160,10 +169,16 @@
     $L @ "attn.value.weight"                  | @ "attn.value.weight"             !
     $L @ "attn.value.bias"                    | @ "attn.value.bias"               !
     $L @ "attn.o_proj.weight"                 | @ "attn.o_proj.weight"            !
+    /*
     $L @ "mlp.w1.weight"                      | @ "mlp.w1.weight"                 !
     $L @ "mlp.w2.weight"                      | @ "mlp.w2.weight"                 !
+    */
     $L @ "mlp.o_proj.weight"                  | @ "mlp.o_proj.weight"             !
 
+    
+    "mlp.w1.weight" @     { $L @ "mlp.w1.weight"    | @ }  op.copy
+    "mlp.w2.weight" @     { $L @ "mlp.w2.weight"    | @ }  op.copy
+ 
     $L !!
 %end
 
@@ -295,7 +310,6 @@
     $L !
     "cache_man" @  "_position" @ nn.ezkv_position  $pos !
     "xinput" @ "ln_1.weight" @ "norm2" @ "xa" @ "RMS_EPS" @ op.rmsnorm
-    
     
     ;; attention
     {

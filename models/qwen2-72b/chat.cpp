@@ -230,7 +230,7 @@ int main(int argc, const char* argv[] ) {
         delete init_bin;
     }
     env->execute(init_cmd);
-    
+
     ChatApplication* app = new ChatApplication(env);
     app->run();
 
