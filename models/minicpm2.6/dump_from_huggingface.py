@@ -76,17 +76,57 @@ def save_weight(w, wfile):
     w32.tofile(ofile_name);
     '''
 
+def save_resampler(rs):
+    save_weight( rs.kv_proj.weight, "rs.kv_proj");
+    save_weight( rs.ln_q.weight, "rs.ln_q.weight");
+    save_weight( rs.ln_q.bias, "rs.ln_q.bias");
+    save_weight( rs.ln_kv.weight, "rs.ln_kv.weight");
+    save_weight( rs.ln_kv.bias, "rs.ln_kv.bias");
+    save_weight( rs.ln_post.weight, "rs.ln_post.weight");
+    save_weight( rs.ln_post.bias, "rs.ln_post.bias");
+    save_weight( rs.attn.out_proj.weight, "rs.attn.out_proj.weight");
+    save_weight( rs.attn.out_proj.bias, "rs.attn.out_proj.bias");
+
+def save_vpm(v):
+    save_weight( v.embeddings.patch_embedding.weight, "v.embeddings.patch_embedding.weight");
+    save_weight( v.embeddings.patch_embedding.bias, "v.embeddings.patch_embedding.bias");
+    save_weight( v.embeddings.position_embedding.weight, "v.embeddings.position_embedding.weight");
+    save_weight( v.post_layernorm.weight, "v.post_layernorm.weight");
+    save_weight( v.post_layernorm.bias, "v.post_layernorm.bias");
+    for i in range(0, 26):
+        l = v.encoder.layers[i];
+        lname = "v.encoder.layers_" + str(i)
+
+        save_weight( l.layer_norm1.weight, lname + ".layer_norm1.weight");
+        save_weight( l.layer_norm1.bias, lname + ".layer_norm1.bias");
+        save_weight( l.layer_norm2.weight, lname + ".layer_norm2.weight");
+        save_weight( l.layer_norm2.bias, lname + ".layer_norm2.bias");
+
+        save_weight( l.mlp.fc1.weight, lname + ".mlp.fc1.weight");
+        save_weight( l.mlp.fc1.bias, lname + ".mlp.fc1.bias");
+        save_weight( l.mlp.fc2.weight, lname + ".mlp.fc2.weight");
+        save_weight( l.mlp.fc2.bias, lname + ".mlp.fc2.bias");
+
+        save_weight( l.self_attn.k_proj.weight, lname + ".attn.k_proj.weight");
+        save_weight( l.self_attn.k_proj.bias, lname + ".atnn.k_proj.bias");
+        save_weight( l.self_attn.q_proj.weight, lname + ".attn.q_proj.weight");
+        save_weight( l.self_attn.q_proj.bias, lname + ".atnn.q_proj.bias");
+        save_weight( l.self_attn.v_proj.weight, lname + ".attn.v_proj.weight");
+        save_weight( l.self_attn.v_proj.bias, lname + ".atnn.v_proj.bias");
+        save_weight( l.self_attn.out_proj.weight, lname + ".attn.out_proj.weight");
+        save_weight( l.self_attn.out_proj.bias, lname + ".atnn.out_proj.bias");
+
 def save_llm(llm):
     ## wte & lm_head & ln_f
     w = llm.model.embed_tokens.weight
-    save_weight(w, "wte");
+    save_weight(w, "llm.wte");
     w = llm.model.norm.weight
-    save_weight(w, "ln_f");
+    save_weight(w, "llm.ln_f");
     w = llm.lm_head.weight
-    save_weight(w, "lm_head");
+    save_weight(w, "llm.lm_head");
 
     for i in range(0, 28):
-        pname = "h_" + str(i) + ".";
+        pname = "llm.h_" + str(i) + ".";
 
         w = llm.model.layers[i].input_layernorm.weight;
         name = pname + "ln_1.weight";
@@ -135,6 +175,7 @@ pretrain = "./";  ## "openbmb/MiniCPM-V-2_6"
 model = AutoModelForCausalLM.from_pretrained(pretrain, device_map="cpu", trust_remote_code=True).eval()
 
 save_llm(model.llm);
-
+save_resampler(model.resampler);
+save_vpm(model.vpm);
 
 
