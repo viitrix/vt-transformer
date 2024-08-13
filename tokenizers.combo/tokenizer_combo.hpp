@@ -28,6 +28,11 @@ struct ImageLoader {
 Tokenizer* build_tokenizer_qwen(const char* file_name, bool is_visual=false);
 ImageLoader* build_imageloader_qwen(const char* file_name);
 
+// Llama3
 Tokenizer* build_tokenizer_llama3(const char* file_name);
+
+// MiniCPM
+ImageLoader* build_imageloader_minicpm(const char* file_name);
+
 }
 #endif
