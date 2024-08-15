@@ -93,14 +93,16 @@ static unsigned short fp32_to_fp16(float value) {
 	return (sign >> 16) | (shl1_w > UINT32_C(0xFF000000) ? UINT16_C(0x7E00) : nonsign);
 }
 
+
 struct MinicpmImageLoader : public ImageLoader {
     static const float mean[];
     static const float std[];
+    static const int PATCH_SIZE;
 
     ImageHandle rustObj;
     MinicpmImageLoader(const std::string& filename) {
         rustObj = imgobj_load(filename.c_str(), filename.size());
-        //imgobj_resize(rustObj, 448, 448);
+        imgobj_resize(rustObj, 448, 448);
     }
     virtual ~MinicpmImageLoader() override{
         imgobj_free(rustObj);
@@ -114,6 +116,9 @@ struct MinicpmImageLoader : public ImageLoader {
 
     virtual void preprocess(std::vector<unsigned short>& out) {
         const size_t s = width() * height();
+        const int PW = width() / PATCH_SIZE;
+        const int PH = height() / PATCH_SIZE;
+
         std::vector<unsigned char> rgb;
         rgb.resize(s * 3);
         out.resize(s * 3);
@@ -122,21 +127,35 @@ struct MinicpmImageLoader : public ImageLoader {
         for (size_t h = 0; h < height(); h++) {
             for (size_t w = 0; w < width(); w++) {
                 int i = w + h * width();
+                int ii = 0;
+                {
+                    // do unflod
+                    int hh = h / PATCH_SIZE;
+                    int ww = w / PATCH_SIZE;
+
+                    int pi = hh * PW + ww;
+                    int iiy = h % PATCH_SIZE;
+                    int iix = pi * PATCH_SIZE + (w % PATCH_SIZE);
+                    ii = iiy * PW * PH * PATCH_SIZE + iix;
+                }
 
                 float r,g,b;
                 r = ((int)rgb[i] / 255.0 - mean[0]) / std[0];
                 g = ((int)rgb[i + s] / 255.0 - mean[1]) / std[1];
                 b = ((int)rgb[i + s * 2] / 255.0 - mean[2]) / std[2];
 
-                out[i] = fp32_to_fp16(r);
-                out[i + s] = fp32_to_fp16(g);
-                out[i + s * 2] = fp32_to_fp16(b);
+                out[ii] = fp32_to_fp16(r);
+                out[ii + s] = fp32_to_fp16(g);
+                out[ii + s * 2] = fp32_to_fp16(b);
             }
         }
     }
 
     virtual void preprocess(std::vector<float>& out) {
         const size_t s = width() * height();
+        const int PW = width() / PATCH_SIZE;
+        const int PH = height() / PATCH_SIZE;
+
         std::vector<unsigned char> rgb;
         rgb.resize(s * 3);
         out.resize(s * 3);
@@ -145,16 +164,33 @@ struct MinicpmImageLoader : public ImageLoader {
         for (size_t h = 0; h < height(); h++) {
             for (size_t w = 0; w < width(); w++) {
                 int i = w + h * width();
+                int ii = 0;
+                {
+                    // do unflod
+                    int hh = h / PATCH_SIZE;
+                    int ww = w / PATCH_SIZE;
 
-                out[i] = ((int)rgb[i] / 255.0 - mean[0]) / std[0];
-                out[i + s] = ((int)rgb[i + s] / 255.0 - mean[1]) / std[1];
-                out[i + s * 2] = ((int)rgb[i + s * 2] / 255.0 - mean[2]) / std[2];
+                    int pi = hh * PW + ww;
+                    int iiy = h % PATCH_SIZE;
+                    int iix = pi * PATCH_SIZE + (w % PATCH_SIZE);
+                    ii = iiy * PH * PW * PATCH_SIZE + iix;
+                }
+
+                float r,g,b;
+                r = ((int)rgb[i] / 255.0 - mean[0]) / std[0];
+                g = ((int)rgb[i + s] / 255.0 - mean[1]) / std[1];
+                b = ((int)rgb[i + s * 2] / 255.0 - mean[2]) / std[2];
+
+                out[ii] = r;
+                out[ii + s] = g;
+                out[ii + s * 2] = b;
             }
         }
     }
 };
 const float MinicpmImageLoader::mean[3] = {0.5, 0.5, 0.5};
 const float MinicpmImageLoader::std[3] = {0.5, 0.5, 0.5};
+const int MinicpmImageLoader::PATCH_SIZE = 14;
 
 ImageLoader* build_imageloader_minicpm(const char* file_name) {
     return new MinicpmImageLoader(file_name);

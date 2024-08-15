@@ -11,9 +11,11 @@ int main(int argc, const char* argv[]) {
     auto loader = vt::build_imageloader_minicpm(argv[1]);
 
     loader->preprocess(out);
-    for(int i = 0; i < 8; i++) {
-        std::cout << out[448 * 448 * 0 + i] << " ";
-        //std::cout << out[ i] << " ";
+    for(int i = 0; i < 1; i++) {
+        for(int j = 0; j < 32; j++) {
+            std::cout << out[32 * 32 * 14 * i + j] << " ";
+        }
+        std::cout << std::endl;
     }
     std::cout << std::endl;
 }
