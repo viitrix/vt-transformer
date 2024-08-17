@@ -1082,6 +1082,38 @@ ComputingReturn CUDATensor<_DT_>::op_conv2d(ComputingContext* ctx, tensor_t self
 
         return OP_OK;
     }
+    if ( _DT_ == DataType::F16 ) {
+        // 0. create and setup desc
+        cudnnConvolutionDescriptor_t convDesc;
+        cudnnCreateConvolutionDescriptor(&convDesc);
+        cudnnSetConvolution2dDescriptor(convDesc, padding, padding, weight->shape()[2], weight->shape()[3], 1, 1, CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT);
+
+        cudnnFilterDescriptor_t wDesc;
+        cudnnCreateFilterDescriptor(&wDesc);
+        cudnnSetFilter4dDescriptor(wDesc, CUDNN_DATA_HALF, CUDNN_TENSOR_NCHW, weight->shape()[0], weight->shape()[1],  weight->shape()[2], weight->shape()[3]);
+
+        // 1. init parameters
+        float alpha = 1.0;
+        float beta = 0.0;
+
+        cudnnTensorDescriptor_t xDesc = create_cudnn_td_with<DataType::F16>( self->shape().vec() );
+        void* x = data();
+        void* w = weight->cuda_f16()->data();
+
+        cudnnTensorDescriptor_t yDesc = create_cudnn_td_with<DataType::F16>( dst->shape().vec() );
+        void* y = dst->cuda_f16()->data();
+
+        // 2. make call
+        cudnnConvolutionForward(ctx->cudnn_handle, &alpha, xDesc, x, wDesc, w, convDesc,
+                CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM, ctx->cuda_workspace, ctx->workspace_size, &beta, yDesc, y);
+
+        // x. release resouce
+        cudnnDestroyConvolutionDescriptor(convDesc);
+        cudnnDestroyFilterDescriptor(wDesc);
+
+        return OP_OK;
+    }
+
     return OP_TODO_ERROR;
 }
 

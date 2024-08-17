@@ -101,7 +101,7 @@ struct ChatApplication {
                 int len = id.size();
                 write_all(id.data(), id.size() * sizeof(int));
                 write_all(mask.data(), mask.size() * sizeof(int));
-                
+
                 env_->stack().push_number(len);
                 env_->run(target_code_);
 
@@ -246,11 +246,13 @@ int main(int argc, const char* argv[] ) {
         delete init_bin;
     }
     env->execute(init_cmd);
-    
+
+    /*
     ChatApplication* app = new ChatApplication(env);
     app->run();
-
     delete app;
+    */
+
     delete env;
     delete ctx;
 }
