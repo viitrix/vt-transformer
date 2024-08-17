@@ -11,9 +11,7 @@
     "CONV_CHANNELS" @ 3 14 14 4 "G_DEVICE" @ "f16" op.create "v.embeddings.patch_embedding.weight" !
     "CONV_CHANNELS" @ 1 "G_DEVICE" @ "f16" op.create "v.embeddings.patch_embedding.bias" !
     
-    "CONV_CHANNELS" @ "VISUAL_POS_NUM" @ 2 "G_DEVICE" @ "f16" op.create "v.embeddings.position_embedding.weight" !
-    
-
+    "VISUAL_POS_NUM" @ "CONV_CHANNELS" @ 2 "host" "f16" op.create "v.embeddings.position_embedding.weight" !
 %end
 
 %def visual_load_one
@@ -32,19 +30,27 @@
     visual_create_weights
     visual_load_weights
 
-    ; working memroy in device
+    ;; input image and hidden_state
     1 3 14 14336 4 "G_DEVICE" @ "f16" op.create "v_img" !
     1 "CONV_CHANNELS" @ 1 1024 4 "G_DEVICE" @ "f16" op.create "v_imgx" !
  
+    ;; position and embedding
+    1024 1 "host" "i32" op.create "v_ids~" !
+    1 1024 "CONV_CHANNELS" @ 3 "host"       "f16" op.create "v_pos~" ! 
+    1 1024 "CONV_CHANNELS" @ 3 "G_DEVICE" @ "f16" op.create "v_pos" ! 
+
+    
+    1 1024 "CONV_CHANNELS" @ 3 "G_DEVICE" @ "f16" op.create "v_xa" !
 %end
 
 %def visual_main
+    "v_ids~" @ 70 32 32 app.position
+    "v_ids~" @ "v.embeddings.position_embedding.weight" @ "v_pos~" @ op.embed
+    "v_pos" @ "v_pos~" @ op.copy 
+
+    "v_img" @ "./demo.fp16" io.load
     ;;"v_img" @ app.fill
    
-    "v_img" @ "./demo.fp16" io.load
-
-    "v_img" @ io.dump 
-    
     ;; conv2d
     {
         "v_img" @ 
@@ -52,7 +58,13 @@
         "v.embeddings.patch_embedding.bias" @ 
         "v_imgx" @ 14 0 op.conv2d
     }
+    
+    { "v_imgx" @ 0 1 "CONV_CHANNELS" @ 1024 1 4 op.view } 
+    { "v_xa" @   0 1 1024 "CONV_CHANNELS" @ 1 4 op.view } op.transpose_0213
 
-    "v_imgx" @ io.dump 
+
+    "v_xa" @ "v_pos" @ "v_xa" @ op.add
+
+    "v_xa" @ io.dump
 %end
 

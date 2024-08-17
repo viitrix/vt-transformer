@@ -38,6 +38,33 @@ struct MemoryFill : public vt::NativeWord {
     NWORD_CREATOR_DEFINE_CTX(MemoryFill)
 };
 
+struct PositionId : public vt::NativeWord {
+    void run(vt::Stack& stack) override {
+        int wid = stack.pop_number();
+        int hei = stack.pop_number();
+        int bound = stack.pop_number();
+        auto tensor = stack.pop_tensor();
+
+        int* dst = (int *)std::get<1>(tensor->op_data(ctx_, tensor));
+
+        float bucket = 1.0 / bound;
+
+        for(int h = 0; h < hei; h++) {
+            for(int w = 0; w < wid; w++) {
+                float x = 1.0 * w / wid ;
+                float y = 1.0 * h / hei;
+
+                int hh = y / bucket;
+                int ww = x / bucket;
+                int ii = hh * bound + ww;
+                *dst = ii;
+                dst++;
+            }
+        }
+    }
+    NWORD_CREATOR_DEFINE_CTX(PositionId)
+};
+
 struct InsertImage : public vt::NativeWord {
     void run(vt::Stack& stack) override {
         auto ids = stack.pop_tensor();

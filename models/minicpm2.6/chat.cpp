@@ -229,6 +229,7 @@ int main(int argc, const char* argv[] ) {
     env->insert_native_word("app.align", MemoryAlign::creator);
     env->insert_native_word("app.fill", MemoryFill::creator);
     env->insert_native_word("app.insert", InsertImage::creator);
+    env->insert_native_word("app.position", PositionId::creator);
 
     // load whole code
     {
