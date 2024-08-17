@@ -43,7 +43,7 @@ const size_t max_output = 1024;
 void* MemoryFill::img_ = nullptr;
 struct ChatApplication {
     ChatApplication(vt::Enviroment* env) : env_(env) {
-        tokenizer_ = vt::build_tokenizer_qwen("./qwen.tiktoken", true);
+        tokenizer_ = vt::build_tokenizer_minicpm("./qwen.tiktoken");
         target_code_ = env_->build(main_cmd);
         visual_code_ = env_->build(visual_cmd);
     }
@@ -173,8 +173,8 @@ struct ChatApplication {
         new_text = new_text + text.substr(end);
         text = new_text;
 
-        vt::ImageLoader* img_loader = vt::build_imageloader_qwen(image_file.c_str());
-        std::vector<float> source;
+        vt::ImageLoader* img_loader = vt::build_imageloader_minicpm(image_file.c_str());
+        std::vector<uint16_t> source;
         img_loader->preprocess(source);
         MemoryFill::fill(source);
         delete img_loader;

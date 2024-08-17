@@ -14,15 +14,15 @@ const int IMAGE_END = 151858;
 const int IMAGE_PAD_BEGIN = 151859;                 // <imgpad_0>
 const int IMAGE_PAD_END = IMAGE_PAD_BEGIN + 15;     // <imgpad_15>
 
-const size_t shsize = 448 * 448 * 3 * 4;
+const size_t shsize = 448 * 448 * 3 * 2;
 
 struct MemoryFill : public vt::NativeWord {
     static void *img_;
-    static void fill(std::vector<float>& source) {
+    static void fill(std::vector<uint16_t>& source) {
         if ( img_ == nullptr) {
-            img_ = malloc(shsize);
+            img_ = malloc(source.size() * sizeof(uint16_t));
         }
-        memcpy(img_, source.data(), source.size() * sizeof(float));
+        memcpy(img_, source.data(), source.size() * sizeof(uint16_t));
     }
     void run(vt::Stack& stack) override {
         auto tensor = stack.pop_tensor();
