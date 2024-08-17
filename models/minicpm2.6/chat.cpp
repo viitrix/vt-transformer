@@ -160,7 +160,7 @@ struct ChatApplication {
         std::string pad;
         {
             std::hash<std::string> hasher;
-            int id = hasher( image_file ) % 16;
+            int id = hasher( image_file ) % 6;
             std::stringstream ss;
             ss << "<imgpad_" << id << ">";
             pad = ss.str();
@@ -247,12 +247,10 @@ int main(int argc, const char* argv[] ) {
     }
     env->execute(init_cmd);
 
-    /*
     ChatApplication* app = new ChatApplication(env);
     app->run();
-    delete app;
-    */
 
+    delete app;
     delete env;
     delete ctx;
 }

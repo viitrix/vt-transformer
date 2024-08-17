@@ -32,6 +32,7 @@ ImageLoader* build_imageloader_qwen(const char* file_name);
 Tokenizer* build_tokenizer_llama3(const char* file_name);
 
 // MiniCPM
+Tokenizer* build_tokenizer_minicpm(const char* file_name);
 ImageLoader* build_imageloader_minicpm(const char* file_name);
 
 }

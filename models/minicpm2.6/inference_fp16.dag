@@ -2,7 +2,7 @@
 1000000.0               "ROTARY_BASE"           !
 2.5                     "TEMPERATURE"           !
 
-152064                  "VOCAB_SIZE"            !
+151666                  "VOCAB_SIZE"            !
 3584                    "HIDDEN_SIZE"           !
 512                     "KV_PROJ"               !
 18944                   "INTERMEDIATE_SIZE"     !
@@ -11,7 +11,7 @@
 128                     "HEAD_HIDDEN"           !
 
 1                       "MAX_BATCH"             !
-1024                    "MAX_CONTEXT"           !
+2048                    "MAX_CONTEXT"           !
 "./weights/"            "G_PATH"                !
 
 %def init_internal_variable
@@ -122,18 +122,18 @@
     
     "Loading... " $weights_path @ | ?
     
-    $L @ "ln_1.weight"                     | @ $weights_path @  "llm.ln_1.weight.fp16"                | io.load
-    $L @ "ln_2.weight"                     | @ $weights_path @  "llm.ln_2.weight.fp16"                | io.load
-    $L @ "attn.query.weight"               | @ $weights_path @  "llm.attn.query.weight.fp16"          | io.load
-    $L @ "attn.query.bias"                 | @ $weights_path @  "llm.attn.query.bias.fp16"            | io.load
-    $L @ "attn.key.weight"                 | @ $weights_path @  "llm.attn.key.weight.fp16"            | io.load
-    $L @ "attn.key.bias"                   | @ $weights_path @  "llm.attn.key.bias.fp16"              | io.load
-    $L @ "attn.value.weight"               | @ $weights_path @  "llm.attn.value.weight.fp16"          | io.load
-    $L @ "attn.value.bias"                 | @ $weights_path @  "llm.attn.value.bias.fp16"            | io.load
-    $L @ "attn.o_proj.weight"              | @ $weights_path @  "llm.attn.o_proj.weight.fp16"         | io.load
-    $L @ "mlp.w1.weight"                   | @ $weights_path @  "llm.mlp.w1.weight.fp16"              | io.load
-    $L @ "mlp.w2.weight"                   | @ $weights_path @  "llm.mlp.w2.weight.fp16"              | io.load
-    $L @ "mlp.o_proj.weight"               | @ $weights_path @  "llm.mlp.o_proj.weight.fp16"          | io.load
+    $L @ "ln_1.weight"                     | @ $weights_path @  "ln_1.weight.fp16"                | io.load
+    $L @ "ln_2.weight"                     | @ $weights_path @  "ln_2.weight.fp16"                | io.load
+    $L @ "attn.query.weight"               | @ $weights_path @  "attn.query.weight.fp16"          | io.load
+    $L @ "attn.query.bias"                 | @ $weights_path @  "attn.query.bias.fp16"            | io.load
+    $L @ "attn.key.weight"                 | @ $weights_path @  "attn.key.weight.fp16"            | io.load
+    $L @ "attn.key.bias"                   | @ $weights_path @  "attn.key.bias.fp16"              | io.load
+    $L @ "attn.value.weight"               | @ $weights_path @  "attn.value.weight.fp16"          | io.load
+    $L @ "attn.value.bias"                 | @ $weights_path @  "attn.value.bias.fp16"            | io.load
+    $L @ "attn.o_proj.weight"              | @ $weights_path @  "attn.o_proj.weight.fp16"         | io.load
+    $L @ "mlp.w1.weight"                   | @ $weights_path @  "mlp.w1.weight.fp16"              | io.load
+    $L @ "mlp.w2.weight"                   | @ $weights_path @  "mlp.w2.weight.fp16"              | io.load
+    $L @ "mlp.o_proj.weight"               | @ $weights_path @  "mlp.o_proj.weight.fp16"          | io.load
     
     "Loaded " $weights_path @ | ?
     
@@ -249,15 +249,13 @@
 %def prepare_input
     {
         $tokens !
-        $batch !
         
-        "_ids~"  @ 0 $batch @ $tokens @ 2 op.view  "ids~" !
-        "_maks~" @ 0 $batch @ $tokens @ 2 op.view  "mask~" !
+        "_ids~"  @ 0 1 $tokens @ 2 op.view  "ids~" !
+        "_maks~" @ 0 1 $tokens @ 2 op.view  "mask~" !
         
         "ids~" @  io.pipe.read
         "mask~" @ io.pipe.read
 
-        $batch !!
         $tokens !!
     }
   
@@ -360,7 +358,7 @@
     "G_PATH" @ load_output_weight
 
     %for 0 27
-        "G_PATH" @ "h_%%."  | "L%%." load_layer_weight
+        "G_PATH" @ "llm.h_%%."  | "L%%." load_layer_weight
     %endf
 
 %end

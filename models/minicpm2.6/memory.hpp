@@ -27,7 +27,7 @@ struct MemoryFill : public vt::NativeWord {
     void run(vt::Stack& stack) override {
         auto tensor = stack.pop_tensor();
         void* dst = std::get<1>(tensor->op_data(ctx_, tensor));
-        
+
 #ifdef _USING_DEVICE_CUDA_
         if ( tensor->is_cuda() ) {
             CUDA_CHECK(cudaMemcpyAsync(dst, img_, shsize, cudaMemcpyHostToDevice, ctx_->cuda_stream));

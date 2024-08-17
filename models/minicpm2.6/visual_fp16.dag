@@ -8,6 +8,7 @@
 %def visual_create_weights
     "CONV_CHANNELS" @ 3 14 14 4 "G_DEVICE" @ "f16" op.create "v.embeddings.patch_embedding.weight" !
     "CONV_CHANNELS" @ 1 "G_DEVICE" @ "f16" op.create "v.embeddings.patch_embedding.bias" !
+
 %end
 
 %def visual_load_one
@@ -17,7 +18,8 @@
 %end
 
 %def visual_load_weights
-    " "                     visual_load_one
+    "v.embeddings.patch_embedding.weight"       visual_load_one
+    "v.embeddings.patch_embedding.bias"         visual_load_one
 %end
 
 %def visual_init
