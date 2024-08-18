@@ -40,7 +40,13 @@
     "HIDDEN_SIZE" @ "CONV_CHANNELS" @ 2 "G_DEVICE" @ "f16" op.create "rs.kv_proj" !
     "HIDDEN_SIZE" @ 1 "G_DEVICE" @ "f16" op.create "rs.ln_kv.weight" !
     "HIDDEN_SIZE" @ 1 "G_DEVICE" @ "f16" op.create "rs.ln_kv.bias" !
-    1 64 "HIDDEN_SIZE" @ 3 "G_DEVICE" @ "f16" op.create "rs.query" !
+    
+    1 64 "HIDDEN_SIZE" @ 3 "G_DEVICE" @ "f16" op.create "rs.attn.query" !
+    
+    "HIDDEN_SIZE" @ "HIDDEN_SIZE" @ 2 "G_DEVICE" @ "f16" op.create "rs.attn.k_proj.weight" !
+    "HIDDEN_SIZE" @                 1 "G_DEVICE" @ "f16" op.create "rs.attn.k_proj.bias" !
+    "HIDDEN_SIZE" @ "HIDDEN_SIZE" @ 2 "G_DEVICE" @ "f16" op.create "rs.attn.v_proj.weight" !
+    "HIDDEN_SIZE" @                 1 "G_DEVICE" @ "f16" op.create "rs.attn.v_proj.bias" !
 
 %end
 
@@ -83,7 +89,12 @@
     "rs.kv_proj" visual_load_one
     "rs.ln_kv.weight" visual_load_one
     "rs.ln_kv.bias" visual_load_one
-    "rs.query" visual_load_one
+    
+    "rs.attn.query" visual_load_one
+    "rs.attn.k_proj.weight" visual_load_one
+    "rs.attn.k_proj.bias" visual_load_one
+    "rs.attn.v_proj.weight" visual_load_one
+    "rs.attn.v_proj.bias" visual_load_one
 %end
 
 %def visual_init
@@ -104,7 +115,6 @@
     "HIDDEN_SIZE" @ 1 "G_DEVICE" @ "f16" op.create "v.mean_r" !
     "HIDDEN_SIZE" @ 1 "G_DEVICE" @ "f16" op.create "v.var_r" !
 
-
     ;; internal variable
     1 1024 "CONV_CHANNELS" @ 3 "G_DEVICE" @ "f16" op.create "v_xa" !
     1 1024 "CONV_CHANNELS" @ 3 "G_DEVICE" @ "f16" op.create "v_xb" !
@@ -115,6 +125,9 @@
     1 1024 "VISUAL_MLP_INTERNAL" @ 3 "G_DEVICE" @ "f16" op.create "v_xp" !
     1 1024 "HIDDEN_SIZE" @ 3 "G_DEVICE" @ "f16" op.create "v_xrs_a" !
     1 1024 "HIDDEN_SIZE" @ 3 "G_DEVICE" @ "f16" op.create "v_xrs_b" !
+    1 1024 "HIDDEN_SIZE" @ 3 "G_DEVICE" @ "f16" op.create "v_xrs_c" !
+    1 64 "HIDDEN_SIZE" @ 3 "G_DEVICE" @ "f16" op.create "v_xrs_d" !
+    1 "HEADS_NUM" @ 64 1024 4 "G_DEVICE" @ "f16" op.create "v_xpll" !   
 
     ;; shadowed variable
     "v_xa" @ 0 1 "CONV_CHANNELS" @ 1 1024 4 op.view "v_imgx" !
@@ -124,12 +137,26 @@
     "v_xd" @ 0 1 1024 "VISUAL_HEAD_NUM" @ "VISUAL_HEAD_LEN" @ 4  op.view "v_yd" !
     "v_xe" @ 0 1 1024 "VISUAL_HEAD_NUM" @ "VISUAL_HEAD_LEN" @ 4  op.view "v_ye" !
    
+
+    "v_xrs_a" @ 0 1 1024 "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "v_yrs_a" !
+    "v_xrs_a" @ 0 1 64 "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "v_yrs_o" !
+    "v_xrs_b" @ 0 1 1024 "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "v_yrs_b" !
+    "v_xrs_c" @ 0 1 1024 "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "v_yrs_c" !
+    "v_xrs_d" @ 0 1 64   "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "v_yrs_d" !
+    "rs.attn.query" @ 0 1 64 "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "v_yrs_q" !
+   
+
     "v_xa" @ 0 1 "VISUAL_HEAD_NUM" @ 1024 "VISUAL_HEAD_LEN" @ 4  op.view "v_za" !
     "v_xb" @ 0 1 "VISUAL_HEAD_NUM" @ 1024 "VISUAL_HEAD_LEN" @ 4  op.view "v_zb" !
     "v_xc" @ 0 1 "VISUAL_HEAD_NUM" @ 1024 "VISUAL_HEAD_LEN" @ 4  op.view "v_zc" !
     "v_xd" @ 0 1 "VISUAL_HEAD_NUM" @ 1024 "VISUAL_HEAD_LEN" @ 4  op.view "v_zd" !
     "v_xe" @ 0 1 "VISUAL_HEAD_NUM" @ 1024 "VISUAL_HEAD_LEN" @ 4  op.view "v_ze" !
-  
+ 
+    "v_xrs_a" @ 0 1 "HEADS_NUM" @ 1024 "HEAD_HIDDEN" @ 4 op.view "v_zrs_a" !
+    "v_xrs_b" @ 0 1 "HEADS_NUM" @ 1024 "HEAD_HIDDEN" @ 4 op.view "v_zrs_b" !
+    "v_xrs_c" @ 0 1 "HEADS_NUM" @ 1024 "HEAD_HIDDEN" @ 4 op.view "v_zrs_c" !
+    "v_xrs_d" @ 0 1 "HEADS_NUM" @ 64 "HEAD_HIDDEN" @ 4 op.view   "v_zrs_d" !
+
     ;; function memory 
     1 "VISUAL_HEAD_NUM" @ 1024 1024 4 "G_DEVICE" @ "f16" op.create "v_xll" !
 %end
@@ -215,7 +242,26 @@
         "v_xb" @ "rs.kv_proj" @ op.null "v_xrs_a" @ op.linear 
         "v_xrs_a" @ "v.mean_r" @ "v.var_r" @ "rs.ln_kv.weight" @ "rs.ln_kv.bias" @ "v_xrs_b" @ "RMS_EPS" @ op.layernorm
 
-        "v_xrs_b" @ io.dump ^
+        ;; key 
+        "v_xrs_b" @ "rs.attn.k_proj.weight" @ "rs.attn.k_proj.bias" @ "v_xrs_c" @ op.linear
+        "v_yrs_c" @ "v_zrs_a" @ op.transpose_0213
+
+        ;; query
+        "v_yrs_q" @ "v_zrs_d" @ op.transpose_0213
+        
+        ;; query @ key
+        "v_zrs_d" @ "v_zrs_a" @ "v_xpll" @ op.querykey         
+        "v_xpll" @ "v_xpll" @ op.softmax
+        
+        ;; value
+        "v_xrs_b" @ "rs.attn.v_proj.weight" @ "rs.attn.v_proj.bias" @ "v_xrs_c" @ op.linear
+        "v_yrs_c" @ "v_zrs_a" @ op.transpose_0213
+        
+        ;; attn
+        "v_xpll" @ "v_zrs_a" @ "v_zrs_d" @ op.attn
+        "v_zrs_d" @ "v_yrs_o" @ op.transpose_0213
+
+        "v_yrs_o" @ io.dump ^
     }
 %end
 

@@ -1,3 +1,4 @@
+import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 '''
@@ -78,7 +79,7 @@ def save_weight(w, wfile):
 
 def save_resampler(rs):
     q = rs.ln_q( rs.query);
-    save_weight( q, "rs.query");
+    #save_weight( q, "rs.query");
     #save_weight( rs.ln_q.weight, "rs.ln_q.weight");
     #save_weight( rs.ln_q.bias, "rs.ln_q.bias");
 
@@ -88,14 +89,20 @@ def save_resampler(rs):
     save_weight( rs.ln_kv.bias, "rs.ln_kv.bias");
     save_weight( rs.kv_proj.weight, "rs.kv_proj");
 
-    q_proj, k_proj, v_proj = rs.attn.in_proj_weight.chunk(3);
-    save_weight( q_proj, "rs.attn.q_proj.weight");
+    q_proj_weight, k_proj, v_proj = rs.attn.in_proj_weight.chunk(3);
     save_weight( k_proj, "rs.attn.k_proj.weight");
     save_weight( v_proj, "rs.attn.v_proj.weight");
-    q_proj, k_proj, v_proj = rs.attn.in_proj_bias.chunk(3);
-    save_weight( q_proj, "rs.attn.q_proj.bias");
+    q_proj_bias, k_proj, v_proj = rs.attn.in_proj_bias.chunk(3);
     save_weight( k_proj, "rs.attn.k_proj.bias");
     save_weight( v_proj, "rs.attn.v_proj.bias");
+
+    q = rs.ln_q( rs.query);
+    q = torch.nn.functional.linear(q, q_proj_weight, q_proj_bias);
+    save_weight( q, "rs.attn.query");
+    #save_weight( rs.ln_q.weight, "rs.ln_q.weight");
+    #save_weight( rs.ln_q.bias, "rs.ln_q.bias");
+    #save_weight( q_proj_weight, "rs.attn.q_proj.weight");
+    #save_weight( q_proj_bias, "rs.attn.q_proj.bias");
 
     save_weight( rs.attn.out_proj.weight, "rs.attn.out_proj.weight");
     save_weight( rs.attn.out_proj.bias, "rs.attn.out_proj.bias");
@@ -187,7 +194,7 @@ def save_llm(llm):
         save_weight(w, name);
 
 pretrain = "./";  ## "openbmb/MiniCPM-V-2_6"
-model = AutoModelForCausalLM.from_pretrained(pretrain, device_map="cpu", trust_remote_code=True).eval()
+model = AutoModelForCausalLM.from_pretrained(pretrain, device_map="cpu", trust_remote_code=True, torch_dtype=torch.float16).eval()
 
 #save_llm(model.llm);
 save_resampler(model.resampler);
