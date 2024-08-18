@@ -93,7 +93,7 @@ def save_vpm(v):
     save_weight( v.embeddings.position_embedding.weight, "v.embeddings.position_embedding.weight");
     save_weight( v.post_layernorm.weight, "v.post_layernorm.weight");
     save_weight( v.post_layernorm.bias, "v.post_layernorm.bias");
-    for i in range(0, 26):
+    for i in range(0, 27):
         l = v.encoder.layers[i];
         lname = "v.encoder.layers_" + str(i)
 
@@ -108,13 +108,13 @@ def save_vpm(v):
         save_weight( l.mlp.fc2.bias, lname + ".mlp.fc2.bias");
 
         save_weight( l.self_attn.k_proj.weight, lname + ".attn.k_proj.weight");
-        save_weight( l.self_attn.k_proj.bias, lname + ".atnn.k_proj.bias");
+        save_weight( l.self_attn.k_proj.bias, lname + ".attn.k_proj.bias");
         save_weight( l.self_attn.q_proj.weight, lname + ".attn.q_proj.weight");
-        save_weight( l.self_attn.q_proj.bias, lname + ".atnn.q_proj.bias");
+        save_weight( l.self_attn.q_proj.bias, lname + ".attn.q_proj.bias");
         save_weight( l.self_attn.v_proj.weight, lname + ".attn.v_proj.weight");
-        save_weight( l.self_attn.v_proj.bias, lname + ".atnn.v_proj.bias");
+        save_weight( l.self_attn.v_proj.bias, lname + ".attn.v_proj.bias");
         save_weight( l.self_attn.out_proj.weight, lname + ".attn.out_proj.weight");
-        save_weight( l.self_attn.out_proj.bias, lname + ".atnn.out_proj.bias");
+        save_weight( l.self_attn.out_proj.bias, lname + ".attn.out_proj.bias");
 
 def save_llm(llm):
     ## wte & lm_head & ln_f

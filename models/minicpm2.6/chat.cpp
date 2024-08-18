@@ -71,6 +71,8 @@ struct ChatApplication {
                 continue;
             }
 
+            text = "<img>./demo.jpg</img>描述画面";
+
             int use_image = insert_image(text);
             if ( use_image < 0) {
                 std::cout << "<img>...</img> input error, please input again" << std::endl;
