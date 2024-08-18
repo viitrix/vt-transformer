@@ -77,15 +77,30 @@ def save_weight(w, wfile):
     '''
 
 def save_resampler(rs):
-    save_weight( rs.kv_proj.weight, "rs.kv_proj");
-    save_weight( rs.ln_q.weight, "rs.ln_q.weight");
-    save_weight( rs.ln_q.bias, "rs.ln_q.bias");
+    q = rs.ln_q( rs.query);
+    save_weight( q, "rs.query");
+    #save_weight( rs.ln_q.weight, "rs.ln_q.weight");
+    #save_weight( rs.ln_q.bias, "rs.ln_q.bias");
+
+    save_weight( rs.proj, "rs.proj");
+    save_weight( rs.pos_embed, "rs.pos_embed");
     save_weight( rs.ln_kv.weight, "rs.ln_kv.weight");
     save_weight( rs.ln_kv.bias, "rs.ln_kv.bias");
-    save_weight( rs.ln_post.weight, "rs.ln_post.weight");
-    save_weight( rs.ln_post.bias, "rs.ln_post.bias");
+    save_weight( rs.kv_proj.weight, "rs.kv_proj");
+
+    q_proj, k_proj, v_proj = rs.attn.in_proj_weight.chunk(3);
+    save_weight( q_proj, "rs.attn.q_proj.weight");
+    save_weight( k_proj, "rs.attn.k_proj.weight");
+    save_weight( v_proj, "rs.attn.v_proj.weight");
+    q_proj, k_proj, v_proj = rs.attn.in_proj_bias.chunk(3);
+    save_weight( q_proj, "rs.attn.q_proj.bias");
+    save_weight( k_proj, "rs.attn.k_proj.bias");
+    save_weight( v_proj, "rs.attn.v_proj.bias");
+
     save_weight( rs.attn.out_proj.weight, "rs.attn.out_proj.weight");
     save_weight( rs.attn.out_proj.bias, "rs.attn.out_proj.bias");
+    save_weight( rs.ln_post.weight, "rs.ln_post.weight");
+    save_weight( rs.ln_post.bias, "rs.ln_post.bias");
 
 def save_vpm(v):
     save_weight( v.embeddings.patch_embedding.weight, "v.embeddings.patch_embedding.weight");
@@ -174,8 +189,8 @@ def save_llm(llm):
 pretrain = "./";  ## "openbmb/MiniCPM-V-2_6"
 model = AutoModelForCausalLM.from_pretrained(pretrain, device_map="cpu", trust_remote_code=True).eval()
 
-save_llm(model.llm);
+#save_llm(model.llm);
 save_resampler(model.resampler);
-save_vpm(model.vpm);
+#save_vpm(model.vpm);
 
 

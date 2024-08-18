@@ -12,6 +12,9 @@
     "CONV_CHANNELS" @ 1 "G_DEVICE" @ "f16" op.create "v.embeddings.patch_embedding.bias" !
     "VISUAL_POS_NUM" @ "CONV_CHANNELS" @ 2 "host" "f16" op.create "v.embeddings.position_embedding.weight" !
     
+    "CONV_CHANNELS" @ 1 "G_DEVICE" @ "f16" op.create "v.post_layernorm.weight" !
+    "CONV_CHANNELS" @ 1 "G_DEVICE" @ "f16" op.create "v.post_layernorm.bias" !
+    
     %for 0 26
         "CONV_CHANNELS" @ 1                   "G_DEVICE" @ "f16" op.create "v.encoder.layers_%%.layer_norm1.weight" !
         "CONV_CHANNELS" @ 1                   "G_DEVICE" @ "f16" op.create "v.encoder.layers_%%.layer_norm1.bias" !
@@ -32,8 +35,12 @@
         "VISUAL_MLP_INTERNAL" @                    1 "G_DEVICE" @ "f16" op.create "v.encoder.layers_%%.mlp.fc1.bias" !
         "CONV_CHANNELS" @  "VISUAL_MLP_INTERNAL" @ 2 "G_DEVICE" @ "f16" op.create "v.encoder.layers_%%.mlp.fc2.weight" !
         "CONV_CHANNELS" @                          1 "G_DEVICE" @ "f16" op.create "v.encoder.layers_%%.mlp.fc2.bias" !
-
     %endf
+
+    "HIDDEN_SIZE" @ "CONV_CHANNELS" @ 2 "G_DEVICE" @ "f16" op.create "rs.kv_proj" !
+    "HIDDEN_SIZE" @ 1 "G_DEVICE" @ "f16" op.create "rs.ln_kv.weight" !
+    "HIDDEN_SIZE" @ 1 "G_DEVICE" @ "f16" op.create "rs.ln_kv.bias" !
+    1 64 "HIDDEN_SIZE" @ 3 "G_DEVICE" @ "f16" op.create "rs.query" !
 
 %end
 
@@ -47,6 +54,9 @@
     "v.embeddings.patch_embedding.weight"       visual_load_one
     "v.embeddings.patch_embedding.bias"         visual_load_one
     "v.embeddings.position_embedding.weight"    visual_load_one
+    
+    "v.post_layernorm.weight" visual_load_one
+    "v.post_layernorm.bias" visual_load_one
 
     %for 0 26
         "v.encoder.layers_%%.layer_norm1.weight" visual_load_one
@@ -69,7 +79,11 @@
         "v.encoder.layers_%%.mlp.fc2.weight" visual_load_one
         "v.encoder.layers_%%.mlp.fc2.bias" visual_load_one
     %endf
-
+    
+    "rs.kv_proj" visual_load_one
+    "rs.ln_kv.weight" visual_load_one
+    "rs.ln_kv.bias" visual_load_one
+    "rs.query" visual_load_one
 %end
 
 %def visual_init
@@ -87,6 +101,9 @@
     ;; help memory
     "CONV_CHANNELS" @ 1 "G_DEVICE" @ "f16" op.create "v.mean_c" !
     "CONV_CHANNELS" @ 1 "G_DEVICE" @ "f16" op.create "v.var_c" !
+    "HIDDEN_SIZE" @ 1 "G_DEVICE" @ "f16" op.create "v.mean_r" !
+    "HIDDEN_SIZE" @ 1 "G_DEVICE" @ "f16" op.create "v.var_r" !
+
 
     ;; internal variable
     1 1024 "CONV_CHANNELS" @ 3 "G_DEVICE" @ "f16" op.create "v_xa" !
@@ -96,6 +113,8 @@
     1 1024 "CONV_CHANNELS" @ 3 "G_DEVICE" @ "f16" op.create "v_xe" !
     
     1 1024 "VISUAL_MLP_INTERNAL" @ 3 "G_DEVICE" @ "f16" op.create "v_xp" !
+    1 1024 "HIDDEN_SIZE" @ 3 "G_DEVICE" @ "f16" op.create "v_xrs_a" !
+    1 1024 "HIDDEN_SIZE" @ 3 "G_DEVICE" @ "f16" op.create "v_xrs_b" !
 
     ;; shadowed variable
     "v_xa" @ 0 1 "CONV_CHANNELS" @ 1 1024 4 op.view "v_imgx" !
@@ -104,22 +123,21 @@
     "v_xc" @ 0 1 1024 "VISUAL_HEAD_NUM" @ "VISUAL_HEAD_LEN" @ 4  op.view "v_yc" !
     "v_xd" @ 0 1 1024 "VISUAL_HEAD_NUM" @ "VISUAL_HEAD_LEN" @ 4  op.view "v_yd" !
     "v_xe" @ 0 1 1024 "VISUAL_HEAD_NUM" @ "VISUAL_HEAD_LEN" @ 4  op.view "v_ye" !
-    
+   
     "v_xa" @ 0 1 "VISUAL_HEAD_NUM" @ 1024 "VISUAL_HEAD_LEN" @ 4  op.view "v_za" !
     "v_xb" @ 0 1 "VISUAL_HEAD_NUM" @ 1024 "VISUAL_HEAD_LEN" @ 4  op.view "v_zb" !
     "v_xc" @ 0 1 "VISUAL_HEAD_NUM" @ 1024 "VISUAL_HEAD_LEN" @ 4  op.view "v_zc" !
     "v_xd" @ 0 1 "VISUAL_HEAD_NUM" @ 1024 "VISUAL_HEAD_LEN" @ 4  op.view "v_zd" !
     "v_xe" @ 0 1 "VISUAL_HEAD_NUM" @ 1024 "VISUAL_HEAD_LEN" @ 4  op.view "v_ze" !
-    
+  
     ;; function memory 
     1 "VISUAL_HEAD_NUM" @ 1024 1024 4 "G_DEVICE" @ "f16" op.create "v_xll" !
 %end
 
 %def visual_embeded
+    ;"v_img" @ app.fill
     "v_img" @ "./demo.fp16" io.load
-    ;;"v_img" @ app.fill
-   
-    
+
     ;; building position
     "v_ids~" @ 70 32 32 app.position
     "v_ids~" @ "v.embeddings.position_embedding.weight" @ "v_pos~" @ op.embed
@@ -188,7 +206,16 @@
         "v_xa" @ "v_xb" @ "v_xa" @ op.add
     %endf
 
-    "v_xa" @ io.dump ^
+    "v_xa" @ "v.mean_c" @ "v.var_c" @ "v.post_layernorm.weight" @ "v.post_layernorm.bias" @ "v_xb" @ "RMS_EPS" @ op.layernorm
+   
+    ;;; resampler
+    {
+        "v_xb" @ "x.fp16" io.load
+        
+        "v_xb" @ "rs.kv_proj" @ op.null "v_xrs_a" @ op.linear 
+        "v_xrs_a" @ "v.mean_r" @ "v.var_r" @ "rs.ln_kv.weight" @ "rs.ln_kv.bias" @ "v_xrs_b" @ "RMS_EPS" @ op.layernorm
 
+        "v_xrs_b" @ io.dump ^
+    }
 %end
 
