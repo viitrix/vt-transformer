@@ -102,8 +102,8 @@ struct MinicpmTokenizer : public Tokenizer {
         specs.append("<|im_start|>\n");     // 151644
         specs.append("<|im_end|>\n");
 
-        specs.append("<img>");
-        specs.append("</img>");
+        specs.append("<img>\n");
+        specs.append("</img>\n");
         specs.append("<ref>\n");
         specs.append("</ref>\n");
         specs.append("<box>\n");
@@ -114,8 +114,8 @@ struct MinicpmTokenizer : public Tokenizer {
         specs.append("</point>\n");
         specs.append("<slice>\n");
         specs.append("</slice>\n");
-        specs.append("<img_id>");
-        specs.append("</img_id>");
+        specs.append("<img_id>\n");
+        specs.append("</img_id>\n");
 
         for ( int i = 0; i < 6; i++) {
             std::stringstream ss;

@@ -83,11 +83,12 @@ def save_resampler(rs):
     #save_weight( rs.ln_q.weight, "rs.ln_q.weight");
     #save_weight( rs.ln_q.bias, "rs.ln_q.bias");
 
-    save_weight( rs.proj, "rs.proj");
-    save_weight( rs.pos_embed, "rs.pos_embed");
+    save_weight( rs.proj.transpose(1,0), "rs.proj");
     save_weight( rs.ln_kv.weight, "rs.ln_kv.weight");
     save_weight( rs.ln_kv.bias, "rs.ln_kv.bias");
     save_weight( rs.kv_proj.weight, "rs.kv_proj");
+
+    save_weight( rs.pos_embed[:32, :32, :], "rs.pos_embed");
 
     q_proj_weight, k_proj, v_proj = rs.attn.in_proj_weight.chunk(3);
     save_weight( k_proj, "rs.attn.k_proj.weight");

@@ -71,7 +71,7 @@ struct ChatApplication {
                 continue;
             }
 
-            text = "<img>./demo.jpg</img>描述画面";
+            text = "<img_id>0</img_id>(<img>./demo.jpg</img>)\n描述画面";
 
             int use_image = insert_image(text);
             if ( use_image < 0) {
@@ -169,7 +169,7 @@ struct ChatApplication {
         }
 
         std::string new_text = text.substr(0, begin);
-        for (int i = 0; i < 256; i++) {
+        for (int i = 0; i < 64; i++) {
             new_text = new_text + pad;
         }
         new_text = new_text + text.substr(end);

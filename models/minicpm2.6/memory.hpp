@@ -3,16 +3,16 @@
 #include <sys/ipc.h>
 #include <sys/shm.h>
 
-const int VOCAB_SIZE = 151936;
-const int HIDDEN_SIZE = 4096;
-const int INTERMEDIATE_SIZE = 11008;
-const int HEADS_NUM = 32;
+const int VOCAB_SIZE = 151666;
+const int HIDDEN_SIZE = 3584;
+const int INTERMEDIATE_SIZE = 18944;
+const int HEADS_NUM = 28;
 const int HEAD_HIDDEN = 128;
 
-const int IMAGE_BEGIN = 151857;
-const int IMAGE_END = 151858;
-const int IMAGE_PAD_BEGIN = 151859;                 // <imgpad_0>
-const int IMAGE_PAD_END = IMAGE_PAD_BEGIN + 15;     // <imgpad_15>
+const int IMAGE_BEGIN = 151646;
+const int IMAGE_END = 151647;
+const int IMAGE_PAD_BEGIN = 151660;                 // <imgpad_0>
+const int IMAGE_PAD_END = IMAGE_PAD_BEGIN + 5;     // <imgpad_5>
 
 const size_t shsize = 448 * 448 * 3 * 2;
 
@@ -74,10 +74,10 @@ struct InsertImage : public vt::NativeWord {
         int* tokens = (int *)std::get<1>(ids->op_data(ctx_, ids));
         for (int i = 0; i < (int)ids->items(); i++) {
             if ( tokens[i] >= IMAGE_PAD_BEGIN ) {
-                vt_assert(i + 256 < (int)ids->items() - 1, "Token's length error for image");
-                vt_assert(tokens[i + 256] == IMAGE_END, "Token's image format error!");
+                vt_assert(i + 64 < (int)ids->items() - 1, "Token's length error for image");
+                vt_assert(tokens[i + 64] == IMAGE_END, "Token's image format error!");
 
-                auto ret = embed->op_view(ctx_, embed, i * HIDDEN_SIZE, {1, 256, 4096});
+                auto ret = embed->op_view(ctx_, embed, i * HIDDEN_SIZE, {1, 64, HIDDEN_SIZE});
                 auto target = std::get<1>(ret);
 
                 target->op_copy_from(ctx_, target, image);

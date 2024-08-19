@@ -11,7 +11,7 @@ LINK = -L../../install/lib \
 	   -L/usr/lib/x86_64-linux-gnu \
 	   -ltokenizer_combo -ltokenizers_c -lreadline\
 	   -lssl -lcrypto \
-	   -ltensortype -lcuda_kernels -lcudnn -lcudart -lcublas -lcublasLt 
+	   -ltensortype -lcuda_kernels -lbitsandbytes -lcudnn -lcudart -lcublas -lcublasLt -lcusparse 
 
 all: chat
 
