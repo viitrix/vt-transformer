@@ -197,8 +197,8 @@ def save_llm(llm):
 pretrain = "./";  ## "openbmb/MiniCPM-V-2_6"
 model = AutoModelForCausalLM.from_pretrained(pretrain, device_map="cpu", trust_remote_code=True, torch_dtype=torch.float16).eval()
 
-#save_llm(model.llm);
+save_llm(model.llm);
 save_resampler(model.resampler);
-#save_vpm(model.vpm);
+save_vpm(model.vpm);
 
 

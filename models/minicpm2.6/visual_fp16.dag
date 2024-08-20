@@ -182,8 +182,8 @@
 %end
 
 %def visual_embeded
-    ;"v_img" @ app.fill
-    "v_img" @ "./demo.fp16" io.load
+    "v_img" @ app.fill
+    ;"v_img" @ "./demo.fp16" io.load
 
     ;; building position
     "v_ids~" @ 70 32 32 app.position
@@ -257,7 +257,7 @@
    
     ;;; resampler
     {
-        "v_xb" @ "x.fp16" io.load
+        ;"v_xb" @ "x.fp16" io.load
         "v_xb" @ "rs.kv_proj" @ op.null "v_xrs_a" @ op.linear 
         "v_xrs_a" @ "v.mean_r" @ "v.var_r" @ "rs.ln_kv.weight" @ "rs.ln_kv.bias" @ "v_xrs_b" @ "RMS_EPS" @ op.layernorm
 

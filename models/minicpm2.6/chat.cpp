@@ -71,8 +71,6 @@ struct ChatApplication {
                 continue;
             }
 
-            text = "<img_id>0</img_id>(<img>./demo.jpg</img>)\n描述画面";
-
             int use_image = insert_image(text);
             if ( use_image < 0) {
                 std::cout << "<img>...</img> input error, please input again" << std::endl;
@@ -135,6 +133,7 @@ struct ChatApplication {
         }
     }
 
+    // "<img_id>0</img_id>(<img>./demo.jpg</img>)\n 识别画面上的文字";
     int insert_image(std::string& text) {
         size_t begin = text.find("<img>");
         size_t end = text.find("</img>");
@@ -146,12 +145,11 @@ struct ChatApplication {
             return -1;
         }
 
-        begin += 5;
-        if ( begin >= end ) {
+        int len = end - (begin + 5);
+        if ( len <= 0) {
             return -1;
         }
-        size_t len = end - begin;
-        std::string image_file = text.substr( begin, len);
+        std::string image_file = text.substr( begin + 5, len);
         {
             std::ifstream f(image_file.c_str());
             if ( ! f.good() ) {
@@ -169,10 +167,12 @@ struct ChatApplication {
         }
 
         std::string new_text = text.substr(0, begin);
+        new_text = new_text + "<img_id>0</img_id>(<img>";
         for (int i = 0; i < 64; i++) {
             new_text = new_text + pad;
         }
-        new_text = new_text + text.substr(end);
+        new_text = new_text + "</img>)\n";
+        new_text = new_text + text.substr(end+6);
         text = new_text;
 
         vt::ImageLoader* img_loader = vt::build_imageloader_minicpm(image_file.c_str());

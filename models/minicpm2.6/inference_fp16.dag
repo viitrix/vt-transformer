@@ -390,8 +390,8 @@
 
     ;; sampling using tempture & top_p
     
-    ;"all_logits" @ "TEMPERATURE" @ op.sampling_top3
-    "all_logits" @ op.sampling_top1
+    "all_logits" @ "TEMPERATURE" @ op.sampling_top3
+    ;"all_logits" @ op.sampling_top1
     
     0 io.pipe.write
 %end
