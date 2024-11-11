@@ -44,7 +44,7 @@ def save_weight(w, wfile):
 pretrain = "./";  ## "Qwen/Qwen2-7B-Instruct"
 model = AutoModelForCausalLM.from_pretrained(pretrain, device_map="cpu").eval()
 
-
+"""
 ## wte & lm_head & ln_f
 w = model.model.embed_tokens.weight
 save_weight(w, "wte");
@@ -98,4 +98,4 @@ for i in range(0, 28):
     w = model.model.layers[i].mlp.down_proj.weight;
     name = pname + "mlp.o_proj.weight";
     save_weight(w, name);
-
+"""
