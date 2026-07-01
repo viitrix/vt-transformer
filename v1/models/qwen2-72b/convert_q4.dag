@@ -1,0 +1,91 @@
+8192                    "HIDDEN_SIZE"           !
+1024                    "KV_PROJ"               !
+29568                   "INTERMEDIATE_SIZE"     !
+
+"./weights/"            "G_PATH"                !
+
+%def create_layer_weight
+    $L !
+    $DEVICE !
+
+    ("HIDDEN_SIZE" @ "HIDDEN_SIZE" @ 2 $DEVICE @  "f16" )  op.create  $L @  "attn.query.weight" | !
+    ("KV_PROJ" @     "HIDDEN_SIZE" @ 2 $DEVICE @  "f16" )  op.create  $L @  "attn.key.weight" | !
+    ("KV_PROJ" @     "HIDDEN_SIZE" @ 2 $DEVICE @  "f16" )  op.create  $L @  "attn.value.weight" | !
+
+    ("HIDDEN_SIZE" @  "HIDDEN_SIZE" @ 2 $DEVICE @  "f16")  op.create   $L @ "attn.o_proj.weight" |  !
+
+    ("INTERMEDIATE_SIZE" @  "HIDDEN_SIZE" @ 2 $DEVICE @  "f16")  op.create  $L @  "mlp.w1.weight"  | !
+    ("INTERMEDIATE_SIZE" @  "HIDDEN_SIZE" @ 2 $DEVICE @  "f16")  op.create  $L @  "mlp.w2.weight"  | !
+    ("HIDDEN_SIZE" @  "INTERMEDIATE_SIZE" @ 2 $DEVICE @  "f16")  op.create  $L @  "mlp.o_proj.weight" | !
+
+    ("HIDDEN_SIZE" @ "HIDDEN_SIZE" @ 2 $DEVICE @  "q4" )  op.create  $L @  "attn.query.q4" | !
+    ("KV_PROJ" @     "HIDDEN_SIZE" @ 2 $DEVICE @  "q4" )  op.create  $L @  "attn.key.q4" | !
+    ("KV_PROJ" @     "HIDDEN_SIZE" @ 2 $DEVICE @  "q4" )  op.create  $L @  "attn.value.q4" | !
+
+    ("HIDDEN_SIZE" @  "HIDDEN_SIZE" @ 2 $DEVICE @  "q4")  op.create   $L @ "attn.o_proj.q4" |  !
+
+    ("INTERMEDIATE_SIZE" @  "HIDDEN_SIZE" @ 2 $DEVICE @  "q4")  op.create  $L @  "mlp.w1.q4"  | !
+    ("INTERMEDIATE_SIZE" @  "HIDDEN_SIZE" @ 2 $DEVICE @  "q4")  op.create  $L @  "mlp.w2.q4"  | !
+    ("HIDDEN_SIZE" @  "INTERMEDIATE_SIZE" @ 2 $DEVICE @  "q4")  op.create  $L @  "mlp.o_proj.q4" | !
+
+    $L !!
+    $DEVICE !!
+%end
+
+%def load_layer_weight
+    $L !
+    $weights_path ! 
+    
+    "Loading... " $weights_path @ | ?
+    
+    $L @ "attn.query.weight"               | @ $weights_path @  "attn.query.weight.fp16"          | io.load
+    $L @ "attn.key.weight"                 | @ $weights_path @  "attn.key.weight.fp16"            | io.load
+    $L @ "attn.value.weight"               | @ $weights_path @  "attn.value.weight.fp16"          | io.load
+    $L @ "attn.o_proj.weight"              | @ $weights_path @  "attn.o_proj.weight.fp16"         | io.load
+    $L @ "mlp.w1.weight"                   | @ $weights_path @  "mlp.w1.weight.fp16"              | io.load
+    $L @ "mlp.w2.weight"                   | @ $weights_path @  "mlp.w2.weight.fp16"              | io.load
+    $L @ "mlp.o_proj.weight"               | @ $weights_path @  "mlp.o_proj.weight.fp16"          | io.load
+    
+    "Loaded " $weights_path @ | ?
+    
+    $L !!
+    $weights_path !!
+%end
+
+%def convert_layer_weight
+    $L !
+    $weights_path ! 
+    
+    "Convert.. " $weights_path @ | ?
+    
+    $L @ "attn.query.weight"               | @  $L @ "attn.query.q4"               | @ op.quantize 
+    $L @ "attn.key.weight"                 | @  $L @ "attn.key.q4"                 | @ op.quantize
+    $L @ "attn.value.weight"               | @  $L @ "attn.value.q4"               | @ op.quantize
+    $L @ "attn.o_proj.weight"              | @  $L @ "attn.o_proj.q4"              | @ op.quantize
+    $L @ "mlp.w1.weight"                   | @  $L @ "mlp.w1.q4"                   | @ op.quantize
+    $L @ "mlp.w2.weight"                   | @  $L @ "mlp.w2.q4"                   | @ op.quantize 
+    $L @ "mlp.o_proj.weight"               | @  $L @ "mlp.o_proj.q4"               | @ op.quantize
+ 
+    $L @ "attn.query.q4"               | @ $weights_path @  "attn.query.weight.q4"          | io.save
+    $L @ "attn.key.q4"                 | @ $weights_path @  "attn.key.weight.q4"            | io.save
+    $L @ "attn.value.q4"               | @ $weights_path @  "attn.value.weight.q4"          | io.save
+    $L @ "attn.o_proj.q4"              | @ $weights_path @  "attn.o_proj.weight.q4"         | io.save
+    $L @ "mlp.w1.q4"                   | @ $weights_path @  "mlp.w1.weight.q4"              | io.save
+    $L @ "mlp.w2.q4"                   | @ $weights_path @  "mlp.w2.weight.q4"              | io.save
+    $L @ "mlp.o_proj.q4"               | @ $weights_path @  "mlp.o_proj.weight.q4"          | io.save
+    
+    $L !!
+    $weights_path !!
+%end
+
+%def gpu_main
+
+    "cuda" "LX." create_layer_weight 
+
+    %for 0 79
+        "G_PATH" @ "h_%%."  | dup "LX." load_layer_weight
+                                  "LX." convert_layer_weight 
+    %endf
+
+%end
+

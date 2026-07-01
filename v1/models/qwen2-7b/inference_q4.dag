@@ -1,0 +1,432 @@
+1e-06                   "RMS_EPS"               !
+1000000.0               "ROTARY_BASE"           !
+2.5                     "TEMPERATURE"           !
+
+152064                  "VOCAB_SIZE"            !
+3584                    "HIDDEN_SIZE"           !
+512                     "KV_PROJ"               !
+18944                   "INTERMEDIATE_SIZE"     !
+28                      "HEADS_NUM"             !
+4                       "KV_HEADS_NUM"          !
+128                     "HEAD_HIDDEN"           !
+
+1                       "MAX_BATCH"             !
+4096                    "MAX_CONTEXT"           !
+"./weights/"            "G_PATH"                !
+
+%def init_internal_variable
+    $DEVICE !
+
+    ;; local host xinput var 
+    "MAX_CONTEXT" @ "MAX_BATCH" @ "HIDDEN_SIZE" @ * * 1 "host" "f16" op.create "_xinput~" !
+
+    ;; activity memory
+    "MAX_BATCH" @ "MAX_CONTEXT" @ app.mem 1 $DEVICE @ "f16" op.create  "_var_"  !
+    
+    ;; internal dequantized shared memory
+    "INTERMEDIATE_SIZE" @   "HIDDEN_SIZE" @ 2 $DEVICE @ "f16" op.create "_w_" !
+    "_w_" @  0 ("HIDDEN_SIZE" @        "HIDDEN_SIZE" @       2) op.view  "_HH_" !
+    "_w_" @  0 ("KV_PROJ"     @        "HIDDEN_SIZE" @       2) op.view  "_KH_" !
+    "_w_" @  0 ("INTERMEDIATE_SIZE" @  "HIDDEN_SIZE" @       2) op.view  "_IH_" !
+    "_w_" @  0 ("HIDDEN_SIZE" @        "INTERMEDIATE_SIZE" @ 2) op.view  "_HI_" !
+
+    ;; kv cached memroy
+    28 "MAX_BATCH" @ "MAX_CONTEXT" @ 16 + "KV_PROJ" @ 4 $DEVICE @  "f16" op.create dup "_kcache_"  !
+    28 "MAX_BATCH" @ "MAX_CONTEXT" @ 16 + "KV_PROJ" @ 4 $DEVICE @  "f16" op.create dup "_vcache_"  !
+    nn.ezkv_init "cache_man" !
+
+    "MAX_CONTEXT" @ "MAX_BATCH" @ * dup dup dup 
+    1 "host"     "i32"  op.create  "_ids~"     !
+    1 "host"     "i32"  op.create  "_maks~"    !
+    1 $DEVICE @  "i32"  op.create  "_ids"      !
+    1 $DEVICE @  "i32"  op.create  "_mask"     !
+    "MAX_CONTEXT" @ 1 $DEVICE @  "i32" op.create "_position" !
+    
+    10000 "HEAD_HIDDEN" @ 2 3 $DEVICE @  "f32" op.create dup 
+    "ROTARY_BASE" @ op.rotary_cache 
+    "rotary_cache" !
+
+    $DEVICE !!
+%end
+
+%def create_input_weight
+    $DEVICE !
+
+    "VOCAB_SIZE" @ "HIDDEN_SIZE" @ 2 $DEVICE @ "f16" op.create "wte.weight"  !
+
+    $DEVICE !!
+%end
+
+%def create_output_weight
+    $DEVICE !
+
+    1 1 "HIDDEN_SIZE" @ 3 $DEVICE @ "f16"  op.create  "ln_f.weight"  !
+    "VOCAB_SIZE" @ "HIDDEN_SIZE" @ 2 $DEVICE @ "f16" op.create "lm_head.weight" !
+
+    $DEVICE !!
+%end
+
+%def create_layer_weight
+    $L !
+    $DEVICE !
+
+    (1 1 "HIDDEN_SIZE" @  3 $DEVICE @ "f16")  op.create  $L @ "ln_1.weight" | !
+    (1 1 "HIDDEN_SIZE" @  3 $DEVICE @ "f16")  op.create  $L @ "ln_2.weight"  | !
+
+    ("HIDDEN_SIZE" @ "HIDDEN_SIZE" @ 2 $DEVICE @  "q4" )  op.create  $L @  "attn.query.weight" | !
+    ("KV_PROJ" @     "HIDDEN_SIZE" @ 2 $DEVICE @  "q4" )  op.create  $L @  "attn.key.weight" | !
+    ("KV_PROJ" @     "HIDDEN_SIZE" @ 2 $DEVICE @  "q4" )  op.create  $L @  "attn.value.weight" | !
+
+    ("HIDDEN_SIZE" @ 1 $DEVICE @  "f16" )  op.create  $L @  "attn.query.bias" | !
+    ("KV_PROJ" @     1 $DEVICE @  "f16" )  op.create  $L @  "attn.key.bias" | !
+    ("KV_PROJ" @     1 $DEVICE @  "f16" )  op.create  $L @  "attn.value.bias" | !
+    
+    ("HIDDEN_SIZE" @  "HIDDEN_SIZE" @ 2 $DEVICE @  "q4")  op.create   $L @ "attn.o_proj.weight" |  !
+
+    ("INTERMEDIATE_SIZE" @  "HIDDEN_SIZE" @ 2 $DEVICE @  "q4")  op.create  $L @  "mlp.w1.weight"  | !
+    ("INTERMEDIATE_SIZE" @  "HIDDEN_SIZE" @ 2 $DEVICE @  "q4")  op.create  $L @  "mlp.w2.weight"  | !
+    ("HIDDEN_SIZE" @  "INTERMEDIATE_SIZE" @ 2 $DEVICE @  "q4")  op.create  $L @  "mlp.o_proj.weight" | !
+
+    $L !!
+    $DEVICE !!
+%end
+
+%def load_input_weight
+    "Loading input weight..." ? 
+    
+    $weights_path ! 
+
+    "wte.weight" @
+    $weights_path @ "wte.fp16" |
+    io.load
+
+    $weights_path !!
+
+    "Loaded input weight." ?
+%end
+
+%def load_output_weight
+    "Loading output weight..." ? 
+    
+    $weights_path ! 
+    
+    "ln_f.weight" @
+    $weights_path @ "ln_f.fp16"  |
+    io.load
+
+    "lm_head.weight" @
+    $weights_path @ "lm_head.fp16"  |
+    io.load
+
+    $weights_path !!
+
+    "Loaded output weight." ?
+%end
+
+%def load_layer_weight
+    $L !
+    $weights_path ! 
+    
+    "Loading... " $weights_path @ | ?
+    
+    $L @ "ln_1.weight"                     | @ $weights_path @  "ln_1.weight.fp16"                | io.load
+    $L @ "ln_2.weight"                     | @ $weights_path @  "ln_2.weight.fp16"                | io.load
+    $L @ "attn.query.weight"               | @ $weights_path @  "attn.query.weight.q4"            | io.load
+    $L @ "attn.query.bias"                 | @ $weights_path @  "attn.query.bias.fp16"            | io.load
+    $L @ "attn.key.weight"                 | @ $weights_path @  "attn.key.weight.q4"              | io.load
+    $L @ "attn.key.bias"                   | @ $weights_path @  "attn.key.bias.fp16"              | io.load
+    $L @ "attn.value.weight"               | @ $weights_path @  "attn.value.weight.q4"            | io.load
+    $L @ "attn.value.bias"                 | @ $weights_path @  "attn.value.bias.fp16"            | io.load
+    $L @ "attn.o_proj.weight"              | @ $weights_path @  "attn.o_proj.weight.q4"           | io.load
+    $L @ "mlp.w1.weight"                   | @ $weights_path @  "mlp.w1.weight.q4"                | io.load
+    $L @ "mlp.w2.weight"                   | @ $weights_path @  "mlp.w2.weight.q4"                | io.load
+    $L @ "mlp.o_proj.weight"               | @ $weights_path @  "mlp.o_proj.weight.q4"            | io.load
+    
+    "Loaded " $weights_path @ | ?
+    
+    $L !!
+    $weights_path !!
+%end
+
+%def sync_layer_clone
+    $L !
+
+    $L @ "ln_1.weight"                        | @ "ln_1.weight"                   !
+    $L @ "ln_2.weight"                        | @ "ln_2.weight"                   !
+    $L @ "attn.query.weight"                  | @ "attn.query.weight"             !
+    $L @ "attn.query.bias"                    | @ "attn.query.bias"               !
+    $L @ "attn.key.weight"                    | @ "attn.key.weight"               !
+    $L @ "attn.key.bias"                      | @ "attn.key.bias"                 !
+    $L @ "attn.value.weight"                  | @ "attn.value.weight"             !
+    $L @ "attn.value.bias"                    | @ "attn.value.bias"               !
+    $L @ "attn.o_proj.weight"                 | @ "attn.o_proj.weight"            !
+    $L @ "mlp.w1.weight"                      | @ "mlp.w1.weight"                 !
+    $L @ "mlp.w2.weight"                      | @ "mlp.w2.weight"                 !
+    $L @ "mlp.o_proj.weight"                  | @ "mlp.o_proj.weight"             !
+
+    $L !!
+%end
+
+%def create_dynamic
+    $batch          !
+    $full_tokens    !
+    $tokens         !
+    
+    ;; xinput in GPU and host
+    {
+        "_xinput~" @ 0  $batch @  $tokens @  "HIDDEN_SIZE" @ 3 op.view  "xinput~" !
+        "_var_"    @ 0  $batch @  $tokens @  "HIDDEN_SIZE" @ 3 op.view  "xinput" !
+        $batch @ $tokens @ "HIDDEN_SIZE" @ * *
+    }
+
+    ;; causal mask, norm2 in GPU, extend to aligen address
+    {
+        dup
+        "_var_" @ swap $batch @ 1 $tokens @  $full_tokens @ 4 "f16" op.view_as  "causal_mask"  !
+        $batch @ $tokens @ $full_tokens @ 2 * * * +
+
+        dup
+        "_var_" @ swap $batch @ $tokens @ 1 3 op.view "norm2" !
+        $batch @ $tokens @ 2 * * +                                  
+    }
+
+    64 app.align
+    
+    ;; xa, xb, xquery/key/value, xll, x4a, x4b, all_logits
+    dup
+    "_var_" @ swap $batch @ $tokens @ "HIDDEN_SIZE" @ 3 op.view "xa" !
+    $batch @ $tokens @ "HIDDEN_SIZE" @  * * +
+    "xa" @ 0 $batch @ $tokens @ "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "ya" !
+    "xa" @ 0 $batch @ "HEADS_NUM" @ $tokens @ "HEAD_HIDDEN" @ 4 op.view "za" !
+    "xa" @ 0 $batch @ $tokens @ "KV_PROJ" @ 3  op.view "xa_kv" !
+    "xa" @ 0 $batch @ $tokens @ "KV_HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "ya_kv" !
+
+    dup
+    "_var_" @ swap $batch @ $tokens @ "HIDDEN_SIZE" @ 3 op.view "xb" !
+    $batch @ $tokens @ "HIDDEN_SIZE" @  * * +
+    "xb" @ 0 $batch @ $tokens @ "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "yb" !
+    "xb" @ 0 $batch @ "HEADS_NUM" @ $tokens @ "HEAD_HIDDEN" @ 4 op.view "zb" !
+    "xb" @ 0 $batch @ $tokens @ "KV_PROJ" @ 3 op.view "xb_kv" !
+    "xb" @ 0 $batch @ $tokens @ "KV_HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "yb_kv" !
+    
+    dup 
+    {
+        dup
+        "_var_" @ swap $batch @ $tokens @ "HIDDEN_SIZE" @ 3 op.view "xc" !
+        $batch @ $tokens @ "HIDDEN_SIZE" @  * * +
+        "xc" @ 0 $batch @ $tokens @ "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "yc" !
+        "xc" @ 0 $batch @ "HEADS_NUM" @ $tokens @ "HEAD_HIDDEN" @ 4 op.view "zc" !
+        "xc" @ 0 $batch @ $tokens @ "KV_PROJ" @ 3  op.view "xc_kv" !
+        "xc" @ 0 $batch @ $tokens @ "KV_HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "yc_kv" !
+       
+        dup
+        "_var_" @ swap $batch @ $full_tokens @ "HIDDEN_SIZE" @ 3 op.view "xfa" !
+        $batch @ $full_tokens @ "HIDDEN_SIZE" @  * * +
+        "xfa" @ 0 $batch @ $full_tokens @ "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "yfa" !
+        "xfa" @ 0 $batch @ "HEADS_NUM" @ $full_tokens @ "HEAD_HIDDEN" @ 4 op.view "zfa" !
+        "xfa" @ 0 $batch @ $full_tokens @ "KV_PROJ" @ 3 op.view "xfa_kv" !
+        "xfa" @ 0 $batch @ $full_tokens @ "KV_HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "yfa_kv" !
+
+        dup
+        "_var_" @ swap $batch @ $full_tokens @ "HIDDEN_SIZE" @ 3 op.view "xfb" !
+        $batch @ $full_tokens @ "HIDDEN_SIZE" @  * * +
+        "xfb" @ 0 $batch @ $full_tokens @ "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "yfb" !
+        "xfb" @ 0 $batch @ "HEADS_NUM" @ $full_tokens @ "HEAD_HIDDEN" @ 4 op.view "zfb" !
+        "xfb" @ 0 $batch @ $full_tokens @ "KV_PROJ" @ 3 op.view "xfb_kv" !
+        "xfb" @ 0 $batch @ $full_tokens @ "KV_HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "yfb_kv" !
+
+        "_var_" @ swap $batch @ "HEADS_NUM" @ $tokens @ $full_tokens @ 4 op.view "xll" !
+    }  
+    dup
+    {
+   
+        dup 
+        "_var_" @ swap $batch @ $tokens @ "INTERMEDIATE_SIZE" @ 3 op.view "x4a" !
+        $batch @ $tokens @ "INTERMEDIATE_SIZE" @ * * +
+
+        "_var_" @ swap $batch @ $tokens @ "INTERMEDIATE_SIZE" @ 3 op.view "x4b" !
+    }
+    "_var_" @ swap 0 "VOCAB_SIZE" @ 2 op.view  "all_logits" !
+
+    $tokens !!
+    $batch !!
+    $full_tokens !!
+%end
+
+%def prepare_input
+    {
+        $tokens !
+        $batch !
+        
+        "_ids~"  @ 0 $batch @ $tokens @ 2 op.view  "ids~" !
+        "_maks~" @ 0 $batch @ $tokens @ 2 op.view  "mask~" !
+        
+        "ids~" @  io.pipe.read
+        "mask~" @ io.pipe.read
+
+        $batch !!
+        $tokens !!
+    }
+  
+    ;; fetch KV cache
+    "cache_man" @  "ids~" @  "mask~" @  "_ids" @ "_mask" @ nn.ezkv_match  
+    "mask" !        
+    "ids"  !
+       
+    ;; write cached mask & ids back to cpu
+    {
+        "_maks~" @ 0 "mask" @ op.get_shape op.view "mask~" !
+        "_ids~" @ 0 "ids" @ op.get_shape op.view "ids~" !
+        
+        "mask" @ "mask~" @ op.copy_to
+        "ids" @ "ids~" @  op.copy_to
+    }
+
+    {
+        "ids" @ op.get_shape drop swap drop
+        "mask" @ op.get_shape drop swap 
+        create_dynamic
+    }
+
+    "mask" @ "causal_mask" @ op.causal_mask
+%end
+
+%def layer_forward
+    $L !
+    "cache_man" @  "_position" @ nn.ezkv_position  $pos !
+    "xinput" @ "ln_1.weight" @ "norm2" @ "xa" @ "RMS_EPS" @ op.rmsnorm
+    
+    
+    ;; attention
+    {
+        ;; get key for new tokens, combing cached tokens, position embedding
+        {
+            ;"xa" @ "attn.key.weight" @ "attn.key.bias" @ "xb_kv" @ op.linear
+            "attn.key.weight" @ "_KH_" @ op.dequantize 
+            "xa" @ "_KH_" @ "attn.key.bias" @ "xb_kv" @ op.linear
+        }
+        "yb_kv" @ "rotary_cache" @ $pos @ "yc_kv" @  op.rotary_embed
+        "cache_man" @ "_kcache_" @ "xc_kv" @ "xfb_kv" @ $L @ nn.ezkv_update
+        "yfb_kv" @ "zfa" @ op.transpose_0213_repeated
+       
+        ;; get query@key
+        {
+            ;"xa" @ "attn.query.weight" @ "attn.query.bias" @ "xc" @ op.linear
+            "attn.query.weight" @ "_HH_" @ op.dequantize 
+            "xa" @ "_HH_" @ "attn.query.bias" @ "xc" @ op.linear
+        }
+        "yc" @ "rotary_cache" @ $pos @ "yb" @  op.rotary_embed
+        "yb" @ "zc" @ op.transpose_0213
+     
+        ;; query@key + apply causal_mask + softmax
+        "zc" @  "zfa" @  "xll" @ op.querykey
+        "xll" @ "causal_mask" @ "xll" @ op.add
+        "xll" @ "xll" @ op.softmax
+     
+        ;; get value for new tokens, combing cached tokens 
+        {
+            ;"xa" @ "attn.value.weight" @ "attn.value.bias" @ "xb_kv" @ op.linear
+            "attn.value.weight" @ "_KH_" @ op.dequantize 
+            "xa" @ "_KH_" @ "attn.value.bias" @ "xb_kv" @ op.linear
+        }
+        "cache_man" @ "_vcache_" @ "xb_kv" @ "xfa_kv" @ $L @ nn.ezkv_update
+        "yfa_kv" @ "zfb" @ op.transpose_0213_repeated
+
+        ;; do attention and transpose back
+        "xll" @ "zfb" @ "zb" @ op.attn          
+        "zb" @ "ya" @ op.transpose_0213          ;; attn->ya 
+    }
+    
+    ;; do dense & residual
+    {
+        ;"xa" @ "attn.o_proj.weight" @  op.null "xb" @ op.linear
+        "attn.o_proj.weight" @ "_HH_" @ op.dequantize
+        "xa" @ "_HH_" @  op.null "xb" @ op.linear
+    }
+    "xb" @ "xinput" @ "xa" @ op.add
+
+    ;; post layer norm
+    "xa" @ "ln_2.weight" @ "norm2" @ "xb" @ "RMS_EPS" @ op.rmsnorm
+
+    ;; MLP
+    {
+        ;; xa atteion output
+        ;; xb passed post layernorm
+        
+        {
+            ;"xb" @ "mlp.w2.weight" @ op.null "x4a" @ op.linear
+            "mlp.w2.weight" @ "_IH_" @ op.dequantize
+            "xb" @ "_IH_" @ op.null "x4a" @ op.linear
+
+
+            ;"xb" @ "mlp.w1.weight" @ op.null "x4b" @ op.linear
+            "mlp.w1.weight" @ "_IH_" @ op.dequantize
+            "xb" @ "_IH_" @ op.null "x4b" @ op.linear
+        }
+        
+        "x4b" @ "x4a" @ "x4a" @ op.silu_product
+        {
+            ;"x4a" @ "mlp.o_proj.weight" @ op.null "xb" @ op.linear
+            "mlp.o_proj.weight" @ "_HI_" @ op.dequantize
+            "x4a" @ "_HI_" @ op.null "xb" @ op.linear
+        }
+        
+        ;; residual
+        "xa" @ "xb" @ "xinput" @ op.add
+    }
+  
+    $pos !!
+    $L !!
+%end
+
+%def gpu_init
+    "G_DEVICE" ! 
+
+    "G_DEVICE" @       init_internal_variable
+
+    "host"             create_input_weight
+    "G_DEVICE" @       create_output_weight
+
+    %for 0 27
+        "G_DEVICE" @    "L%%."   create_layer_weight 
+    %endf
+
+    "G_PATH" @ load_input_weight
+    "G_PATH" @ load_output_weight
+
+    %for 0 27
+        "G_PATH" @ "h_%%."  | "L%%." load_layer_weight
+    %endf
+
+%end
+
+%def gpu_main
+    prepare_input
+
+    ;; embed    
+    {
+        "ids~" @ "wte.weight" @ "xinput~" @ op.embed
+        "xinput" @ "xinput~" @ op.copy
+    }
+
+    %for 0 27
+        "L%%."   sync_layer_clone %% layer_forward 
+    %endf
+
+    ;; ln & output    
+    {
+        "xinput" @ "ln_f.weight" @ "norm2" @ "xb" @ "RMS_EPS" @ op.rmsnorm
+        "xb" @ "mask~" @ "lm_head.weight" @ "all_logits" @  op.all_logits 
+    }
+   
+    ;; reshape all_logits according to user's masks
+    "all_logits" @ 0 rot "VOCAB_SIZE" @ 2 op.view "all_logits" !
+
+    ;; sampling using tempture & top_p
+    
+    ;"all_logits" @ "TEMPERATURE" @ op.sampling_top3
+    "all_logits" @ op.sampling_top1
+    
+    0 io.pipe.write
+%end
+

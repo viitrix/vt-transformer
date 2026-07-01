@@ -1,0 +1,23 @@
+.PHONY: all
+
+FLAGS = -Wall -O3 -fopenmp -Wno-strict-aliasing -D_USING_DEVICE_CUDA_ 
+INC = -I../../install/include \
+      -I${CUDA_DIR}/include \
+	  -I${CUDNN_DIR}/include 
+
+LINK = -L../../install/lib \
+	   -L${CUDA_DIR}/lib64 \
+       -L${CUDNN_DIR}/lib \
+	   -L/usr/lib/x86_64-linux-gnu \
+	   -ltensortype -lcuda_kernels -lbitsandbytes -lcudnn -lcudart -lcublas -lcublasLt -lcusparse  
+
+all: repl 
+
+repl: repl.cpp
+	g++ $(FLAGS) -o $@ $< $(INC) $(LINK)
+
+run: repl 
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${CUDA_DIR}/lib64:${CUDNN_DIR}/lib:${VT_SOURCE}/install/lib ./repl $(target)
+
+clean:
+	rm -f repl 

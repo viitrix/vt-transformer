@@ -1,0 +1,314 @@
+html, body {
+    margin: 0;
+    padding: 0;
+}
+
+.app {
+    border: 3px solid #031426;
+    width: 95%;
+    margin: 25px auto;
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-auto-rows: minmax(500px, calc(100vh - 100px));
+}
+
+.profile {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* display: flex;
+    align-items: center;
+    justify-content: center; */
+    /* border: 5px solid lime; */
+    height: 45px;
+    width: 45px;
+    overflow: hidden;
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+.profile img {
+    width: inherit;
+}
+
+.hamburger-btn, .search-btn {
+    place-self: center start;
+}
+
+.option-btn {
+    place-self: center end;
+}
+
+.chat-list {
+    /* border: 5px solid cyan; */
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-auto-rows: 100px;
+    overflow-y: auto;
+}
+
+.notif-badge {
+    place-self: center;
+    background: white;
+    color: #555;
+}
+
+.self-info {
+    /* border: 5px solid magenta; */
+    padding: 5px;
+    display: grid;
+    grid-auto-flow: column;
+    grid-template-columns: 1fr 4fr 1fr;
+    place-items: center;
+    background: #041b33;
+    box-shadow: 0px -3px 5px rgba(0, 0, 0, 0.4);
+}
+
+.your-photo {
+    /* border: 5px solid lime; */
+    height: 50px;
+    width: 50px;
+    place-content: center start;
+    place-self: center end;
+}
+
+.your-name {
+    /* border: 5px solid bisque; */
+    color: white;
+    margin-left: 20px;
+    place-self: center start;
+}
+
+.self-info .glyphicon {
+    /* border: 5px solid skyblue; */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2.2em;
+    color: white;
+    place-content: center end;
+    place-self: center;
+    cursor: pointer;
+    transition: 0.2s linear;
+}
+
+.self-info .glyphicon:hover {
+    transform: rotate(30deg);
+}
+
+/* END OF LEFT SECTION */
+/* ################################################## */
+/* START OF RIGHT SECTION */
+
+.main-main {
+    background: #dedede;
+    display: grid;
+    grid-auto-flow: row;
+    grid-template-rows: 1fr 8fr 1fr;
+}
+
+.header-right {
+    /* border: 5px solid greenyellow; */
+    padding: 5px;
+    background: white;
+    display: grid;
+    place-items: center;
+    box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.4);
+}
+
+.header-img {
+    place-content: center start;
+    place-self: center end;
+}
+
+.name {
+    font-size: 1.2em;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.friend-name {
+    /* border: 5px solid violet; */
+    place-self: center start;
+    margin-left: 20px;
+    color: #485373;
+}
+
+.some-btn {
+    /* border: 5px solid maroon; */
+    font-size: 1.5em;
+    place-items: center end;
+}
+
+.some-btn .glyphicon {
+    margin: 0px 10px;
+    cursor: pointer;
+}
+
+.chat-area {
+    /* border: 5px solid lightseagreen; */
+    overflow-y: scroll;
+    padding-top: 10px;
+    padding-bottom: 10px;
+}
+
+/*
+.chat-area::-webkit-scrollbar {
+    width: 0;
+}
+*/
+
+.friends-chat {
+    /* border: 3px solid beige; */
+    padding-top: 5px;
+    padding-bottom: 5px;
+    display: grid;
+    grid-auto-flow: column;
+    grid-template-columns: 1fr 9fr;
+}
+
+.friends-chat-photo {
+    /* border: 3px solid orchid; */
+    place-self: start end;
+    margin: 0px 5px;
+}
+
+.friends-chat-content {
+    /* border: 3px solid red; */
+    display: grid;
+    grid-auto-flow: row;
+    grid-template-rows: 1fr min-content min-content;
+    place-items: start;
+    font-size: 1.8em;
+}
+
+.friends-chat-name {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    color: #485373;
+    font-size: 1em;
+    margin: 0px 0px 3px 0px;
+    font-weight: bold;
+}
+
+
+.friends-chat-balloon{
+    /* border: 3px solid navy; */
+    max-width: 90%;
+    padding: 10px 20px;
+    margin: 0;
+    min-width: min-content;
+    border-radius: 0px 20px 20px 20px; /* TL-TR-BR-BL*/
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    color: #485373;
+    background: white;
+    font-size: 0.9em;
+}
+
+.chat-datetime {
+    /* border: 3px solid yellow; */
+    margin: 3px 10px;
+    font-size: 0.75em;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    color: #aaa;
+}
+
+.your-chat {
+    /* border: 3px solid chocolate; */
+    font-size: 1.8em;
+    display: grid;
+    padding-top: 5px;
+    padding-bottom: 5px;
+    padding-right: 10px;
+    grid-auto-flow: row;
+    grid-template-rows: min-content min-content;
+    place-items: start end;
+}
+
+.your-chat-balloon {
+    /* border: 3px solid blueviolet; */
+    max-width: 80%;
+    padding: 10px 20px;
+    margin: 0;
+    min-width: min-content;
+    border-radius: 20px 20px 0px 20px; /* TL-TR-BR-BL*/
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    color: white;
+    background: darkslateblue;
+    font-size: 0.9em;
+}
+
+.your-chat-datetime .glyphicon {
+    margin-right: 5px;
+    color: green;
+}
+
+.typing-area {
+    /* border: 5px solid goldenrod; */
+    background: white;
+    display: grid;
+    grid-auto-flow: column;
+    grid-template-columns: 8fr 1fr;
+    overflow-x: hidden;
+    box-shadow: 0px -2px 5px rgba(0, 0, 0, 0.2);
+}
+
+.type-area {
+    /* border: 5px solid blueviolet; */
+    border: none;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    outline: none;
+    background: none;
+    padding: 10px 20px;
+    color: #333;
+    font-size: 1.1em;
+}
+
+input::placeholder {
+    color: #777;
+}
+
+.typing-area .glyphicon, .attach-btn {
+    color: #555;
+    cursor: pointer;
+    place-self: center;
+    transition: .2s linear;
+}
+
+.typing-area .glyphicon:hover, .attach-btn span:hover {
+    color: darkslateblue;
+}
+
+.attach-btn {
+    /* border: 5px solid coral; */
+    font-size: 1.25em;
+}
+
+.attach-btn span {
+    margin: 0px 10px;
+}
+
+.send-btn {
+    /* border: 5px solid darkcyan; */
+    font-size: 2.25em;
+}
+
+.creator {
+    text-align: center;
+    color: #777;
+    font-family: 'Courier New', Courier, monospace;
+}
+
+.img-div{
+    width:320px; 
+    height:240px;
+    position:relative; 
+}
+
+.img-cv{
+    position:relative;
+    z-index:20;
+}
+
+.img-img{
+    position:absolute;
+    z-index:1;
+}
