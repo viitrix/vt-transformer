@@ -30,6 +30,7 @@ dependencies = [
     "fastapi",
     "prompt_toolkit",
     "openai",
+    "psutil",
     "tqdm",
 ]
 

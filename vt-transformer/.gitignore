@@ -1,0 +1,19 @@
+# Build artifacts
+*.o
+*.obj
+*.so
+*.dylib
+*.dll
+*.a
+*.lib
+*.exe
+*.out
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*~
+
+# Dumped model weights (large, regeneratable)
+models/*/weights/
