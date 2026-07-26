@@ -22,8 +22,17 @@ namespace vt {
 //   total_len   = input.size() + output.size()
 //   extend_len  = total_len - cached_len   （本次 forward 待写入的量）
 //
+// 模板参数（与 PageTable / CacheManager / RadixNode 对齐）：
+//   TokenT  token id 类型，存进 input / output
+//   IndexT  page_id / table_idx 等下标类型
+//
 // 状态迁移由 scheduler 显式驱动；Request 自身只负责薄记。
+template <typename TokenT = int32_t, typename IndexT = int32_t>
 struct Request {
+    using Token = TokenT;
+    using Index = IndexT;
+    using Node  = RadixNode<Token, Index>;
+
     enum State {
         Waiting,
         Prefill,
@@ -31,18 +40,18 @@ struct Request {
         Finished,
     };
 
-    uint64_t           id   = 0;
+    uint64_t           id    = 0;
     State              state = Waiting;
 
-    std::vector<int>   input;        // prompt token ids（提交后不可变）
-    std::vector<int>   output;       // 已生成 token（Decode 期间单调增长）
+    std::vector<Token> input;        // prompt token ids（提交后不可变）
+    std::vector<Token> output;       // 已生成 token（Decode 期间单调增长）
 
     // 两个 scheduler 分配的"锚点"——Request 活跃期内不变。
     //   node      : radix 树里的最深命中节点（prefix cache 视角）
-    //   table_idx : page_table 的行号（KV pool 视角），-1 = 尚未分配
+    //   table_idx : page_table 的行号（KV pool 视角），kInvalid = 尚未分配
     // 二者在 Waiting->Prefill 入选时一起赋值，Finished 后由 scheduler 回收。
-    RadixNode<>*       node      = nullptr;
-    int                table_idx = -1;
+    Node*              node      = nullptr;
+    Index              table_idx = (Index)-1;
 
     int                prefill_pos = 0;
     int                decode_pos  = 0;
@@ -59,7 +68,7 @@ struct Request {
 
     // Decode 一步：追加新采样的 token，output 长度自动 +1。
     // 调用方永远不直接 push output —— 长度增长只走这条路径。
-    void decode_step(int token) {
+    void decode_step(Token token) {
         vt_assert(state == Decode, "Request::decode_step: not in Decode");
         output.push_back(token);
         decode_pos += 1;
