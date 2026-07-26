@@ -8,6 +8,7 @@
 *.lib
 *.exe
 *.out
+test/bin/
 
 # Editor / IDE
 .vscode/
