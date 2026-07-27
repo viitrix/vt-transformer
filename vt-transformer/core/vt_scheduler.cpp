@@ -120,6 +120,17 @@ Scheduler<TokenT, IndexT>::step() {
 
     std::vector<int> finished_idx;
     process_results(out, finished_idx);
+
+    // 收 results：process_results 已经把预测 token 追加到 req.output，
+    // finished_idx 也已收集好；此时 req 还在 running_，引用仍然有效。
+    // free_finished 之后被 erase 的 Req& 就成悬挂了，所以必须在它之前读。
+    ret.results.reserve(cur_batch_.size());
+    for (int i = 0; i < cur_batch_.size(); ++i) {
+        bool fin = std::find(finished_idx.begin(), finished_idx.end(), i)
+                   != finished_idx.end();
+        ret.results.push_back({cur_batch_.reqs[i]->id, out.next_tokens[i], fin});
+    }
+
     free_finished(finished_idx);
 
     ret.ran_batch      = true;
@@ -147,6 +158,18 @@ Scheduler<TokenT, IndexT>::step_overlap() {
 
         std::vector<int> finished_idx;
         process_inflight_results(prev_out, finished_idx);
+
+        // 收 results：跟 sync step() 一样在 free_finished 之前读，避免悬挂。
+        // next_token 直接取 engine 产出（inflight 期间被 abort 的 req 跳过了
+        // record_predicted，但 engine 还是产了 token——这里报它实际产出的值，
+        // 与 mini-sglang _process_last_data 中 next_token = next_tokens_cpu[i] 一致）。
+        ret.results.reserve(cur_batch_.size());
+        for (int i = 0; i < cur_batch_.size(); ++i) {
+            bool fin = std::find(finished_idx.begin(), finished_idx.end(), i)
+                       != finished_idx.end();
+            ret.results.push_back({cur_batch_.reqs[i]->id, prev_out.next_tokens[i], fin});
+        }
+
         free_finished(finished_idx);
 
         ret.finished_count = (int)finished_idx.size();

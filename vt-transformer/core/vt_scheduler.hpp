@@ -153,9 +153,21 @@ public:
 
     // 跑一步：选 batch → 准备资源 → forward → 处理结果 → 归还 finished 资源。
     // 无 work（pending / running 都空）时返回 ran_batch=false。
+    //
+    // results：本步 forward 给 batch 里每个 req 产出的"新 token + 是否完成"。
+    // 调用方（典型是 backend driver）按这把它翻译成 Endpoint::Result 回送 frontend。
+    // sync step() 中 results 跟 ran_batch 描述同一次 forward；step_overlap() 中
+    // results 描述 phase 1 处理的上一次 inflight，而 ran_batch 描述 phase 2 本次提交——
+    // 与 finished_count 的语义一致（详见 step_overlap 注释）。
+    struct ReqResult {
+        uint64_t uid;         // 对应 Request::id
+        Token    next_token;  // 本步 engine 预测出的 token
+        bool     finished;    // 本步是否触发 finish（EOS / max_output / inflight 期间 abort）
+    };
     struct StepResult {
-        bool ran_batch;        // 本步是否真正跑了一次 forward
-        int  finished_count;   // 本步 finished 的 req 数
+        bool                     ran_batch;      // 本步是否真正跑了一次 forward
+        int                      finished_count; // 本步 finished 的 req 数
+        std::vector<ReqResult>   results;        // empty 当 ran_batch==false（sync）/ phase 1 没有 inflight（overlap）
     };
     StepResult step();
 

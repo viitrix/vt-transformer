@@ -15,7 +15,7 @@ INCLUDES  := -I.. -I../opt
 BIN := bin
 
 # 终止型单元测试：自己跑完就退出，可以串到 `make check` 里。
-UNIT_TESTS := vt_test vt_cache_test vt_radix_test safetensors_test
+UNIT_TESTS := vt_test vt_cache_test vt_radix_test safetensors_test vt_backend_test
 
 # 长跑 / 集成型：`make all` 会构建，但 `make check` 不跑（不会自行退出）。
 LOOP_TARGETS := vt_endpoint_test
@@ -51,5 +51,11 @@ $(BIN)/vt_test: vt_test.cpp ../core/vt.cpp | $(BIN)
 # vt_endpoint_test 链接 libzmq。
 $(BIN)/vt_endpoint_test: vt_endpoint_test.cpp | $(BIN)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) $< -o $@ -lzmq -lpthread
+
+# vt_backend_test：自终止型集成测试，跑全 pipeline（UserMsg → forward → DetokenizeMsg）。
+# 链接 vt_backend.cpp + vt_scheduler.cpp + vt.cpp + libzmq。
+$(BIN)/vt_backend_test: vt_backend_test.cpp \
+                        ../core/vt_backend.cpp ../core/vt_scheduler.cpp ../core/vt.cpp | $(BIN)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@ -lzmq -lpthread
 
 -include $(BIN)/*.d
