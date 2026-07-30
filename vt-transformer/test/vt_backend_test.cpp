@@ -58,7 +58,7 @@ public:
         out.next_tokens.reserve(batch.reqs.size());
         std::uniform_int_distribution<int> d(1, 99);
         for (std::size_t i = 0; i < batch.reqs.size(); ++i) {
-            out.next_tokens.push_back(static_cast<vt::Scheduler<>::Token>(d(rng_)));
+            out.next_tokens.push_back(static_cast<vt::FullScheduler<>::Token>(d(rng_)));
         }
         return out;
     }
@@ -100,14 +100,14 @@ struct Fixture {
     std::unique_ptr<vt::Backend>            backend;
     std::unique_ptr<Peer>                   peer;
 
-    Fixture(int n)
+    Fixture(int n, vt::Backend::Mode mode = vt::Backend::Mode::Sync)
         : recv_addr("ipc:///tmp/vtbe_test_in_"  + std::to_string(n)),
           send_addr("ipc:///tmp/vtbe_test_out_" + std::to_string(n)),
           engine(std::make_unique<DummyEngine>()) {
         vt::SchedulerConfig<> cfg;
         cfg.num_pages = 16 * cfg.default_max_output;
         backend = std::make_unique<vt::Backend>(ctx, recv_addr, send_addr,
-                                                 cfg, engine.get());
+                                                 cfg, engine.get(), mode);
         peer = std::make_unique<Peer>(ctx, recv_addr, send_addr);
     }
 };
@@ -390,6 +390,51 @@ void test_run_exits_on_exit_msg() {
     CHECK(true, "run() returned from ExitMsg without crashing");
 }
 
+// ============================================================================
+// 场景 7：Overlap 模式——同一条 req 走完 prefill + 多步 decode + abort 收尾
+// ============================================================================
+// Overlap 与 sync 在驱动侧的可见差别：submit 与 wait 错位一步——首次 run_once 只
+// submit prefill，prefill 的 reply 要等到第二次 run_once 的 phase 1 才回。
+// 此处验证：连续 run_once 能在 Overlap 模式下稳定产出 reply；abort 后能干净收尾，
+// req 被释放后再 tick 不会产 phantom reply。
+void test_overlap_mode() {
+    Fixture f(7, vt::Backend::Mode::Overlap);
+    send_raw(f.peer->push, build_user_msg(5, {1, 2, 3}));
+
+    // tick 1：submit prefill（async engine 下 GPU 开始算；DummyEngine 立即完成）
+    auto o1 = f.backend->run_once();
+    CHECK(!o1.exit && o1.did_work, "overlap tick 1 should submit prefill");
+
+    // tick 2：phase 1 drain prefill → reply；phase 2 submit decode 1
+    f.backend->run_once();
+    auto r1 = recv_replies(f.peer->pull, 500);
+    CHECK(r1.size() == 1 && r1[0].uid == 5 && !r1[0].finished,
+          "overlap: prefill reply missing");
+
+    // tick 3：drain decode 1 → reply；submit decode 2
+    f.backend->run_once();
+    auto r2 = recv_replies(f.peer->pull, 500);
+    CHECK(r2.size() == 1 && r2[0].uid == 5, "overlap: decode 1 reply missing");
+
+    // 此时 req 5 仍在 running（DummyEngine 不发 EOS，默认 max_output=1024 不会触顶）。
+    // abort 它：tick 4 的 drain 阶段先 mark Finished（abort_req 走 inflight 分支），
+    // 同一 tick 的 step_overlap phase 1 drain decode 2 时走 abort 分支
+    // （process_inflight_results 见 state==Finished → 直接 free_finished，不 record）。
+    send_raw(f.peer->push, build_abort_msg(5));
+    f.backend->run_once();   // drain abort + drain inflight + free_finished
+    auto r3 = recv_replies(f.peer->pull, 500);
+    CHECK(r3.size() == 1 && r3[0].uid == 5,
+          "overlap: should drain one final reply for aborted req");
+
+    // 现在 pending/running/inflight 都空——真正 idle。再 tick 不应有 phantom reply。
+    f.backend->run_once();
+    auto r4 = recv_replies(f.peer->pull, 200);
+    CHECK(r4.empty(), "overlap: should not produce reply when truly idle");
+
+    send_raw(f.peer->push, build_exit_msg());
+    CHECK(f.backend->run_once().exit, "ExitMsg should set exit=true");
+}
+
 } // anon namespace
 
 int main() {
@@ -401,6 +446,7 @@ int main() {
         test_abort,
         test_run_idle_exits_on_flag,
         test_run_exits_on_exit_msg,
+        test_overlap_mode,
     };
 
     for (TestFn t : tests) {

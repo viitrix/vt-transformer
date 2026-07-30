@@ -13,17 +13,17 @@
 
 namespace vt {
 
-// Scheduler 配置（对齐 mini-sglang SchedulerConfig 中"计算相关"的字段；
-// 网络层 zmq 地址等不在此处——Scheduler 与 Endpoint 解耦的边界）。
+// FullScheduler 配置（对齐 mini-sglang SchedulerConfig 中"计算相关"的字段；
+// 网络层 zmq 地址等不在此处——FullScheduler 与 Endpoint 解耦的边界）。
 //
-// 模板参数：把 Token / Index 作为类型参数放在这里——Scheduler 跟着用同样的
-// 两个参数实例化（见下方 Scheduler 模板）。default 是 int32_t / int32_t，
+// 模板参数：把 Token / Index 作为类型参数放在这里——FullScheduler 跟着用同样的
+// 两个参数实例化（见下方 FullScheduler 模板）。default 是 int32_t / int32_t，
 // 对齐 Request<> / CacheManager<> 等其它模板族的默认。
 //
 // 用法：
 //   SchedulerConfig<>                      cfg;           // 默认 int32_t/int32_t
 //   SchedulerConfig<int16_t, int32_t>      cfg16;         // 自定义
-//   Scheduler<int16_t, int32_t>            sched(cfg16, &engine);
+//   FullScheduler<int16_t, int32_t>            sched(cfg16, &engine);
 template <typename TokenT = int32_t, typename IndexT = int32_t>
 struct SchedulerConfig {
     using Token = TokenT;
@@ -39,7 +39,7 @@ struct SchedulerConfig {
 
 // 一次 forward 提交给 Engine 的内容（对齐 mini-sglang core.py:71-94）。
 //
-// reqs：非拥有指针，所有权属于 Scheduler 的 pending_ / running_。
+// reqs：非拥有指针，所有权属于 FullScheduler 的 pending_ / running_。
 // phase：Prefill / Decode 二选一——本实现沿用 mini-sglang 的"prefill OR decode"
 //        单 batch 策略（scheduler.py:219-225），不在同一 batch 内混跑。
 template <typename Token = int32_t, typename Index = int32_t>
@@ -72,8 +72,8 @@ struct ForwardHandle {
     ForwardOutput<Token> sync_output;   // sync 路径专用
 };
 
-// Engine 抽象基类——Scheduler 把 batch 喂进来，子类返回新 token。
-// 真实实现（CudaEngine / MockEngine 等）子类化后注入 Scheduler 构造函数。
+// Engine 抽象基类——FullScheduler 把 batch 喂进来，子类返回新 token。
+// 真实实现（CudaEngine / MockEngine 等）子类化后注入 FullScheduler 构造函数。
 // 对齐 mini-sglang engine.py:29 的 Engine.forward_batch。
 template <typename Token = int32_t, typename Index = int32_t>
 class EngineBase {
@@ -86,7 +86,7 @@ public:
 
     // 同步 forward：读取 batch 里每个 req 的 [cached_len, total_len) 段作为输入，
     // 把新 token 写到 KV（位置由 PageTable 决定），返回每个 req 一个新 token。
-    // sync 路径（Scheduler::step）走这条。
+    // sync 路径（FullScheduler::step）走这条。
     virtual ForwardOutputT forward(const BatchT& batch) = 0;
 
     // 异步 forward：立即返回 handle，不阻塞；调用方在需要结果时再调 wait。
@@ -106,7 +106,7 @@ public:
     virtual Token eos_token_id() const { return Token(-1); }
 };
 
-// Scheduler：推理计算的核心调度器。
+// FullScheduler：推理计算的核心调度器。
 //
 // Continue Batch（连续 batching）模型（对齐 mini-sglang scheduler.py:219-225）：
 //   - 每个 step 选 prefill batch 或 decode batch 之一（prefill 优先）
@@ -114,18 +114,18 @@ public:
 //   - Finished req 在 step 末尾从 running_ 移除并归还资源
 //
 // 职责切分：
-//   - Scheduler  ：req 状态机驱动、batch 调度、CacheManager 协调
+//   - FullScheduler  ：req 状态机驱动、batch 调度、CacheManager 协调
 //   - CacheManager：radix 命中、page 分配 / 回收（已实现）
 //   - EngineBase ：实际 model forward（子类提供）
 //   - Endpoint   ：与 frontend 的 ZMQ IO（已实现，由外部 driver 驱动）
 //
 // 模板参数与 SchedulerConfig 对齐：TokenT / IndexT 默认 int32_t / int32_t。
 // 实例化 .cpp 末尾对 default 类型做了 explicit instantiation，default 类型
-// 直接用 `Scheduler<>` 即可；其它类型需要在自己的代码里再 instantiate。
+// 直接用 `FullScheduler<>` 即可；其它类型需要在自己的代码里再 instantiate。
 //
 // 非线程安全：单线程驱动，与 mini-sglang scheduler 单线程模型一致。
 template <typename TokenT = int32_t, typename IndexT = int32_t>
-class Scheduler {
+class FullScheduler {
 public:
     using Token  = TokenT;
     using Index  = IndexT;
@@ -137,8 +137,8 @@ public:
     using Handle = ForwardHandle<Token>;
     using Config = SchedulerConfig<Token, Index>;
 
-    // Scheduler 拥有 CacheManager；Engine 由外部注入（不拥有）。
-    Scheduler(Config config, Engine* engine);
+    // FullScheduler 拥有 CacheManager；Engine 由外部注入（不拥有）。
+    FullScheduler(Config config, Engine* engine);
 
     // ---- 外部 IO 入口（Endpoint / 测试驱动）----
 
@@ -214,7 +214,6 @@ private:
 
     // overlap 模式专用：上次 step_overlap 提交、还在 engine 里跑的 batch。
     // 下次 step_overlap 进入阶段 1 时被处理（wait + record + free_finished）。
-    // 是否有 inflight 由 inflight_batch_.reqs 是否为空判定——避免再维护一份并行的 bool。
     BatchT                     inflight_batch_;
     Handle                     inflight_handle_;
 

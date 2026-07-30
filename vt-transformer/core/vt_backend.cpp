@@ -19,15 +19,21 @@ Backend::Backend(zmq::context_t&   ctx,
                  const std::string& send_addr,
                  SchedulerConfig<> cfg,
                  EngineBase<>*     engine,
+                 Mode              mode,
                  bool              bind_recv,
                  bool              bind_send)
     : ep_(ctx, recv_addr, send_addr, bind_recv, bind_send),
       engine_(engine),
-      sched_(std::move(cfg), engine_) {
+      sched_(std::move(cfg), engine_),
+      mode_(mode) {
     vt_assert(engine != nullptr, "Backend: engine must not be null");
 }
 
 Backend::TickOutcome Backend::run_once() {
+    return mode_ == Mode::Overlap ? run_once_overlap() : run_once_sync();
+}
+
+Backend::TickOutcome Backend::run_once_sync() {
     bool did_work = false;
 
     // 1. drain 入站事件——非阻塞，有多少取多少
@@ -50,6 +56,41 @@ Backend::TickOutcome Backend::run_once() {
     return {/*exit=*/false, did_work};
 }
 
+Backend::TickOutcome Backend::run_once_overlap() {
+    bool did_work = false;
+
+    // 1. drain 入站事件——非阻塞，有多少取多少（与 sync 一致）
+    while (auto ev = ep_.try_recv()) {
+        did_work = true;
+        if (!handle_event(sched_, *ev)) {
+            return {/*exit=*/true, did_work};
+        }
+    }
+
+    // 2. 有 work 或有 in-flight 时跑一步 step_overlap。
+    //    - has_work()       ：有 req 等 prefill / decode——phase 2 会 submit
+    //    - has_inflight()   ：上次 step_overlap 提交的 forward 还没被 phase 1 处理——
+    //                         本次 phase 1 会 wait + record + reply
+    //    两者皆空 = 真正 idle，让上层 sleep（对齐 mini-sglang overlap_loop 里
+    //    `blocking = not (last_data or runnable)` 的判断）。
+    if (sched_.has_work() || sched_.has_inflight()) {
+        auto sr = sched_.step_overlap();
+
+        // phase 1 产出：上一批 inflight 的 reply——立即回送。
+        if (!sr.results.empty()) {
+            reply(sr.results);
+            did_work = true;
+        }
+        // phase 2 产出：本次 submit 了一个新 forward——reply 要等下一步的 phase 1。
+        // 算作 did_work 以免上层在 async engine 等待期间空转 sleep。
+        if (sr.ran_batch) {
+            did_work = true;
+        }
+    }
+
+    return {/*exit=*/false, did_work};
+}
+
 void Backend::run(const std::atomic<bool>& stop_flag) {
     while (!stop_flag.load()) {
         auto r = run_once();
@@ -61,7 +102,7 @@ void Backend::run(const std::atomic<bool>& stop_flag) {
     }
 }
 
-void Backend::reply(const std::vector<Scheduler<>::ReqResult>& results) {
+void Backend::reply(const std::vector<FullScheduler<>::ReqResult>& results) {
     if (results.empty()) return;
     std::vector<Endpoint<>::Result> out;
     out.reserve(results.size());
@@ -75,7 +116,7 @@ void Backend::reply(const std::vector<Scheduler<>::ReqResult>& results) {
     }
 }
 
-bool Backend::handle_event(Scheduler<>& sched, const Endpoint<>::Event& ev) {
+bool Backend::handle_event(FullScheduler<>& sched, const Endpoint<>::Event& ev) {
     if (auto* nr = std::get_if<Endpoint<>::NewRequests>(&ev)) {
         for (auto& r : nr->requests) {
             // Request 默认 state=Waiting / output 空，符合 add_req 的契约。

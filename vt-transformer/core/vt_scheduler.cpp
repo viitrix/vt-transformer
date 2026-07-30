@@ -1,4 +1,4 @@
-// vt_scheduler.cpp — Scheduler 实现（推理计算核心调度器）
+// vt_scheduler.cpp — FullScheduler 实现（推理计算核心调度器）
 //
 // 详见 vt_scheduler.hpp 顶部注释中的 Continue Batch 模型与职责切分。
 // 文件末尾对 default 类型 `<int32_t, int32_t>` 做 explicit instantiation；
@@ -16,20 +16,20 @@ namespace vt {
 // ============================================================================
 
 template <typename TokenT, typename IndexT>
-Scheduler<TokenT, IndexT>::Scheduler(Config config, Engine* engine)
+FullScheduler<TokenT, IndexT>::FullScheduler(Config config, Engine* engine)
     : config_(config),
       engine_(engine),
       cache_(std::make_unique<Cache>(config.max_running_reqs,
                                        config.num_pages,
                                        config.max_seq_len,
                                        config.page_size)) {
-    vt_assert(engine != nullptr, "Scheduler: engine must not be null");
-    vt_assert(config.max_running_reqs   > 0, "Scheduler: max_running_reqs must be > 0");
-    vt_assert(config.num_pages          > 0, "Scheduler: num_pages must be > 0");
-    vt_assert(config.max_seq_len        > 0, "Scheduler: max_seq_len must be > 0");
-    vt_assert(config.page_size          > 0, "Scheduler: page_size must be > 0");
-    vt_assert(config.max_extend_tokens  > 0, "Scheduler: max_extend_tokens must be > 0");
-    vt_assert(config.default_max_output > 0, "Scheduler: default_max_output must be > 0");
+    vt_assert(engine != nullptr, "FullScheduler: engine must not be null");
+    vt_assert(config.max_running_reqs   > 0, "FullScheduler: max_running_reqs must be > 0");
+    vt_assert(config.num_pages          > 0, "FullScheduler: num_pages must be > 0");
+    vt_assert(config.max_seq_len        > 0, "FullScheduler: max_seq_len must be > 0");
+    vt_assert(config.page_size          > 0, "FullScheduler: page_size must be > 0");
+    vt_assert(config.max_extend_tokens  > 0, "FullScheduler: max_extend_tokens must be > 0");
+    vt_assert(config.default_max_output > 0, "FullScheduler: default_max_output must be > 0");
 }
 
 // ============================================================================
@@ -37,14 +37,14 @@ Scheduler<TokenT, IndexT>::Scheduler(Config config, Engine* engine)
 // ============================================================================
 
 template <typename TokenT, typename IndexT>
-void Scheduler<TokenT, IndexT>::add_req(Req req) {
-    vt_assert(req.state == Req::Waiting, "Scheduler::add_req: state must be Waiting");
-    vt_assert(!req.input.empty(), "Scheduler::add_req: input must be non-empty");
+void FullScheduler<TokenT, IndexT>::add_req(Req req) {
+    vt_assert(req.state == Req::Waiting, "FullScheduler::add_req: state must be Waiting");
+    vt_assert(!req.input.empty(), "FullScheduler::add_req: input must be non-empty");
     pending_.push_back(std::move(req));
 }
 
 template <typename TokenT, typename IndexT>
-bool Scheduler<TokenT, IndexT>::abort_req(uint64_t uid) {
+bool FullScheduler<TokenT, IndexT>::abort_req(uint64_t uid) {
     // 1) 还在 pending_（未占用资源）→ 直接 erase
     auto pit = find_in_pending(uid);
     if (pit != pending_.end()) {
@@ -92,8 +92,8 @@ bool Scheduler<TokenT, IndexT>::abort_req(uint64_t uid) {
 // ============================================================================
 
 template <typename TokenT, typename IndexT>
-typename Scheduler<TokenT, IndexT>::StepResult
-Scheduler<TokenT, IndexT>::step() {
+typename FullScheduler<TokenT, IndexT>::StepResult
+FullScheduler<TokenT, IndexT>::step() {
     StepResult ret{/*ran_batch=*/false, /*finished_count=*/0};
     if (!has_work()) return ret;
 
@@ -145,8 +145,8 @@ Scheduler<TokenT, IndexT>::step() {
 // ============================================================================
 
 template <typename TokenT, typename IndexT>
-typename Scheduler<TokenT, IndexT>::StepResult
-Scheduler<TokenT, IndexT>::step_overlap() {
+typename FullScheduler<TokenT, IndexT>::StepResult
+FullScheduler<TokenT, IndexT>::step_overlap() {
     StepResult ret{/*ran_batch=*/false, /*finished_count=*/0};
 
     // === 阶段 1: 处理上次 in-flight 的 forward ===
@@ -214,7 +214,7 @@ Scheduler<TokenT, IndexT>::step_overlap() {
         for (Req* r : cur_batch_.reqs) {
             auto it = find_in_pending(r->id);
             vt_assert(it != pending_.end(),
-                      "Scheduler::step_overlap: prefill req missing in pending_");
+                      "FullScheduler::step_overlap: prefill req missing in pending_");
             running_.splice(running_.end(), pending_, it);
         }
     }
@@ -226,8 +226,8 @@ Scheduler<TokenT, IndexT>::step_overlap() {
 }
 
 template <typename TokenT, typename IndexT>
-typename Scheduler<TokenT, IndexT>::ReqIter
-Scheduler<TokenT, IndexT>::find_in_pending(uint64_t uid) {
+typename FullScheduler<TokenT, IndexT>::ReqIter
+FullScheduler<TokenT, IndexT>::find_in_pending(uint64_t uid) {
     for (auto it = pending_.begin(); it != pending_.end(); ++it) {
         if (it->id == uid) return it;
     }
@@ -235,8 +235,8 @@ Scheduler<TokenT, IndexT>::find_in_pending(uint64_t uid) {
 }
 
 template <typename TokenT, typename IndexT>
-typename Scheduler<TokenT, IndexT>::ReqIter
-Scheduler<TokenT, IndexT>::find_in_running(uint64_t uid) {
+typename FullScheduler<TokenT, IndexT>::ReqIter
+FullScheduler<TokenT, IndexT>::find_in_running(uint64_t uid) {
     for (auto it = running_.begin(); it != running_.end(); ++it) {
         if (it->id == uid) return it;
     }
@@ -248,7 +248,7 @@ Scheduler<TokenT, IndexT>::find_in_running(uint64_t uid) {
 // ============================================================================
 
 template <typename TokenT, typename IndexT>
-int Scheduler<TokenT, IndexT>::try_schedule_prefill() {
+int FullScheduler<TokenT, IndexT>::try_schedule_prefill() {
     if (pending_.empty()) return 0;
 
     // running_ 在飞 token 估算（对齐 mini-sglang prefill.py:131-134 PrefillAdder）：
@@ -302,7 +302,7 @@ int Scheduler<TokenT, IndexT>::try_schedule_prefill() {
 }
 
 template <typename TokenT, typename IndexT>
-bool Scheduler<TokenT, IndexT>::try_schedule_decode() {
+bool FullScheduler<TokenT, IndexT>::try_schedule_decode() {
     if (running_.empty()) return false;
     for (Req& r : running_) {
         cur_batch_.reqs.push_back(&r);
@@ -315,7 +315,7 @@ bool Scheduler<TokenT, IndexT>::try_schedule_decode() {
 // ============================================================================
 
 template <typename TokenT, typename IndexT>
-bool Scheduler<TokenT, IndexT>::prepare_batch() {
+bool FullScheduler<TokenT, IndexT>::prepare_batch() {
     // 失败语义：原子——任何一步失败，前面已动的资源全部回滚到进入前的状态。
     //
     // prefill 与 decode 走不同路径：
@@ -374,7 +374,7 @@ bool Scheduler<TokenT, IndexT>::prepare_batch() {
 }
 
 template <typename TokenT, typename IndexT>
-bool Scheduler<TokenT, IndexT>::is_inflight_req_(const Req* r) const {
+bool FullScheduler<TokenT, IndexT>::is_inflight_req_(const Req* r) const {
     if (inflight_batch_.reqs.empty()) return false;
     for (const Req* ir : inflight_batch_.reqs) {
         if (ir == r) return true;
@@ -383,7 +383,7 @@ bool Scheduler<TokenT, IndexT>::is_inflight_req_(const Req* r) const {
 }
 
 template <typename TokenT, typename IndexT>
-void Scheduler<TokenT, IndexT>::rollback_prepare_(Req* r) {
+void FullScheduler<TokenT, IndexT>::rollback_prepare_(Req* r) {
     // 用空 tokens + cur_cached_len=0 调 finished：内部不插入 radix，仅 unlock +
     // free_row（命中段的 page_id 由 radix 持有，不能 free）。
     typename Cache::FinishInput empty{
@@ -406,10 +406,10 @@ void Scheduler<TokenT, IndexT>::rollback_prepare_(Req* r) {
 // ============================================================================
 
 template <typename TokenT, typename IndexT>
-void Scheduler<TokenT, IndexT>::process_results(const Output& out,
+void FullScheduler<TokenT, IndexT>::process_results(const Output& out,
                                                   std::vector<int>& finished_idx) {
     vt_assert((int)out.next_tokens.size() == cur_batch_.size(),
-              "Scheduler::process_results: next_tokens size must == batch size");
+              "FullScheduler::process_results: next_tokens size must == batch size");
 
     const Token eos     = engine_->eos_token_id();
     const int   max_out = config_.default_max_output;
@@ -445,14 +445,14 @@ void Scheduler<TokenT, IndexT>::process_results(const Output& out,
             Req& r = *cur_batch_.reqs[i];
             auto it = find_in_pending(r.id);
             vt_assert(it != pending_.end(),
-                      "Scheduler::process_results: prefill req missing in pending_");
+                      "FullScheduler::process_results: prefill req missing in pending_");
             running_.splice(running_.end(), pending_, it);
         }
     }
 }
 
 template <typename TokenT, typename IndexT>
-void Scheduler<TokenT, IndexT>::process_inflight_results(const Output& out,
+void FullScheduler<TokenT, IndexT>::process_inflight_results(const Output& out,
                                                           std::vector<int>& finished_idx) {
     // 与 process_results 的差别：
     //   - commit 已在 submit 时做完（step_overlap 阶段 3），这里只做 record_predicted。
@@ -461,7 +461,7 @@ void Scheduler<TokenT, IndexT>::process_inflight_results(const Output& out,
     //   - 多一条 abort 分支：inflight 期间被 abort_req 标 Finished 的 req，
     //     跳过 record_predicted 直接进 finished_idx 让 free_finished 清理。
     vt_assert((int)out.next_tokens.size() == cur_batch_.size(),
-              "Scheduler::process_inflight_results: next_tokens size must == batch size");
+              "FullScheduler::process_inflight_results: next_tokens size must == batch size");
 
     const Token eos     = engine_->eos_token_id();
     const int   max_out = config_.default_max_output;
@@ -495,7 +495,7 @@ void Scheduler<TokenT, IndexT>::process_inflight_results(const Output& out,
 // ============================================================================
 
 template <typename TokenT, typename IndexT>
-void Scheduler<TokenT, IndexT>::free_finished(const std::vector<int>& finished_idx) {
+void FullScheduler<TokenT, IndexT>::free_finished(const std::vector<int>& finished_idx) {
     if (finished_idx.empty()) return;
 
     // finished req 此时已在 running_ 里：prefill 完成的 req 在 process_results
@@ -523,7 +523,7 @@ void Scheduler<TokenT, IndexT>::free_finished(const std::vector<int>& finished_i
 
         auto it = find_in_running(r.id);
         vt_assert(it != running_.end(),
-                  "Scheduler::free_finished: finished req missing in running_");
+                  "FullScheduler::free_finished: finished req missing in running_");
         running_.erase(it);
     }
 }
@@ -532,6 +532,6 @@ void Scheduler<TokenT, IndexT>::free_finished(const std::vector<int>& finished_i
 // explicit instantiation — default 类型，对齐 Request<> / CacheManager<> 等
 // ============================================================================
 
-template class Scheduler<int32_t, int32_t>;
+template class FullScheduler<int32_t, int32_t>;
 
 } // namespace vt
