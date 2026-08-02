@@ -1,0 +1,44 @@
+;;
+;;  prefill.vt —— Prefill 阶段 kernel 调用入口
+;;
+;;  角色：把 C++ 侧的 Batch/ForwardOutput 引用桥接到 qwen3.prefill native word。
+;;        Qwen3Engine::forward() 在 batch.is_prefill() 时通过 run_dag() 跑本脚本，
+;;        不直接调 launch_prefill——这样未来加 stream 切换、event record、profile
+;;        等编排时，只改本脚本即可，C++ 一行不动。
+;;
+;;  ── 调用契约（C++ 侧 Qwen3Engine::forward 跑本脚本前必须满足）──
+;;
+;;    把 batch / out 的指针以 number 形式写进 env hash：
+;;
+;;      env.hash().set("__prefill_batch", (double)(uintptr_t)&batch);
+;;      env.hash().set("__prefill_out",   (double)(uintptr_t)&out);
+;;
+;;    指针类型：
+;;      __prefill_batch → const vt::Batch<int32_t, int32_t>*
+;;      __prefill_out   → vt::ForwardOutput<int32_t>*
+;;
+;;  ── 栈效果 ──
+;;
+;;    qwen3.prefill  ( batch_ptr out_ptr -- )
+;;    不留返回值；结果直接写进 *out_ptr（即 out.next_tokens）。
+;;
+;;  ── 依赖（init.vt 启动时 setup）──
+;;
+;;    env.hash() 里有：
+;;      kv_cache                   —— KV pool tensor（device）
+;;      model.embed_tokens.weight  —— embedding
+;;      model.layers.*.{q,k,v,o}_proj.weight、*.mlp.*、*.norm 等
+;;      lm_head.weight / model.norm.weight
+;;    env.ctx() 是 vt::CudaContext，提供 current_stream。
+;;
+;;  ── 框架级折中 ──
+;;
+;;    用 number 压指针是因为 DAG 原生不支持 struct。production 路径里，
+;;    forward() 直接调 launch_prefill(env, batch, out) 也行——本脚本存在的意义
+;;    是给"用 .vt 编排推理"留一条入口（比如后续要在 prefill 前后插 cuda.sync /
+;;    cuda.record_event 做性能剖析，只改这个文件就够）。
+;;
+
+"__prefill_batch" @
+"__prefill_out"   @
+qwen3.prefill

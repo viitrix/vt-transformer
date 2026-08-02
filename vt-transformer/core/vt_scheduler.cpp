@@ -94,7 +94,7 @@ bool FullScheduler<TokenT, IndexT>::abort_req(uint64_t uid) {
 template <typename TokenT, typename IndexT>
 typename FullScheduler<TokenT, IndexT>::StepResult
 FullScheduler<TokenT, IndexT>::step() {
-    StepResult ret{/*ran_batch=*/false, /*finished_count=*/0};
+    StepResult ret{/*ran_batch=*/false, /*finished_count=*/0, /*results=*/{}};
     if (!has_work()) return ret;
 
     cur_batch_.reqs.clear();
@@ -147,7 +147,7 @@ FullScheduler<TokenT, IndexT>::step() {
 template <typename TokenT, typename IndexT>
 typename FullScheduler<TokenT, IndexT>::StepResult
 FullScheduler<TokenT, IndexT>::step_overlap() {
-    StepResult ret{/*ran_batch=*/false, /*finished_count=*/0};
+    StepResult ret{/*ran_batch=*/false, /*finished_count=*/0, /*results=*/{}};
 
     // === 阶段 1: 处理上次 in-flight 的 forward ===
     if (!inflight_batch_.reqs.empty()) {

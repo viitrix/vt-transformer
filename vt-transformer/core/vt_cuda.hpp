@@ -103,8 +103,26 @@ private:
 
     void release() noexcept {
         if (!owner || !ptr) return;
-        if (mem_type_ == CudaMemoryType::Device) cudaFree(ptr);
-        else                                     cudaFreeHost(ptr);
+        if (mem_type_ == CudaMemoryType::Device) {
+            cudaFree(ptr);
+            /*
+            size_t before = 0, total = 0;
+            cudaMemGetInfo(&before, &total);
+            fprintf(stderr, "[CudaTensor] cudaFree device ptr=%p bytes=%llu free_before=%zu\n",
+                    ptr, (unsigned long long)bytes, before);
+            cudaError_t e = cudaFree(ptr);
+            size_t after = 0;
+            cudaMemGetInfo(&after, &total);
+            fprintf(stderr, "[CudaTensor] cudaFree -> %s, free_after=%zu delta=%+zd\n",
+                    cudaGetErrorString(e), after, (ptrdiff_t)(after - before));
+            */
+        } else {
+            /*
+            fprintf(stderr, "[CudaTensor] cudaFreeHost ptr=%p bytes=%llu\n",
+                    ptr, (unsigned long long)bytes);
+            */
+            cudaFreeHost(ptr);
+        }
         ptr   = nullptr;
         bytes = 0;
         owner = 0;

@@ -120,7 +120,9 @@ bool Backend::handle_event(FullScheduler<>& sched, const Endpoint<>::Event& ev) 
     if (auto* nr = std::get_if<Endpoint<>::NewRequests>(&ev)) {
         for (auto& r : nr->requests) {
             // Request 默认 state=Waiting / output 空，符合 add_req 的契约。
-            sched.add_req(std::move(r));
+            // ev 是 const&，r 是 const Req&——move ctor 不会被选中（const rvalue
+            // 回退到 copy），所以这里不写 std::move。
+            sched.add_req(r);
         }
         return true;
     }

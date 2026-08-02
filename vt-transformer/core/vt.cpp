@@ -633,7 +633,7 @@ void Enviroment::run_(DaG* dag) {
 
 namespace base {
     struct Exit : public NativeWord {
-        void run(Stack& stack) override {
+        void run(Stack& /*stack*/) override {
             exit(0);
         }
         NWORD_CREATOR_DEFINE_LR(Exit)

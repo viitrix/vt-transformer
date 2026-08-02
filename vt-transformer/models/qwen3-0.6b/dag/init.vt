@@ -1,0 +1,100 @@
+;;
+;; Qwen3.0-0.6B 模型定义
+;;
+1024    "kHiddenSize" !
+3072    "kIntermediateSize" !
+28      "kNumLayers" !
+16      "kNumHeads" !
+8       "kNumKVHeads" !
+128     "kHeadDim" !
+151936  "kVocabSize" !
+/*
+constexpr int kQDim = kNumHeads   * kHeadDim;  // 2048
+constexpr int kKVDim = kNumKVHeads * kHeadDim; // 1024
+*/
+2048    "kQDim" !
+1024    "kKVDim" !
+
+2 "DATA_TYPE_SIZE" !
+
+;;
+;;  Create CUDA weight and naming
+;;
+"kVocabSize" @ "kHiddenSize" @ * "DATA_TYPE_SIZE" @ * "cuda" cuda.create "model.embed_tokens.weight" !
+"kHiddenSize" @ "DATA_TYPE_SIZE" @ * "cuda" cuda.create "model.norm.weight" !
+"kVocabSize" @ "kHiddenSize" @ * "DATA_TYPE_SIZE" @ * "cuda" cuda.create "lm_head.weight" !
+
+;; create & load laysers' weights
+%for 0 27
+    "kQDim" @ "kHiddenSize" @ * "DATA_TYPE_SIZE" @ *
+        "cuda" cuda.create "model.layers.%%.self_attn.q_proj.weight" !
+    "kKVDim" @ "kHiddenSize" @ * "DATA_TYPE_SIZE" @ * dup
+        "cuda" cuda.create "model.layers.%%.self_attn.k_proj.weight" !
+        "cuda" cuda.create "model.layers.%%.self_attn.v_proj.weight" !
+    "kQDim" @ "kHiddenSize" @ * "DATA_TYPE_SIZE" @ *
+        "cuda" cuda.create "model.layers.%%.self_attn.o_proj.weight" !
+    "kHeadDim" @ "DATA_TYPE_SIZE" @ * dup
+        "cuda" cuda.create "model.layers.%%.self_attn.q_norm.weight" !
+        "cuda" cuda.create "model.layers.%%.self_attn.k_norm.weight" !
+    "kIntermediateSize" @ "kHiddenSize" @ * "DATA_TYPE_SIZE" @ * dup
+        "cuda" cuda.create "model.layers.%%.mlp.gate_proj.weight" !
+        "cuda" cuda.create "model.layers.%%.mlp.up_proj.weight" !
+    "kHiddenSize" @ "kIntermediateSize" @ * "DATA_TYPE_SIZE" @ *
+        "cuda" cuda.create "model.layers.%%.mlp.down_proj.weight" !
+    "kHiddenSize" @ "DATA_TYPE_SIZE" @ * dup
+        "cuda" cuda.create "model.layers.%%.input_layernorm.weight" !
+        "cuda" cuda.create "model.layers.%%.post_attention_layernorm.weight" !
+%endf
+
+;;
+;;  加载权重文件
+;;
+"model.embed_tokens.weight" @ "weights/model.embed_tokens.weight.fp16" cuda.load
+"model.norm.weight" @ "weights/model.norm.weight.fp16" cuda.load
+"lm_head.weight" @ "weights/lm_head.weight.fp16" cuda.load
+%for 0 27
+    "model.layers.%%.self_attn.q_proj.weight" @ "weights/model.layers.%%.self_attn.q_proj.weight.fp16" cuda.load
+    "model.layers.%%.self_attn.k_proj.weight" @ "weights/model.layers.%%.self_attn.k_proj.weight.fp16" cuda.load
+    "model.layers.%%.self_attn.v_proj.weight" @ "weights/model.layers.%%.self_attn.v_proj.weight.fp16" cuda.load
+    "model.layers.%%.self_attn.o_proj.weight" @ "weights/model.layers.%%.self_attn.o_proj.weight.fp16" cuda.load
+    "model.layers.%%.self_attn.q_norm.weight" @ "weights/model.layers.%%.self_attn.q_norm.weight.fp16" cuda.load
+    "model.layers.%%.self_attn.k_norm.weight" @ "weights/model.layers.%%.self_attn.k_norm.weight.fp16" cuda.load
+    "model.layers.%%.mlp.gate_proj.weight" @ "weights/model.layers.%%.mlp.gate_proj.weight.fp16" cuda.load
+    "model.layers.%%.mlp.up_proj.weight" @ "weights/model.layers.%%.mlp.up_proj.weight.fp16" cuda.load
+    "model.layers.%%.mlp.down_proj.weight" @ "weights/model.layers.%%.mlp.down_proj.weight.fp16" cuda.load
+    "model.layers.%%.input_layernorm.weight" @ "weights/model.layers.%%.input_layernorm.weight.fp16" cuda.load
+    "model.layers.%%.post_attention_layernorm.weight" @ "weights/model.layers.%%.post_attention_layernorm.weight.fp16" cuda.load
+%endf
+
+;;
+;;  KV Cache 内存池（目标 ~128MB）
+;;
+;;  公式（对齐 Python 参考实现）：
+;;    total = 2 × num_layers × num_blocks × block_size × num_kv_heads × head_dim × dtype_bytes
+;;    per_token = 2 × num_layers × num_kv_heads × head_dim × dtype_bytes
+;;              = 2 × 28 × 8 × 128 × 2 = 114688 字节
+;;
+;;  选 block_size = 4，避免浪费太多空间
+;;  num_blocks 由 128MB 预算反推（// 整除），实际分配略小于预算。
+;;
+4  "kBlockSize"  !
+
+;; 计算每个 Token 所有层对应的 KV Cache 需要多少数据
+2 "kNumLayers" @ * "kNumKVHeads" @ * "kHeadDim" @ * "DATA_TYPE_SIZE" @ *
+    "kKVPerTokenBytes" !
+
+128 1024 1024 * *  "kKVCacheBudget" !       ;; 128 MB = 134217728
+
+;; num_blocks = budget // (block_size × per_token) = 292
+"kKVCacheBudget" @ "kBlockSize" @ "kKVPerTokenBytes" @ * //
+    "kNumBlocks" !
+
+;; 实际分配 = num_blocks × block_size × per_token ≈ 127.5 MB
+"kNumBlocks" @ "kBlockSize" @ * "kKVPerTokenBytes" @ *
+    "cuda" cuda.create "kv_cache" !
+
+;;
+;;  诊断：打印 kv_cache 实际字节数，确认池子分配成功且大小符合预算。
+;;  ?（Echo）pop 顶并打印——栈保持干净，不影响后续 main 的 stack size 检查。
+;;
+"kv_cache" @ cuda.size ?
