@@ -53,7 +53,8 @@ int g_failures = 0;
 // 跟生产 path 同形——证明 Backend 接受任意 EngineBase 子类。
 class DummyEngine : public vt::EngineBase<> {
 public:
-    vt::ForwardOutput<> forward(const vt::Batch<>& batch) override {
+    vt::ForwardOutput<> forward(const vt::Batch<>& batch,
+                                vt::PageTable<int32_t>& /*page_table*/) override {
         vt::ForwardOutput<> out;
         out.next_tokens.reserve(batch.reqs.size());
         std::uniform_int_distribution<int> d(1, 99);

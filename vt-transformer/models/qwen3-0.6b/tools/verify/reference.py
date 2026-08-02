@@ -143,6 +143,9 @@ def main():
     with torch.no_grad():
         out = model(ids)
 
+    # embed_tokens.weight 是静态参数，forward hook 抓不到，单独取一份
+    captures["model.embed_tokens.weight"] = model.model.embed_tokens.weight.detach()
+
     # ---- 落盘：统一 fp32 + cpu + numpy ----
     for name, t in captures.items():
         print(f"====== {name}")

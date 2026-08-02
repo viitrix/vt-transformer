@@ -7,6 +7,15 @@
 //      写在本头文件里让 qwen3.cpp 不必夹带具体桥接逻辑；qwen3.cpp 只负责把
 //      "qwen3.prefill" DAG word 接到 prefill_forward。
 //
+// 数据流（row-based，对齐 init.vt 里分配的 device 端两块镜像表）：
+//   调用 prefill_forward 之前，scheduler 已对每个 req 完成两段 H2D：
+//     req.input             → token_table[table_idx, 0 .. input.size())
+//     该 req 的 page_id 段 → slot_table[table_idx, ...]
+//   prefill_forward 不再 H2D 这两块大表，只负责：
+//     (a) 拼 per-req 描述小数组（row / cached_len / total_len）并 H2D 到 device
+//     (b) launch kernel —— kernel 直接按 row × max_seq_len + pos 寻址两块 device 表
+//     (c) D2H next_tokens 回 host 写到 out.next_tokens
+//
 // 真实 prefill kernel 实现（按层迭代）：
 //   1. embed_tokens 查表
 //   2. 每层：RMSNorm → QKV GEMM + qk_norm → RoPE → 写 KV → flash attn → o_proj → MLP
@@ -20,6 +29,8 @@
 #include <cuda_fp16.h>
 
 #include <cstdint>
+#include <cstdio>
+#include <vector>
 
 #include <core/vt.hpp>
 #include <core/vt_engine.hpp>
@@ -27,102 +38,115 @@
 #include <core/vt_pages.hpp>
 #include <core/vt_cuda.hpp>
 
+#include "common.cuh"
+#include "../qwen3.hpp"
+
 namespace qwen3 {
 
-// Prefill kernel 的纯 CUDA 输入。
-// prefill_forward 负责把 vt::Batch<int32_t, int32_t> 拍平成下面这些 device 数组。
-//
-// 当前是骨架字段——真实实现按需补全（权重指针、scale、rope freqs 等）。
-struct PrefillArgs {
-    // ---- KV pool ----
-    __half*       kv_cache;        // device ptr，布局见 init.vt 注释
-    int           num_layers;
-    int           num_kv_heads;
-    int           head_dim;
-    int           block_size;      // page_size（每 page 含多少 token）
 
-    // ---- batch 输入（拍平后）----
-    // 把 batch.reqs[i] 的 [cached_len, total_len) 段按顺序拼接成一段连续 token 流。
-    // token_ids[k]         ：第 k 个待处理 token 的 id
-    // page_ids[k]          ：第 k 个待处理 token 落进 KV pool 的物理 slot 索引
-    //                        （已由上游从 PageTable 翻译好，含 page 内偏移）
-    // req_token_offsets[i] ：第 i 个 req 的 token 在 token_ids 里的起始下标（i ∈ [0, batch_size]）
-    //                        末尾元素 == total_tokens，方便 kernel 取每个 req 的段
-    const int32_t* token_ids;         // [total_tokens]
-    const int32_t* page_ids;          // [total_tokens]
-    const int32_t* req_token_offsets; // [batch_size + 1]，host-side 常量
-    int            batch_size;
-    int            total_tokens;
-
-    // ---- 输出 ----
-    int32_t*       next_tokens;     // [batch_size]，每个 req 一个新 token
-};
 
 // 单纯的 kernel launcher：只取 stream + args，无 vt 依赖。
 // 调用方负责 args 里所有 device 指针的生命周期与可见性。
-void launch_prefill(cudaStream_t stream, const PrefillArgs& args);
+void launch_prefill(cudaStream_t stream, const CommonArgs& comm, const PrefillArgs& args);
 
-// prefill_forward — 把 vt::Batch / env.hash 桥接到 PrefillArgs，跑一遍 launch_prefill。
+// 同步 forward：当前 kernel 还未真正实现，但入口处先把每个 req 的 token 序列
+// 和 KV slot 锚点 dump 出来——下面几个字段是 CUDA kernel 切 token / 落 KV slot 的依据。
 //
-// 框架阶段：batch 拍平用的 device buffer 还没接，目前用 host 暂存打 stub 占位。
-// 后续真实实现要：
-//   1) 把每个 req 的 [cached_len, total_len) 段 token 拼到 device token_ids
-//   2) 从 PageTable 行 + block_size 算出每个 token 的物理 slot，写 device page_ids
-//   3) 累加 req_token_offsets（host 常量即可）
-//   4) 给 next_tokens 分配 device buffer，kernel 写完后 D2H 拷回
-inline void prefill_forward(vt::Enviroment& env,
+// CUDA kernel 视角（每个 req 独立处理，batch 间只是把 token 段拍平到一起）：
+//   prefill_pos : input[0 .. prefill_pos) 已落 KV —— kernel 跳过这段，
+//                 从 input[prefill_pos] 起处理到 input[input_len) 为止。
+//   decode_pos  : output[0 .. decode_pos) 已落 KV —— Decode 阶段 kernel 只处理
+//                 output[decode_pos]（永远 1 个 token，即上一步刚预测还没落 KV 的那个）。
+//   cached_len  = prefill_pos + decode_pos
+//                 KV pool 行里已写的 slot 数 —— 本步新写的 slot 从 row[cached_len] 开始。
+//   input_len   : input.size()，prompt 总长（不变量）—— kernel 拼 req_token_offsets
+//                 时用，与 prefill_pos 无关。
+//
+// table_idx 给 PageTable 行号；行内 slot → kv_cache 物理 offset 的翻译由 PageTable
+// 配合 block_size（page_size）完成，kernel 入口拿到的 page_ids 已是绝对 slot 索引。
+// radix_hit_len 与 kernel 无关——只用于 scheduler / CacheManager 决定哪些段进 radix 树。
+inline void prefill_forward(Qwen3Engine* eng,
+                            const vt::PageTable<int32_t>& page_table,
                             const vt::Batch<int32_t, int32_t>& batch,
                             vt::ForwardOutput<int32_t>& out) {
-    vt_assert(batch.is_prefill(), "prefill_forward: batch not in Prefill phase");
-    vt_assert(batch.size() > 0,    "prefill_forward: empty batch");
-
-    // (1) 取 KV pool tensor → device ptr
+    auto& env = eng->env();
     auto& h = env.hash();
-    auto kv = h.find_tensor("kv_cache");
-    auto* kv_tensor = dynamic_cast<vt::CudaTensor*>(kv.get());
-    vt_assert(kv_tensor && kv_tensor->is_device(),
-              "prefill_forward: kv_cache missing or not device tensor");
-    __half* kv_ptr = static_cast<__half*>(kv_tensor->data());
+    const int max_running_reqs = static_cast<int>(h.find_number("kMaxRunningReqs"));
+    const int max_seq_len      = static_cast<int>(h.find_number("kMaxSeqLen"));
+    vt_assert(batch.size() <= max_running_reqs,
+              "prefill_forward: batch.size > kMaxRunningReqs");
+    vt_assert(page_table.max_seq_len() == max_seq_len,
+              "prefill_forward: PageTable max_seq_len != init.vt kMaxSeqLen");
 
-    // (2) 从 env.hash 取 KV 维度常量（init.vt 写入）
-    const int num_layers   = static_cast<int>(h.find_number("kNumLayers"));
-    const int num_kv_heads = static_cast<int>(h.find_number("kNumKVHeads"));
-    const int head_dim     = static_cast<int>(h.find_number("kHeadDim"));
-    const int block_size   = static_cast<int>(h.find_number("kBlockSize"));
+    // 取 init.vt 用 cuda.create "host" 分配的 pinned 镜像 buffer。
+    auto get_cpu = [&h](const char* name) -> int32_t* {
+        auto t = h.find_tensor(name);
+        auto* ct = dynamic_cast<vt::CudaTensor*>(t.get());
+        vt_assert(ct != nullptr && ct->is_host(),
+                  "prefill_forward: host mirror buffer missing or wrong type");
+        return static_cast<int32_t*>(ct->data());
+    };
+    int32_t* token_table_cpu = get_cpu("token_table_cpu");
+    int32_t* slot_table_cpu  = get_cpu("slot_table_cpu");
+    int32_t* batch_idx_cpu   = get_cpu("batch_idx_cpu");
+    int32_t* cached_lens_cpu = get_cpu("cached_lens_cpu");
+    int32_t* input_lens_cpu = get_cpu("input_lens_cpu");
 
-    // (3) 取 current stream
-    auto* ctx = dynamic_cast<vt::CudaContext*>(env.ctx());
-    vt_assert(ctx, "prefill_forward: env ctx is not CudaContext");
-    cudaStream_t stream = ctx->current_stream();
+    const int n = batch.size();
+    for (int i = 0; i < n; ++i) {
+        const auto* req = batch.reqs[i];
+        const int input_len = (int)req->input.size();
+        const int32_t row = req->table_idx;
 
-    // (4) 统计 batch 待处理 token 数
-    int total_tokens = 0;
-    const auto kPrefillState = vt::Request<int32_t, int32_t>::Prefill;
-    for (auto* req : batch.reqs) {
-        vt_assert(req->state == kPrefillState,
-                  "prefill_forward: req state != Prefill");
-        total_tokens += req->extend_len();
+        batch_idx_cpu[i] = row;
+        cached_lens_cpu[i] = req->cached_len();
+        input_lens_cpu[i]  = input_len;
+
+        int32_t* token_row = token_table_cpu + static_cast<size_t>(row) * max_seq_len;
+        int32_t* slot_row     = slot_table_cpu + static_cast<size_t>(row) * max_seq_len;
+        const int32_t* pt_row = page_table.page_row(row);
+        for (int j = 0; j < input_len; ++j) {
+            token_row[j] = req->input[j];
+            slot_row[j] = pt_row[j];
+        }
     }
-    vt_assert(total_tokens > 0, "prefill_forward: total_tokens == 0");
 
-    // (5) 构造 PrefillArgs（device buffer 暂留 nullptr）+ launch
+    // CPU参数复制到GPU
+    env.execute("prefill_request_to_cuda");
+
+    // 取 init.vt 用 cuda.create "cuda" 分配的 device 端镜像表 / 输出 buffer。
+    auto get_dev = [&h](const char* name) -> int32_t* {
+        auto  t  = h.find_tensor(name);
+        auto* ct = dynamic_cast<vt::CudaTensor*>(t.get());
+        vt_assert(ct != nullptr && ct->is_device(),
+                  "prefill_forward: device buffer missing or wrong type");
+        return static_cast<int32_t*>(ct->data());
+    };
+
+    // 构造 PrefillArgs：device 指针全部来自 init.vt 镜像表，
+    // host 端 *_cpu 已填好并通过 prefill_request_to_cuda H2D 到 device。
     PrefillArgs args{};
-    args.kv_cache          = kv_ptr;
-    args.num_layers        = num_layers;
-    args.num_kv_heads      = num_kv_heads;
-    args.head_dim          = head_dim;
-    args.block_size        = block_size;
-    args.token_ids         = nullptr;        // TODO: 拼到 device
-    args.page_ids          = nullptr;        // TODO: 从 PageTable 翻译
-    args.req_token_offsets = nullptr;        // TODO: host 常量
-    args.batch_size        = batch.size();
-    args.total_tokens      = total_tokens;
-    args.next_tokens       = nullptr;        // TODO: device buffer + D2H
+    args.token_table = get_dev("token_table");
+    args.slot_table  = get_dev("slot_table");
+    args.batch_idx   = get_dev("batch_idx");
+    args.cached_lens = get_dev("cached_lens");
+    args.input_lens  = get_dev("input_lens");
+    args.next_tokens = get_dev("next_tokens");
+    args.batch_size  = n;
 
-    launch_prefill(stream, args);
+    // launch：comm 来自 Qwen3Engine::init() 灌好的权重表；
+    // stream 从 CudaContext::current_stream() 取（与 init.vt 里 cuda.load / H2D 同路）。
+    auto* ctx = dynamic_cast<vt::CudaContext*>(env.ctx());
+    vt_assert(ctx != nullptr, "prefill_forward: ctx is not CudaContext");
+    launch_prefill(ctx->current_stream(), eng->comm(), args);
 
-    // (6) stub：next_tokens 用 0 占位（kernel 没真跑）
-    out.next_tokens.assign((size_t)batch.size(), 0);
+    env.execute("dump_xhidden");
+
+    // 调试用：launch 后 sync + 阻塞等 Enter。不需要时把这一行注释掉。
+    debug_breakpoint("prefill");
+
+    // 处理返回
+    (void)out;
 }
 
 } // namespace qwen3

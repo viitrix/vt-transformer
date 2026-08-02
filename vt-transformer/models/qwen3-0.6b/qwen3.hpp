@@ -23,29 +23,29 @@
 #ifndef _QWEN3_HPP_
 #define _QWEN3_HPP_
 
-#include <cuda_runtime.h>
-#include <cuda_fp16.h>
+
 
 #include <cstdint>
 #include <string>
 
 #include <core/vt.hpp>
 #include <core/vt_engine.hpp>
+#include <core/vt_pages.hpp>
+
+#include "kernels/common.cuh"
 
 namespace qwen3 {
 
-// ---- 模型维度（来自 config.json）----
-constexpr int kHiddenSize       = 1024;   // hidden_size / d_model
-constexpr int kIntermediateSize = 3072;   // MLP 中间维
-constexpr int kNumLayers        = 28;     // num_hidden_layers
-constexpr int kNumHeads         = 16;     // num_attention_heads
-constexpr int kNumKVHeads       = 8;      // num_key_value_heads (GQA)
-constexpr int kHeadDim          = 128;    // head_dim
-constexpr int kVocabSize        = 151936; // vocab_size
-
-// 推导维度，便于 kernel 写 stride/grid
-constexpr int kQDim = kNumHeads   * kHeadDim;  // 2048
-constexpr int kKVDim = kNumKVHeads * kHeadDim; // 1024
+// 调试断点：同步 current stream 后阻塞等 Enter。
+// 用途：launch_prefill 之后插一个手动 pause，便于 dump GPU 状态 / 上 nsight / 接 gdb。
+// tag 是日志前缀，多次调用时区分（如 "prefill" / "decode"）。
+// 不需要调试时把调用点注释掉即可，函数本身留着不增加运行时开销（inline + 无外部符号）。
+inline void debug_breakpoint(const char* tag) {
+    std::printf("[debug] %s: stream synced, press Enter to continue... ", tag);
+    std::fflush(stdout);
+    int c;
+    while ((c = std::getchar()) != EOF && c != '\n') { /* drain until newline */ }
+}
 
 // Qwen3Engine —— 把 vt::EngineBase 接到 Qwen3-0.6B 
 //
@@ -69,24 +69,29 @@ public:
 
     // ---- EngineBase 接口 ----
     // 同步 forward：读 batch 里每个 req 的 [cached_len, total_len) 段作为输入，
-    // 写 KV 到 PageTable 决定的 slot，返回每个 req 一个新 token。
+    // 写 KV 到 page_table 决定的 slot，返回每个 req 一个新 token。
     // TODO: 区分 batch.is_prefill() 走 prefill / decode 两条 kernel。
-    ForwardOutputT forward(const BatchT& batch) override;
+    ForwardOutputT forward(const BatchT& batch, PageTableT& page_table) override;
 
     // Qwen3 默认用 <|im_end|> 作为 assistant turn 终止符。
     // 若上层想用 <|endoftext|>(151643) 改这个常量即可。
     Token eos_token_id() const override { return kEosTokenId; }
 
-    // 独立接口，外部调用使用
-    bool run_dag(const char* fileName);
+    // 桥接层（kernels/prefill.h::prefill_forward）通过这两个 accessor 取
+    // env（拿 hash / execute / ctx）和 init() 灌好的权重指针表 comm_。
+    vt::Enviroment&    env()  { return *env_; }
+    const CommonArgs&  comm() const { return comm_; }
 
-    // register_all — 外部注册 DAG word 的统一入口（main.cpp 通过 qwen3::register_all(eng) 调起）。
-    void register_all();
+    // 初始化
+    void init();
+
+private:
+    bool run_dag(const char* fileName);
 
 private:
     vt::Enviroment* env_ = nullptr;  // 非拥有：CUDA device / stream / DAG 都从它取
+    CommonArgs comm_;
     static constexpr Token kEosTokenId = 151645;  // <|im_end|>
-
 };
 
 

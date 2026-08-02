@@ -18,6 +18,22 @@ constexpr int kKVDim = kNumKVHeads * kHeadDim; // 1024
 2 "DATA_TYPE_SIZE" !
 
 ;;
+;;  PageTable 维度（host 端 pages_ 数组的形状，对齐 vt_pages.hpp 的 PageTable 构造）
+;;  main.cpp 读这两个常量写进 SchedulerConfig（page_size / num_pages / max_running_reqs /
+;;  max_seq_len 四个字段都由 init.vt 单一来源决定，避免 DAG 与 scheduler 脱钩）。
+;;
+;;  kMaxSeqLen 取 256（Qwen3-0.6B 推理 demo 用量级，对齐 mini-sglang 默认上下文窗口）。
+;;
+;;  kMaxRunningReqs 与 KV cache 容量是两个独立约束：
+;;    (1) kMaxRunningReqs —— scheduler 同时管理的 req 数上限，决定下游表大小：
+;;          token_table / slot_table : kMaxRunningReqs × kMaxSeqLen × 4 B
+;;          batch_idx                : kMaxRunningReqs × 4 B
+;;    (2) KV cache 容量 —— kNumBlocks × kBlockSize = 1168 token，
+;;        实际能跑多少 req 由它决定（与 kMaxRunningReqs 无关）。
+256 "kMaxSeqLen"      !
+4   "kMaxRunningReqs" !
+
+;;
 ;;  Create CUDA weight and naming
 ;;
 "kVocabSize" @ "kHiddenSize" @ * "DATA_TYPE_SIZE" @ * "cuda" cuda.create "model.embed_tokens.weight" !
@@ -79,9 +95,16 @@ constexpr int kKVDim = kNumKVHeads * kHeadDim; // 1024
 ;;
 4  "kBlockSize"  !
 
-;; 计算每个 Token 所有层对应的 KV Cache 需要多少数据
-2 "kNumLayers" @ * "kNumKVHeads" @ * "kHeadDim" @ * "DATA_TYPE_SIZE" @ *
-    "kKVPerTokenBytes" !
+;; 每个 Token 在每一层占的 KV 数据：
+;;   每层 K + V 两个张量，形状都是 [kNumKVHeads, kHeadDim] = kKVDim 个元素
+;;   per_layer = 2 × kKVDim × DATA_TYPE_SIZE
+2 "kKVDim" @ * "DATA_TYPE_SIZE" @ *
+    "kKVPerLayerBytes" !     ;; = 2 × 1024 × 2 = 4096 B
+
+;; 所有层累加得到 per_token：
+;;   per_token = kNumLayers × per_layer
+"kNumLayers" @ "kKVPerLayerBytes" @ *
+    "kKVPerTokenBytes" !     ;; = 28 × 4096 = 114688 B
 
 128 1024 1024 * *  "kKVCacheBudget" !       ;; 128 MB = 134217728
 
@@ -93,8 +116,95 @@ constexpr int kKVDim = kNumKVHeads * kHeadDim; // 1024
 "kNumBlocks" @ "kBlockSize" @ * "kKVPerTokenBytes" @ *
     "cuda" cuda.create "kv_cache" !
 
+
 ;;
-;;  诊断：打印 kv_cache 实际字节数，确认池子分配成功且大小符合预算。
-;;  ?（Echo）pop 顶并打印——栈保持干净，不影响后续 main 的 stack size 检查。
+;;  token_table：device 端按 row 存每个 req 的 token_ids（与 host 端 PageTable 同形状）
 ;;
-"kv_cache" @ cuda.size ?
+;;    token_table[row * kMaxSeqLen + pos] = 第 row 个 req 的第 pos 个 token id（int32）
+;;
+;;  与已有两块 device buffer 的分工：
+;;    kv_cache    按 physical slot 存 KV 张量（KV pool 视角，经 PageTable 间接寻址）
+;;    token_table 按 logical row  存 token id（req 视角，按 req → row 直接寻址）
+;;
+;;  H2D 同步策略（scheduler 端负责）：
+;;    prefill：对每个入选 req，把它整个 input 一次 H2D 拷到 row[0 .. input.size())
+;;    decode  ：每步把上一步预测的 1 个 token H2D 拷到 row[cached_len]
+;;  kernel 直接读 device 端 token_table，不必每 step 重新拍平 + H2D 一段临时 buffer。
+;;
+;;  4 = sizeof(int32_t) = sizeof(Token)，对齐 Request<int32_t, int32_t>::Token。
+"kMaxRunningReqs" @ "kMaxSeqLen" @ * 4 * dup
+    "cuda" cuda.create "token_table" !
+    "host" cuda.create "token_table_cpu" !
+
+"kMaxRunningReqs" @ "kMaxSeqLen" @ * 4 * dup
+    "cuda" cuda.create "slot_table" !
+    "host" cuda.create "slot_table_cpu" !
+
+"kMaxRunningReqs" @ 4 * dup
+    "cuda" cuda.create "batch_idx"  !
+    "host" cuda.create "batch_idx_cpu"  !
+    
+"kMaxRunningReqs" @ 4 * dup    
+    "cuda" cuda.create "cached_lens" !
+    "host" cuda.create "cached_lens_cpu" !
+
+"kMaxRunningReqs" @ 4 * dup
+    "cuda" cuda.create "input_lens" !
+    "host" cuda.create "input_lens_cpu" !
+
+"kMaxRunningReqs" @ 4 * dup
+    "cuda" cuda.create "next_tokens" !
+    "host" cuda.create "next_tokens_cpu" !
+
+;;
+;; 计算过程需要的中间变量
+;;
+;; 同时处理的最大 token 数 = kMaxRunningReqs × kMaxSeqLen = 4 × 256 = 1024
+;;   prefill：每个 req 的 input 一次到位（极端情况 4 个 req 各占满 256）
+;;   decode  ：每步只处理每 req 的 1 个新 token，远小于上限
+;; 三块 buffer 在 28 层之间复用（同一时刻只算一层），不持久化每层结果。
+;;
+"kMaxRunningReqs" @ "kMaxSeqLen" @ * "kMaxTokens" !
+
+;; xhidden: 当前层隐藏状态 [kMaxTokens × kHiddenSize]
+;;          行存寻址 xhidden[(row * kMaxSeqLen + pos) * kHiddenSize + dim]，
+;;          row 维已隐含在 kMaxTokens = kMaxRunningReqs × kMaxSeqLen 里，无需再乘。
+"kMaxTokens" @ "kHiddenSize" @ * "DATA_TYPE_SIZE" @ *
+    "cuda" cuda.create "xhidden" !
+
+"kMaxTokens" @ "kHiddenSize" @ * "DATA_TYPE_SIZE" @ *
+    "cuda" cuda.create "xnorm" !
+
+;; xq: q_proj 输出 [kMaxTokens × kQDim]，attention 计算时持有所有 head 的 query
+"kMaxTokens" @ "kQDim" @ * "DATA_TYPE_SIZE" @ *
+    "cuda" cuda.create "xq" !
+
+;; xout: 子层（attention / MLP）输出，与 xhidden 同形状，便于 residual add
+"kMaxTokens" @ "kHiddenSize" @ * "DATA_TYPE_SIZE" @ *
+    "cuda" cuda.create "xout" !
+
+;; xinter: MLP 中间激活 [kMaxTokens × kIntermediateSize]
+;;         存 SiLU(gate_proj) * up_proj 的结果，喂给 down_proj
+"kMaxTokens" @ "kIntermediateSize" @ * "DATA_TYPE_SIZE" @ *
+    "cuda" cuda.create "xinter" !
+
+;;
+;; working words
+;;
+%def prefill_request_to_cuda
+    "batch_idx_cpu"   @ "batch_idx"   @ cuda.to_device drop
+    "token_table_cpu" @ "token_table" @ cuda.to_device drop
+    "slot_table_cpu"  @ "slot_table"  @ cuda.to_device drop
+    "cached_lens_cpu" @ "cached_lens" @ cuda.to_device drop
+    "input_lens_cpu"  @ "input_lens"  @ cuda.to_device drop
+%end
+
+
+%def dump_xhidden
+    ;; 调试：切出 xhidden 第一个 token 的 view（offset 0，1024 fp16 = 2048 字节），
+    ;; 用 fp16 dump 出来；cuda.dump 自带 head 10 + tail 10，足够看是否被写脏。
+    cuda.sync
+    "xhidden" @ 0 1024 2 * 9 * cuda.view "fp16" cuda.dump
+    "xnorm" @ 0 1024 2 * 9 * cuda.view "fp16" cuda.dump
+    "xq" @ 0 2048 2 * 9 * cuda.view "fp16" cuda.dump
+%end

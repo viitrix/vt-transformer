@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "vt.hpp"
+#include "vt_pages.hpp"
 #include "vt_request.hpp"
 
 namespace vt {
@@ -53,20 +54,23 @@ public:
     using BatchT         = Batch<Token, Index>;
     using ForwardOutputT = ForwardOutput<Token>;
     using ForwardHandleT = ForwardHandle<Token>;
+    using PageTableT     = PageTable<Index>;
 
     virtual ~EngineBase() = default;
 
     // 同步 forward：读取 batch 里每个 req 的 [cached_len, total_len) 段作为输入，
-    // 把新 token 写到 KV（位置由 PageTable 决定），返回每个 req 一个新 token。
+    // 把新 token 写到 KV（位置由 page_table 决定），返回每个 req 一个新 token。
+    // page_table 由 scheduler 注入——engine 不持有 PageTable，只在这一调用窗口内
+    // 读它的 row 视图（page_id 段）来落 KV / 镜像到 device 端 slot_table。
     // sync 路径（FullScheduler::step）走这条。
-    virtual ForwardOutputT forward(const BatchT& batch) = 0;
+    virtual ForwardOutputT forward(const BatchT& batch, PageTableT& page_table) = 0;
 
     // 异步 forward：立即返回 handle，不阻塞；调用方在需要结果时再调 wait。
     // 默认实现就是包一层同步调用——sync engine 不需要重写。
     // 真实 async engine 重写 forward_async（提交到自己的 CUDA stream 立刻返回）
     // 和 wait（在调用方需要结果时同步 stream / event）。
-    virtual ForwardHandleT forward_async(const BatchT& batch) {
-        return ForwardHandleT{/*valid=*/true, forward(batch)};
+    virtual ForwardHandleT forward_async(const BatchT& batch, PageTableT& page_table) {
+        return ForwardHandleT{/*valid=*/true, forward(batch, page_table)};
     }
     virtual ForwardOutputT wait(ForwardHandleT&& h) {
         vt_assert(h.valid, "EngineBase::wait: handle not valid");

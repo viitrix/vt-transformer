@@ -76,7 +76,6 @@ namespace {
     }
 } // namespace
 
-static const char* kInitPath = "dag/init.vt";
 
 int main(int argc, char** argv) {
     // 命令行可覆盖 ZMQ 地址；默认对齐 sglfront shared 拓扑。
@@ -93,23 +92,23 @@ int main(int argc, char** argv) {
     {
         // CUDA 推理计算执行
         qwen3::Qwen3Engine eng(*env);
-        vt_assert(eng.run_dag(kInitPath), "Qwen3Engine: cannot open dag/init.vt");
-
-        // 注册本引擎对外暴露的所有 DAG words（qwen3.prefill 等）。
-        // 必须在 run_dag 之后——prefill_forward 依赖 env hash 里的 kv_cache。
-        eng.register_all();
+        eng.init();
 
         // Engine 由外部注入：scheduler 只持有非拥有指针，不参与 engine 生命周期。
         vt::SchedulerConfig<> cfg;
 
-        // 从 env->hash 提取 init.vt 里算出的 KV 池布局：
-        //   page_size / num_pages 必须与 DAG 分配的 kv_cache 一致——
-        //   否则 PageTable 引用的 page_id 会在 kv_cache 范围外，或浪费已分配的 page。
-        //   其它字段（max_running_reqs / max_seq_len / max_extend_tokens / default_max_output）
-        //   是调度策略选择，跟 DAG 解耦，保留 SchedulerConfig 默认值。
+        // 从 env->hash 提取 init.vt 决定的资源池布局，写进 SchedulerConfig：
+        //   page_size / num_pages       ：KV pool 的 page 切片——必须与 kv_cache 一致，
+        //                                 否则 PageTable 引用的 page_id 会在 kv_cache 范围外。
+        //   max_running_reqs / max_seq_len : PageTable 行数 / 行长——决定 host 端 pages_
+        //                                    数组形状（与 kv_cache 字节数无关）。
+        //   剩下两个（max_extend_tokens / default_max_output）是调度策略选择，
+        //   与 DAG 解耦，保留 SchedulerConfig 默认值。
         auto& h = env->hash();
-        cfg.page_size = static_cast<int>(h.find_number("kBlockSize"));
-        cfg.num_pages = static_cast<int>(h.find_number("kNumBlocks"));
+        cfg.page_size        = static_cast<int>(h.find_number("kBlockSize"));
+        cfg.num_pages        = static_cast<int>(h.find_number("kNumBlocks"));
+        cfg.max_running_reqs = static_cast<int>(h.find_number("kMaxRunningReqs"));
+        cfg.max_seq_len      = static_cast<int>(h.find_number("kMaxSeqLen"));
 
         vt::FullScheduler<> sched(cfg, &eng);
 

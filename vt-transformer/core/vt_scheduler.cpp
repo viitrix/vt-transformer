@@ -116,7 +116,7 @@ FullScheduler<TokenT, IndexT>::step() {
         return ret;
     }
 
-    Output out = engine_->forward(cur_batch_);
+    Output out = engine_->forward(cur_batch_, *cache_->pt());
 
     std::vector<int> finished_idx;
     process_results(out, finished_idx);
@@ -203,7 +203,7 @@ FullScheduler<TokenT, IndexT>::step_overlap() {
     }
 
     // === 阶段 4: 提交 forward_async（默认实现就是同步包一层；真实 engine 重写做 async）===
-    inflight_handle_ = engine_->forward_async(cur_batch_);
+    inflight_handle_ = engine_->forward_async(cur_batch_, *cache_->pt());
     inflight_batch_  = cur_batch_;  // 拷贝 Req* 指针 + phase；reqs 非空 ⇒ has_inflight()==true
 
     // prefill reqs 立刻从 pending_ 搬到 running_——让 abort_req 在 inflight 期间
@@ -531,7 +531,6 @@ void FullScheduler<TokenT, IndexT>::free_finished(const std::vector<int>& finish
 // ============================================================================
 // explicit instantiation — default 类型，对齐 Request<> / CacheManager<> 等
 // ============================================================================
-
 template class FullScheduler<int32_t, int32_t>;
 
 } // namespace vt

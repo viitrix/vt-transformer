@@ -42,16 +42,20 @@ static uint16_t fp32_bits_to_fp16_bits(uint32_t bits) {
     }
 
     if (h_exp > 0) {
-        // FP16 规格化数：尾数 23 → 10，丢弃 13 位，banker's rounding
+        // FP16 规格化数：尾数 23 → 10，丢弃 13 位，banker's rounding。
+        // 注意：m10 == 0 有两种成因 ——（a）原本就是 0（值正好是 2 的整数次幂），
+        // （b）从 0x3FF 进位到 0x400 后被重置回 0。只有 (b) 需要 ++e；
+        // 用 carry 显式区分，否则会把 1.0 错成 2.0、0.5 错成 1.0 等所有 2 的幂。
         uint32_t m10  = mant >> 13;
         uint32_t drop = mant & 0x1FFF;
         const uint32_t halfway = 0x1000;  // 1 << 12
+        bool carry = false;
         if (drop > halfway || (drop == halfway && (m10 & 1))) {
             ++m10;
-            if (m10 == 0x400) { m10 = 0; /* 进位到下一指数，下面再判溢出 */ }
+            if (m10 == 0x400) { m10 = 0; carry = true; }
         }
         int32_t e = h_exp;
-        if (m10 == 0) {
+        if (carry) {
             ++e;
             if (e >= 0x1F) return h_sign | 0x7C00;
         }
@@ -67,8 +71,8 @@ static uint16_t fp32_bits_to_fp16_bits(uint32_t bits) {
         const uint32_t drop     = mant_full & mask;
         uint32_t       h_mant   = mant_full >> shift;
         if (drop > halfway || (drop == halfway && (h_mant & 1))) ++h_mant;
-        // 舍入到 0x400 时正好是最小规格化数 0x0400
-        return h_sign | uint16_t(h_mant & 0x3FF);
+        // h_mant 进位到 0x400 时正好是最小规格化数 0x0400：bit 10 即 exp 位，不要再 mask 掉。
+        return h_sign | uint16_t(h_mant);
     }
 
     // 下溢 → 0

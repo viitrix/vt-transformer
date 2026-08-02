@@ -1,8 +1,12 @@
 #include "vt_cuda.hpp"
 
+#include <cstdio>
 #include <cstring>
 #include <fstream>
+#include <sstream>
 #include <vector>
+
+#include <cuda_fp16.h>
 
 namespace vt {
 
@@ -212,6 +216,69 @@ struct DataPtr : public NativeWord {
     NWORD_CREATOR_DEFINE_CTX(DataPtr)
 };
 
+// cuda.dump : tensor type_str --
+// 简短打印 tensor 内容：head 8 + tail 8 个元素；元素总数少则全打印。
+// type_str 支持 "fp16" / "int32"。
+// device tensor 会经 current_stream 同步拷贝到 host staging buffer 再打印，
+// 因此调用返回时数据已就绪，无需额外 cuda.sync。
+struct Dump : public NativeWord {
+    void run(Stack& stack) override {
+        auto type_str = stack.pop_string();
+        auto t = stack.pop_tensor();
+        auto* ct = dynamic_cast<CudaTensor*>(t.get());
+        if (!ct) vt_fatal_error();
+
+        size_t elem_size = 0;
+        if      (type_str == "fp16")  elem_size = 2;
+        else if (type_str == "int32") elem_size = 4;
+        else vt_panic("cuda.dump: unsupported type, expect fp16/int32");
+
+        size_t total_bytes = ct->size();
+        if (total_bytes % elem_size != 0)
+            vt_panic("cuda.dump: tensor size not multiple of elem_size");
+        size_t n_elems = total_bytes / elem_size;
+
+        std::vector<char> staging;
+        const void* host_ptr = nullptr;
+        if (ct->is_host()) {
+            host_ptr = ct->data();
+        } else {
+            staging.resize(total_bytes);
+            auto* cctx = dynamic_cast<CudaContext*>(ctx_);
+            if (!cctx) vt_fatal_error();
+            CUDA_CHECK(cudaMemcpyAsync(staging.data(), ct->data(), total_bytes,
+                                       cudaMemcpyDeviceToHost,
+                                       cctx->current_stream()));
+            cctx->sync_current();
+            host_ptr = staging.data();
+        }
+
+        const size_t k_head = 10;
+        const size_t k_tail = 10;
+        std::ostringstream oss;
+        oss << "cuda.dump[" << type_str << "] n_elems=" << n_elems << ":";
+
+        auto print_elem = [&](size_t i) {
+            if (type_str == "fp16") {
+                const __half* p = reinterpret_cast<const __half*>(host_ptr) + i;
+                oss << " " << static_cast<double>(__half2float(*p));
+            } else {
+                oss << " " << (reinterpret_cast<const int32_t*>(host_ptr))[i];
+            }
+        };
+
+        if (n_elems <= k_head + k_tail) {
+            for (size_t i = 0; i < n_elems; ++i) print_elem(i);
+        } else {
+            for (size_t i = 0; i < k_head; ++i) print_elem(i);
+            oss << " ...";
+            for (size_t i = n_elems - k_tail; i < n_elems; ++i) print_elem(i);
+        }
+        std::printf("%s\n", oss.str().c_str());
+    }
+    NWORD_CREATOR_DEFINE_CTX(Dump)
+};
+
 // ---- stream 控制 ----
 
 // cuda.sync : --
@@ -303,6 +370,7 @@ Enviroment* create_vt_cuda(int dev) {
     env->insert_native_word("cuda.is_host",        op::IsHost::creator);
     env->insert_native_word("cuda.is_device",      op::IsDevice::creator);
     env->insert_native_word("cuda.data_ptr",       op::DataPtr::creator);
+    env->insert_native_word("cuda.dump",           op::Dump::creator);
 
     // stream control
     env->insert_native_word("cuda.sync",           op::Sync::creator);
