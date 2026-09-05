@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+pydantic
+transformers
+jinja2
+pyzmq
