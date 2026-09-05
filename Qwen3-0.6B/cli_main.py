@@ -71,7 +71,9 @@ class BackendClient:
 
 
 class IncrementalDetokenizer:
-    """每步对完整序列重新 decode 再取新增后缀，跨 token 的多字节字符会在补齐后一次性输出。"""
+    """每步对完整序列重新 decode 再取新增后缀。多字节字符被 token 切开时，
+    中间态 decode 会在尾部产生 U+FFFD，此时先扣住不发（sent_len 不推进），
+    待字符在后续 token 补齐后一并输出。"""
 
     def __init__(self, tokenizer):
         self.tokenizer = tokenizer
@@ -81,6 +83,8 @@ class IncrementalDetokenizer:
     def next_text(self, new_ids: List[int]) -> str:
         self.ids.extend(new_ids)
         full = self.tokenizer.decode(self.ids, skip_special_tokens=True)
+        if full.endswith("�"):
+            full = full[:-1]
         delta = full[self.sent_len:]
         self.sent_len = len(full)
         return delta
