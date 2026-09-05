@@ -1,0 +1,292 @@
+1152    "CONV_CHANNELS"             !
+16      "VISUAL_HEAD_NUM"           !           
+72      "VISUAL_HEAD_LEN"           !
+
+4900    "VISUAL_POS_NUM"            !
+
+4304    "VISUAL_MLP_INTERNAL"       !
+14      "CONV_KERNEL_SIZE"          !
+
+%def visual_create_weights
+    "CONV_CHANNELS" @ 3 14 14 4 "G_DEVICE" @ "f16" op.create "v.embeddings.patch_embedding.weight" !
+    "CONV_CHANNELS" @ 1 "G_DEVICE" @ "f16" op.create "v.embeddings.patch_embedding.bias" !
+    "VISUAL_POS_NUM" @ "CONV_CHANNELS" @ 2 "host" "f16" op.create "v.embeddings.position_embedding.weight" !
+    
+    "CONV_CHANNELS" @ 1 "G_DEVICE" @ "f16" op.create "v.post_layernorm.weight" !
+    "CONV_CHANNELS" @ 1 "G_DEVICE" @ "f16" op.create "v.post_layernorm.bias" !
+    
+    %for 0 26
+        "CONV_CHANNELS" @ 1                   "G_DEVICE" @ "f16" op.create "v.encoder.layers_%%.layer_norm1.weight" !
+        "CONV_CHANNELS" @ 1                   "G_DEVICE" @ "f16" op.create "v.encoder.layers_%%.layer_norm1.bias" !
+        "CONV_CHANNELS" @ 1                   "G_DEVICE" @ "f16" op.create "v.encoder.layers_%%.layer_norm2.weight" !
+        "CONV_CHANNELS" @ 1                   "G_DEVICE" @ "f16" op.create "v.encoder.layers_%%.layer_norm2.bias" !
+    
+        "CONV_CHANNELS" @ "CONV_CHANNELS" @ 2   "G_DEVICE" @ "f16" op.create "v.encoder.layers_%%.attn.q_proj.weight" !
+        "CONV_CHANNELS" @ 1                     "G_DEVICE" @ "f16" op.create "v.encoder.layers_%%.attn.q_proj.bias" !
+        "CONV_CHANNELS" @ "CONV_CHANNELS" @ 2   "G_DEVICE" @ "f16" op.create "v.encoder.layers_%%.attn.k_proj.weight" !
+        "CONV_CHANNELS" @ 1                     "G_DEVICE" @ "f16" op.create "v.encoder.layers_%%.attn.k_proj.bias" !
+        "CONV_CHANNELS" @ "CONV_CHANNELS" @ 2   "G_DEVICE" @ "f16" op.create "v.encoder.layers_%%.attn.v_proj.weight" !
+        "CONV_CHANNELS" @ 1                     "G_DEVICE" @ "f16" op.create "v.encoder.layers_%%.attn.v_proj.bias" !
+        
+        "CONV_CHANNELS" @ "CONV_CHANNELS" @ 2   "G_DEVICE" @ "f16" op.create "v.encoder.layers_%%.attn.out_proj.weight" !
+        "CONV_CHANNELS" @ 1                     "G_DEVICE" @ "f16" op.create "v.encoder.layers_%%.attn.out_proj.bias" !
+    
+        "VISUAL_MLP_INTERNAL" @  "CONV_CHANNELS" @ 2 "G_DEVICE" @ "f16" op.create "v.encoder.layers_%%.mlp.fc1.weight" !
+        "VISUAL_MLP_INTERNAL" @                    1 "G_DEVICE" @ "f16" op.create "v.encoder.layers_%%.mlp.fc1.bias" !
+        "CONV_CHANNELS" @  "VISUAL_MLP_INTERNAL" @ 2 "G_DEVICE" @ "f16" op.create "v.encoder.layers_%%.mlp.fc2.weight" !
+        "CONV_CHANNELS" @                          1 "G_DEVICE" @ "f16" op.create "v.encoder.layers_%%.mlp.fc2.bias" !
+    %endf
+
+    "HIDDEN_SIZE" @ "CONV_CHANNELS" @ 2 "G_DEVICE" @ "f16" op.create "rs.kv_proj" !
+    "HIDDEN_SIZE" @ 1 "G_DEVICE" @ "f16" op.create "rs.ln_kv.weight" !
+    "HIDDEN_SIZE" @ 1 "G_DEVICE" @ "f16" op.create "rs.ln_kv.bias" !
+    
+    1 64 "HIDDEN_SIZE" @ 3 "G_DEVICE" @ "f16" op.create "rs.attn.query" !
+    
+    "HIDDEN_SIZE" @ "HIDDEN_SIZE" @ 2 "G_DEVICE" @ "f16" op.create "rs.attn.k_proj.weight" !
+    "HIDDEN_SIZE" @                 1 "G_DEVICE" @ "f16" op.create "rs.attn.k_proj.bias" !
+    "HIDDEN_SIZE" @ "HIDDEN_SIZE" @ 2 "G_DEVICE" @ "f16" op.create "rs.attn.v_proj.weight" !
+    "HIDDEN_SIZE" @                 1 "G_DEVICE" @ "f16" op.create "rs.attn.v_proj.bias" !
+    
+    "HIDDEN_SIZE" @ "HIDDEN_SIZE" @ 2 "G_DEVICE" @ "f16" op.create "rs.attn.out_proj.weight" !
+    "HIDDEN_SIZE" @                 1 "G_DEVICE" @ "f16" op.create "rs.attn.out_proj.bias" !
+    
+    "HIDDEN_SIZE" @                 1 "G_DEVICE" @ "f16" op.create "rs.ln_post.weight" !
+    "HIDDEN_SIZE" @                 1 "G_DEVICE" @ "f16" op.create "rs.ln_post.bias" !
+
+    "HIDDEN_SIZE" @ "HIDDEN_SIZE" @ 2 "G_DEVICE" @ "f16" op.create "rs.proj" !
+    
+    1 1024 "HIDDEN_SIZE" @ 3 "G_DEVICE" @ "f16" op.create "rs.pos_embed" !
+
+%end
+
+%def visual_load_one
+    dup "Loading... " swap | ?
+
+    dup @ swap "G_PATH" @ swap | ".fp16" | io.load
+%end
+
+%def visual_load_weights
+    "v.embeddings.patch_embedding.weight"       visual_load_one
+    "v.embeddings.patch_embedding.bias"         visual_load_one
+    "v.embeddings.position_embedding.weight"    visual_load_one
+    
+    "v.post_layernorm.weight" visual_load_one
+    "v.post_layernorm.bias" visual_load_one
+
+    %for 0 26
+        "v.encoder.layers_%%.layer_norm1.weight" visual_load_one
+        "v.encoder.layers_%%.layer_norm1.bias" visual_load_one
+        "v.encoder.layers_%%.layer_norm2.weight" visual_load_one
+        "v.encoder.layers_%%.layer_norm2.bias" visual_load_one
+        
+        "v.encoder.layers_%%.attn.q_proj.weight" visual_load_one
+        "v.encoder.layers_%%.attn.q_proj.bias" visual_load_one
+        "v.encoder.layers_%%.attn.k_proj.weight" visual_load_one
+        "v.encoder.layers_%%.attn.k_proj.bias" visual_load_one
+        "v.encoder.layers_%%.attn.v_proj.weight" visual_load_one
+        "v.encoder.layers_%%.attn.v_proj.bias" visual_load_one
+
+        "v.encoder.layers_%%.attn.out_proj.weight" visual_load_one
+        "v.encoder.layers_%%.attn.out_proj.bias" visual_load_one
+        
+        "v.encoder.layers_%%.mlp.fc1.weight" visual_load_one
+        "v.encoder.layers_%%.mlp.fc1.bias" visual_load_one
+        "v.encoder.layers_%%.mlp.fc2.weight" visual_load_one
+        "v.encoder.layers_%%.mlp.fc2.bias" visual_load_one
+    %endf
+    
+    "rs.kv_proj" visual_load_one
+    "rs.ln_kv.weight" visual_load_one
+    "rs.ln_kv.bias" visual_load_one
+    
+    "rs.attn.query" visual_load_one
+    "rs.attn.k_proj.weight" visual_load_one
+    "rs.attn.k_proj.bias" visual_load_one
+    "rs.attn.v_proj.weight" visual_load_one
+    "rs.attn.v_proj.bias" visual_load_one
+
+    "rs.attn.out_proj.weight" visual_load_one
+    "rs.attn.out_proj.bias" visual_load_one
+
+    "rs.ln_post.weight" visual_load_one
+    "rs.ln_post.bias"  visual_load_one
+   
+    "rs.pos_embed" visual_load_one
+    "rs.proj" visual_load_one
+%end
+
+%def visual_init
+    visual_create_weights
+    visual_load_weights
+
+    ;; input image and hidden_state
+    1 3 14 14336 4 "G_DEVICE" @ "f16" op.create "v_img" !
+ 
+    ;; position and embedding
+    1024 1 "host" "i32" op.create "v_ids~" !
+    1 1024 "CONV_CHANNELS" @ 3 "host"       "f16" op.create "v_pos~" ! 
+    1 1024 "CONV_CHANNELS" @ 3 "G_DEVICE" @ "f16" op.create "v_pos" ! 
+
+    ;; help memory
+    "CONV_CHANNELS" @ 1 "G_DEVICE" @ "f16" op.create "v.mean_c" !
+    "CONV_CHANNELS" @ 1 "G_DEVICE" @ "f16" op.create "v.var_c" !
+    "HIDDEN_SIZE" @ 1 "G_DEVICE" @ "f16" op.create "v.mean_r" !
+    "HIDDEN_SIZE" @ 1 "G_DEVICE" @ "f16" op.create "v.var_r" !
+
+    ;; internal variable
+    1 1024 "CONV_CHANNELS" @ 3 "G_DEVICE" @ "f16" op.create "v_xa" !
+    1 1024 "CONV_CHANNELS" @ 3 "G_DEVICE" @ "f16" op.create "v_xb" !
+    1 1024 "CONV_CHANNELS" @ 3 "G_DEVICE" @ "f16" op.create "v_xc" !
+    1 1024 "CONV_CHANNELS" @ 3 "G_DEVICE" @ "f16" op.create "v_xd" !
+    1 1024 "CONV_CHANNELS" @ 3 "G_DEVICE" @ "f16" op.create "v_xe" !
+    
+    1 1024 "VISUAL_MLP_INTERNAL" @ 3 "G_DEVICE" @ "f16" op.create "v_xp" !
+    1 1024 "HIDDEN_SIZE" @ 3 "G_DEVICE" @ "f16" op.create "v_xrs_a" !
+    1 1024 "HIDDEN_SIZE" @ 3 "G_DEVICE" @ "f16" op.create "v_xrs_b" !
+    1 1024 "HIDDEN_SIZE" @ 3 "G_DEVICE" @ "f16" op.create "v_xrs_c" !
+    1 64 "HIDDEN_SIZE" @ 3 "G_DEVICE" @ "f16" op.create "v_xrs_d" !
+    1 "HEADS_NUM" @ 64 1024 4 "G_DEVICE" @ "f16" op.create "v_xpll" !   
+
+    ;; shadowed variable
+    "v_xa" @ 0 1 "CONV_CHANNELS" @ 1 1024 4 op.view "v_imgx" !
+    "v_xa" @ 0 1 1024 "VISUAL_HEAD_NUM" @ "VISUAL_HEAD_LEN" @ 4  op.view "v_ya" !
+    "v_xb" @ 0 1 1024 "VISUAL_HEAD_NUM" @ "VISUAL_HEAD_LEN" @ 4  op.view "v_yb" !
+    "v_xc" @ 0 1 1024 "VISUAL_HEAD_NUM" @ "VISUAL_HEAD_LEN" @ 4  op.view "v_yc" !
+    "v_xd" @ 0 1 1024 "VISUAL_HEAD_NUM" @ "VISUAL_HEAD_LEN" @ 4  op.view "v_yd" !
+    "v_xe" @ 0 1 1024 "VISUAL_HEAD_NUM" @ "VISUAL_HEAD_LEN" @ 4  op.view "v_ye" !
+   
+    "v_xrs_a" @ 0 1 1024 "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "v_yrs_a" !
+    "v_xrs_b" @ 0 1 1024 "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "v_yrs_b" !
+    "v_xrs_c" @ 0 1 1024 "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "v_yrs_c" !
+    "v_xrs_d" @ 0 1 64   "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "v_yrs_d" !
+    
+    "v_xrs_a" @ 0 1 64  "HIDDEN_SIZE" @               3 op.view "v_xrs_e" !
+    "v_xrs_a" @ 0 1 64  "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "v_yrs_e" !
+    "rs.attn.query" @ 0 1 64 "HEADS_NUM" @ "HEAD_HIDDEN" @ 4 op.view "v_yrs_q" !
+   
+
+    "v_xa" @ 0 1 "VISUAL_HEAD_NUM" @ 1024 "VISUAL_HEAD_LEN" @ 4  op.view "v_za" !
+    "v_xb" @ 0 1 "VISUAL_HEAD_NUM" @ 1024 "VISUAL_HEAD_LEN" @ 4  op.view "v_zb" !
+    "v_xc" @ 0 1 "VISUAL_HEAD_NUM" @ 1024 "VISUAL_HEAD_LEN" @ 4  op.view "v_zc" !
+    "v_xd" @ 0 1 "VISUAL_HEAD_NUM" @ 1024 "VISUAL_HEAD_LEN" @ 4  op.view "v_zd" !
+    "v_xe" @ 0 1 "VISUAL_HEAD_NUM" @ 1024 "VISUAL_HEAD_LEN" @ 4  op.view "v_ze" !
+ 
+    "v_xrs_a" @ 0 1 "HEADS_NUM" @ 1024 "HEAD_HIDDEN" @ 4 op.view "v_zrs_a" !
+    "v_xrs_b" @ 0 1 "HEADS_NUM" @ 1024 "HEAD_HIDDEN" @ 4 op.view "v_zrs_b" !
+    "v_xrs_c" @ 0 1 "HEADS_NUM" @ 1024 "HEAD_HIDDEN" @ 4 op.view "v_zrs_c" !
+    "v_xrs_d" @ 0 1 "HEADS_NUM" @ 64 "HEAD_HIDDEN" @ 4 op.view   "v_zrs_d" !
+
+    ;; function memory 
+    1 "VISUAL_HEAD_NUM" @ 1024 1024 4 "G_DEVICE" @ "f16" op.create "v_xll" !
+%end
+
+%def visual_embeded
+    "v_img" @ app.fill
+    ;"v_img" @ "./demo.fp16" io.load
+
+    ;; building position
+    "v_ids~" @ 70 32 32 app.position
+    "v_ids~" @ "v.embeddings.position_embedding.weight" @ "v_pos~" @ op.embed
+    "v_pos" @ "v_pos~" @ op.copy 
+
+    ;; conv2d
+    {
+        "v_img" @ 
+        "v.embeddings.patch_embedding.weight" @ 
+        "v.embeddings.patch_embedding.bias" @ 
+        "v_imgx" @ 14 0 op.conv2d
+    }
+    
+    ;; change to batch | token len | hidden format
+    { "v_imgx" @ 0 1 "CONV_CHANNELS" @ 1024 1 4 op.view } 
+    { "v_xb" @   0 1 1024 "CONV_CHANNELS" @ 1 4 op.view } op.transpose_0213
+
+    ;; added with position embedding 
+    "v_xb" @ "v_pos" @ "v_xa" @ op.add
+%end
+
+%def visual_main
+    
+    ;; output is v_xa
+    visual_embeded
+
+    %for 0 26
+        ;; layernorm
+        "v_xa" @ "v.mean_c" @ "v.var_c" @ "v.encoder.layers_%%.layer_norm1.weight" @ "v.encoder.layers_%%.layer_norm1.bias" @ "v_xb" @ "RMS_EPS" @ op.layernorm
+        
+        ;; self attention
+        {
+            ;; v_zd is query && y_ze is key
+            "v_xb" @ "v.encoder.layers_%%.attn.q_proj.weight" @ "v.encoder.layers_%%.attn.q_proj.bias" @ "v_xc" @ op.linear
+            "v_yc" @ "v_zd" @ op.transpose_0213 
+        
+            "v_xb" @ "v.encoder.layers_%%.attn.k_proj.weight" @ "v.encoder.layers_%%.attn.k_proj.bias" @ "v_xc" @ op.linear
+            "v_yc" @ "v_ze" @ op.transpose_0213     
+    
+            ;; query@key
+            "v_zd" @ "v_ze" @ "v_xll" @ op.querykey
+            "v_xll" @ "v_xll" @ op.softmax
+        
+            ;; v_zb is value do attn
+            "v_xb" @ "v.encoder.layers_%%.attn.v_proj.weight" @ "v.encoder.layers_%%.attn.v_proj.bias" @ "v_xc" @ op.linear
+            "v_yc" @ "v_zb" @ op.transpose_0213
+            "v_xll" @ "v_zb" @ "v_zc" @ op.attn
+        
+            ;; post process
+            "v_zc"  @ "v_yb" @ op.transpose_0213
+            "v_xb"  @ "v.encoder.layers_%%.attn.out_proj.weight" @ "v.encoder.layers_%%.attn.out_proj.bias" @ "v_xc" @ op.linear
+        }
+
+        ;; residual
+        "v_xa" @ "v_xc" @ "v_xa" @ op.add
+        "v_xa" @ "v.mean_c" @ "v.var_c" @ "v.encoder.layers_%%.layer_norm2.weight" @ "v.encoder.layers_%%.layer_norm2.bias" @ "v_xb" @ "RMS_EPS" @ op.layernorm
+        
+        ;; xa is residual, xb is mlp's input
+        ;; mlp
+        {
+            "v_xb" @ "v.encoder.layers_%%.mlp.fc1.weight" @ "v.encoder.layers_%%.mlp.fc1.bias" @ "v_xp" @ op.linear
+            "v_xp" @ "v_xp" @ op.gelu
+            "v_xp" @ "v.encoder.layers_%%.mlp.fc2.weight" @ "v.encoder.layers_%%.mlp.fc2.bias" @ "v_xb" @ op.linear
+        }
+        
+        "v_xa" @ "v_xb" @ "v_xa" @ op.add
+    %endf
+
+    "v_xa" @ "v.mean_c" @ "v.var_c" @ "v.post_layernorm.weight" @ "v.post_layernorm.bias" @ "v_xb" @ "RMS_EPS" @ op.layernorm
+   
+    ;;; resampler
+    {
+        ;"v_xb" @ "x.fp16" io.load
+        "v_xb" @ "rs.kv_proj" @ op.null "v_xrs_a" @ op.linear 
+        "v_xrs_a" @ "v.mean_r" @ "v.var_r" @ "rs.ln_kv.weight" @ "rs.ln_kv.bias" @ "v_xrs_b" @ "RMS_EPS" @ op.layernorm
+
+        ;; key 
+        "v_xrs_b" @ "rs.pos_embed" @ "v_xrs_a" @ op.add
+        "v_xrs_a" @ "rs.attn.k_proj.weight" @ "rs.attn.k_proj.bias" @ "v_xrs_c" @ op.linear
+        "v_yrs_c" @ "v_zrs_a" @ op.transpose_0213
+
+        ;; query
+        "v_yrs_q" @ "v_zrs_d" @ op.transpose_0213
+        
+        ;; query @ key
+        "v_zrs_d" @ "v_zrs_a" @ "v_xpll" @ op.querykey         
+        "v_xpll" @ "v_xpll" @ op.softmax
+        
+        ;; value
+        "v_xrs_b" @ "rs.attn.v_proj.weight" @ "rs.attn.v_proj.bias" @ "v_xrs_c" @ op.linear
+        "v_yrs_c" @ "v_zrs_a" @ op.transpose_0213
+        
+        ;; attn
+        "v_xpll" @ "v_zrs_a" @ "v_zrs_d" @ op.attn
+        "v_zrs_d" @ "v_yrs_e" @ op.transpose_0213
+
+        ;; output
+        "v_xrs_e" @ "rs.attn.out_proj.weight" @ "rs.attn.out_proj.bias" @ "v_xrs_d" @ op.linear
+        
+        ;; ln post
+        "v_xrs_d" @ "v.mean_r" @ "v.var_r" @ "rs.ln_post.weight" @ "rs.ln_post.bias" @ "v_xrs_e" @ "RMS_EPS" @ op.layernorm
+        "v_xrs_e" @ "rs.proj" @ op.null "v_xrs_d" @ op.linear
+    }
+%end
+
