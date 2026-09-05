@@ -1,0 +1,11 @@
+# Makefile 构建产物
+/backend
+/mock
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+
+# 模型权重（大体积二进制 dump，不入库）
+weights/

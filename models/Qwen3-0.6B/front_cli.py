@@ -23,7 +23,7 @@ from transformers import AutoTokenizer
 
 REQ_SOCK_PATH = "ipc:///tmp/vtt_req.sock"
 OUT_SOCK_PATH = "ipc:///tmp/vtt_out.sock"
-LLM_MODEL_PATH = "../../qwen3-0.6b"
+LLM_MODEL_PATH = "/home/teaonly/workspace/qwen3-0.6b"
 
 RECV_TIMEOUT_S = 120.0
 

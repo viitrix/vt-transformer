@@ -1,0 +1,154 @@
+;;
+;; Qwen3.0-0.6B 模型定义
+;;
+1024    "kHiddenSize" !
+3072    "kIntermediateSize" !
+28      "kNumLayers" !
+16      "kNumHeads" !
+8       "kNumKVHeads" !
+128     "kHeadDim" !
+151936  "kVocabSize" !
+/*
+constexpr int kQDim = kNumHeads   * kHeadDim;  // 2048
+constexpr int kKVDim = kNumKVHeads * kHeadDim; // 1024
+*/
+2048    "kQDim" !
+1024    "kKVDim" !
+
+2 "DATA_TYPE_SIZE" !
+
+256 "kMaxSeqLen"      !
+4   "kMaxRunningReqs" !
+
+;;
+;;  Create CUDA weight and naming
+;;
+"kVocabSize" @ "kHiddenSize" @ * "DATA_TYPE_SIZE" @ * "cuda" cuda.create "model.embed_tokens.weight" !
+"kHiddenSize" @ "DATA_TYPE_SIZE" @ * "cuda" cuda.create "model.norm.weight" !
+"kVocabSize" @ "kHiddenSize" @ * "DATA_TYPE_SIZE" @ * "cuda" cuda.create "lm_head.weight" !
+
+;; create & load laysers' weights
+%for 0 27
+    "kQDim" @ "kHiddenSize" @ * "DATA_TYPE_SIZE" @ *
+        "cuda" cuda.create "model.layers.%%.self_attn.q_proj.weight" !
+    "kKVDim" @ "kHiddenSize" @ * "DATA_TYPE_SIZE" @ * dup
+        "cuda" cuda.create "model.layers.%%.self_attn.k_proj.weight" !
+        "cuda" cuda.create "model.layers.%%.self_attn.v_proj.weight" !
+    "kQDim" @ "kHiddenSize" @ * "DATA_TYPE_SIZE" @ *
+        "cuda" cuda.create "model.layers.%%.self_attn.o_proj.weight" !
+    "kHeadDim" @ "DATA_TYPE_SIZE" @ * dup
+        "cuda" cuda.create "model.layers.%%.self_attn.q_norm.weight" !
+        "cuda" cuda.create "model.layers.%%.self_attn.k_norm.weight" !
+    "kIntermediateSize" @ "kHiddenSize" @ * "DATA_TYPE_SIZE" @ * dup
+        "cuda" cuda.create "model.layers.%%.mlp.gate_proj.weight" !
+        "cuda" cuda.create "model.layers.%%.mlp.up_proj.weight" !
+    "kHiddenSize" @ "kIntermediateSize" @ * "DATA_TYPE_SIZE" @ *
+        "cuda" cuda.create "model.layers.%%.mlp.down_proj.weight" !
+    "kHiddenSize" @ "DATA_TYPE_SIZE" @ * dup
+        "cuda" cuda.create "model.layers.%%.input_layernorm.weight" !
+        "cuda" cuda.create "model.layers.%%.post_attention_layernorm.weight" !
+%endf
+
+;;
+;;  加载权重文件
+;;
+"model.embed_tokens.weight" @ "weights/model.embed_tokens.weight.fp16" cuda.load
+"model.norm.weight" @ "weights/model.norm.weight.fp16" cuda.load
+"lm_head.weight" @ "weights/lm_head.weight.fp16" cuda.load
+%for 0 27
+    "model.layers.%%.self_attn.q_proj.weight" @ "weights/model.layers.%%.self_attn.q_proj.weight.fp16" cuda.load
+    "model.layers.%%.self_attn.k_proj.weight" @ "weights/model.layers.%%.self_attn.k_proj.weight.fp16" cuda.load
+    "model.layers.%%.self_attn.v_proj.weight" @ "weights/model.layers.%%.self_attn.v_proj.weight.fp16" cuda.load
+    "model.layers.%%.self_attn.o_proj.weight" @ "weights/model.layers.%%.self_attn.o_proj.weight.fp16" cuda.load
+    "model.layers.%%.self_attn.q_norm.weight" @ "weights/model.layers.%%.self_attn.q_norm.weight.fp16" cuda.load
+    "model.layers.%%.self_attn.k_norm.weight" @ "weights/model.layers.%%.self_attn.k_norm.weight.fp16" cuda.load
+    "model.layers.%%.mlp.gate_proj.weight" @ "weights/model.layers.%%.mlp.gate_proj.weight.fp16" cuda.load
+    "model.layers.%%.mlp.up_proj.weight" @ "weights/model.layers.%%.mlp.up_proj.weight.fp16" cuda.load
+    "model.layers.%%.mlp.down_proj.weight" @ "weights/model.layers.%%.mlp.down_proj.weight.fp16" cuda.load
+    "model.layers.%%.input_layernorm.weight" @ "weights/model.layers.%%.input_layernorm.weight.fp16" cuda.load
+    "model.layers.%%.post_attention_layernorm.weight" @ "weights/model.layers.%%.post_attention_layernorm.weight.fp16" cuda.load
+%endf
+
+;;
+;;  KV Cache 内存池（目标 ~128MB）
+;;
+;; 每个 Token 在每一层占的 KV 数据：
+;;   每层 K + V 两个张量，形状都是 [kNumKVHeads, kHeadDim] = kKVDim 个元素
+;;   per_layer = 2 × kKVDim × DATA_TYPE_SIZE
+2 "kKVDim" @ * "DATA_TYPE_SIZE" @ *
+    "kKVPerLayerBytes" !     ;; = 2 × 1024 × 2 = 4096 B
+
+;; 所有层累加得到 per_token：
+;;   per_token = kNumLayers × per_layer
+"kNumLayers" @ "kKVPerLayerBytes" @ *
+    "kKVPerTokenBytes" !     ;; = 28 × 4096 = 114688 B
+
+128 1024 1024 * *  "kKVCacheBudget" !       ;; 128 MB = 134217728
+
+;; num_blocks = budget // (block_size × per_token) = 292
+"kKVCacheBudget" @ "kKVPerTokenBytes" @ //
+    "kNumCachedTokens" !
+
+;; 实际分配 = num_blocks × block_size × per_token ≈ 127.5 MB
+"kNumCachedTokens" @ "kKVPerTokenBytes" @ *
+    "cuda" cuda.create "kv_cache" !
+
+;; KV Cache 管理变量，CUDA + HOST 各一份
+"kMaxRunningReqs" @ "kMaxSeqLen" @ * 4 * dup
+    "cuda" cuda.create "token_table" !
+    "host" cuda.create "token_table_cpu" !
+
+"kMaxRunningReqs" @ 4 * dup
+    "cuda" cuda.create "cached_lens" !
+    "host" cuda.create "cached_lens_cpu" !
+
+
+;;
+;; 计算过程需要的中间变量
+;;
+;; 同时处理的最大 token 数 = kMaxRunningReqs × kMaxSeqLen = 4 × 256 = 1024
+;;   prefill：每个 req 的 input 一次到位（极端情况 4 个 req 各占满 256）
+;;   decode  ：每步只处理每 req 的 1 个新 token，远小于上限
+;; 三块 buffer 在 28 层之间复用（同一时刻只算一层），不持久化每层结果。
+;;
+"kMaxRunningReqs" @ "kMaxSeqLen" @ * "kMaxTokens" !
+
+;; xhidden: 当前层隐藏状态 [kMaxTokens × kHiddenSize]
+;;          行存寻址 xhidden[(row * kMaxSeqLen + pos) * kHiddenSize + dim]，
+;;          row 维已隐含在 kMaxTokens = kMaxRunningReqs × kMaxSeqLen 里，无需再乘。
+"kMaxTokens" @ "kHiddenSize" @ * "DATA_TYPE_SIZE" @ *
+    "cuda" cuda.create "xhidden" !
+
+"kMaxTokens" @ "kHiddenSize" @ * "DATA_TYPE_SIZE" @ *
+    "cuda" cuda.create "xnorm" !
+
+;; xq: q_proj 输出 [kMaxTokens × kQDim]，attention 计算时持有所有 head 的 query
+"kMaxTokens" @ "kQDim" @ * "DATA_TYPE_SIZE" @ *
+    "cuda" cuda.create "xq" !
+
+;; xout: 子层（attention / MLP）输出，与 xhidden 同形状，便于 residual add
+"kMaxTokens" @ "kHiddenSize" @ * "DATA_TYPE_SIZE" @ *
+    "cuda" cuda.create "xout" !
+
+;; xinter: MLP 中间激活 [kMaxTokens × kIntermediateSize]
+;;         存 SiLU(gate_proj) * up_proj 的结果，喂给 down_proj
+"kMaxTokens" @ "kIntermediateSize" @ * "DATA_TYPE_SIZE" @ *
+    "cuda" cuda.create "xinter" !
+
+;;
+;; working words
+;;
+%def prefill_request_to_cuda
+    "token_table_cpu" @ "token_table" @ cuda.to_device drop
+    "cached_lens_cpu" @ "cached_lens" @ cuda.to_device drop
+%end
+
+
+%def dump_xhidden
+    ;; 调试：切出 xhidden 第一个 token 的 view（offset 0，1024 fp16 = 2048 字节），
+    ;; 用 fp16 dump 出来；cuda.dump 自带 head 10 + tail 10，足够看是否被写脏。
+    cuda.sync
+    "xhidden" @ 0 1024 2 * 9 * cuda.view "fp16" cuda.dump
+    "xnorm" @ 0 1024 2 * 9 * cuda.view "fp16" cuda.dump
+    "xq" @ 0 2048 2 * 9 * cuda.view "fp16" cuda.dump
+%end
