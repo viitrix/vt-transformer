@@ -184,7 +184,8 @@ async def create_chat_completion(request: ChatCompletionRequest):
         input_ids = tokenizer.apply_chat_template(
             [m.model_dump() for m in request.messages],
             tokenize=True,
-            add_generation_prompt=True
+            add_generation_prompt=True,
+            return_dict=False
         )
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to apply chat template: {str(e)}")
