@@ -1,0 +1,25 @@
+.PHONY: all
+
+FLAGS = -Wall -Wno-sequence-point -O3 -fopenmp -D_USING_DEVICE_CUDA_ 
+INC = -I../../install/include \
+	  -I${CUDA_DIR}/include \
+	  -I${CUDNN_DIR}/include 
+
+LINK = -L../../install/lib \
+	   -L${CUDA_DIR}/lib64 \
+	   -L${CUDNN_DIR}/lib \
+	   -L/usr/lib/x86_64-linux-gnu \
+	   -ltokenizer_combo -ltokenizers_c -lreadline\
+	   -lssl -lcrypto \
+	   -ltensortype -lcuda_kernels -lbitsandbytes -lcudnn -lcudart -lcublas -lcublasLt -lcusparse 
+
+all: chat 
+
+chat: chat.cpp memory.hpp ../../install/lib/libtensortype.a 
+	g++ $(FLAGS) -o $@ $< $(INC) $(LINK)
+
+runq4: chat 
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${DNNL_DIR}/lib:${CUDA_DIR}/lib64:${NCCL_DIR}/lib:${CUDNN_DIR}/lib:${VT_SOURCE}/install/lib ./chat ./inference_q4.dag
+
+clean:
+	rm -f chat
