@@ -1,8 +1,0 @@
-dup "host" cuda.create "tok_table_host" !
-"cuda" cuda.create "tok_table" !
-dup "host" cuda.create "idx_table_host" !
-"cuda" cuda.create "idx_table" !
-dup "host" cuda.create "flags_table_host" !
-"cuda" cuda.create "flags_table" !
-dup "host" cuda.create "batch_table_host" !
-"cuda" cuda.create "batch_table" !
