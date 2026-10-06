@@ -1,0 +1,18 @@
+#
+# Qwen3.5-0.8B inference and verification
+#
+
+import torch
+import vt_lang as vt
+
+WEIGHT_FILE = "/home/teaonly/workspace/Qwen3.5-0.8B/model.safetensors.index.json"
+ACTIVITY_FILE = "/home/teaonly/workspace/vt-transformer/models/Qwen3.5-0.8B/qwen3.5-0.8b-vt.safetensors"
+
+vt.register_safetensors(WEIGHT_FILE, ACTIVITY_FILE)
+
+## Weight + Check
+@vt.NodeChecker({"embed_tokens": "model.language_model.embed_tokens.weight"}, ["model.language_model.embed_tokens.out"] )
+def embedding(ids):
+    return torch.embedding(embed_tokens, ids)
+
+
