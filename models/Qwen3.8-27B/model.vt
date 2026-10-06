@@ -1,0 +1,439 @@
+#
+# Qwen3.8-27B inference and verification
+#
+# Model layout (text config of the multimodal Qwen3_5ForConditionalGeneration
+# checkpoint; only the text stack is verified):
+#   64 decoder layers, layer_types: linear_attention except every 4th
+#   (3, 7, ... 63) is full_attention.
+#   - linear attention: Qwen3.5 gated delta net with GVA --
+#     16 key heads x 128 but 48 value heads x 128 (q/k are
+#     repeat-interleaved 3x to the value heads inside the kernel),
+#     in_proj_qkv/a/b/z, depthwise causal conv1d + silu, decay
+#     g = -exp(A_log) * softplus(a + dt_bias), chunked gated delta rule
+#     (plain-torch reference kernel), gated RMSNorm, out_proj
+#   - full attention: gated GQA self-attention with partial RoPE
+#     (24 heads / 4 kv heads, head_dim 256, rotary_dim 64, theta 1e7)
+#     and per-head q/k RMSNorm, sigmoid output gate
+#   - MLP: SwiGLU (gate/up/down, intermediate 17408)
+#   - RMSNorm is zero-centered: x * (1 + weight)
+#   - lm_head is NOT tied to embed_tokens (vocab 248320)
+#
+# The dump (dump.py) runs the HF reference with eager attention and the
+# plain-torch fallback kernels on the GPU, so every node below
+# re-implements exactly those formulas with std-operators only and runs
+# on the same device (bf16 matmuls must match the reference bitwise;
+# keep dump and verification on the same --device).
+
+import torch
+import torch.nn.functional
+import vt_lang as vt
+
+# std-operators alias: "linear" is torch.nn.functional.linear (see
+# std_operators.TORCH_ALIASES; the runtime does not patch it onto torch)
+linear = torch.nn.functional.linear
+silu = torch.nn.functional.silu
+
+WEIGHT_FILE = "/home/teaonly/workspace/Qwen3.8-27B-fp16/model.safetensors.index.json"
+ACTIVITY_FILE = "/home/teaonly/workspace/vt-transformer/models/Qwen3.8-27B/qwen3.8-27b-vt.safetensors"
+
+vt.register_safetensors(WEIGHT_FILE, ACTIVITY_FILE)
+
+# ---- model constants (text config) ---------------------------------------
+HIDDEN = 5120
+NUM_LAYERS = 64
+FULL_ATTENTION_INTERVAL = 4          # layers 3, 7, ... are full attention
+RMS_EPS = 1e-6
+COMPUTE_DTYPE = torch.bfloat16   # hidden states run in bf16 (dump stores fp32)
+
+# full attention
+NUM_HEADS = 24
+NUM_KV_HEADS = 4
+HEAD_DIM = 256
+ROTARY_DIM = 64                      # head_dim * partial_rotary_factor (0.25)
+ROPE_THETA = 10000000.0
+
+# linear attention (gated delta net, GVA)
+L_K_HEADS = 16                       # linear_num_key_heads
+L_V_HEADS = 48                       # linear_num_value_heads (3x the key heads)
+L_HEAD_DIM = 128                     # key/value head dim
+L_REPEAT = L_V_HEADS // L_K_HEADS    # q/k repeat-interleave factor (3)
+CONV_KERNEL = 4
+
+L_KEY_DIM = L_K_HEADS * L_HEAD_DIM           # 2048
+L_VALUE_DIM = L_V_HEADS * L_HEAD_DIM         # 6144
+L_QKV_DIM = L_KEY_DIM * 2 + L_VALUE_DIM      # 10240
+
+# Weights and CLI activations load on the CPU; the whole graph runs on one
+# device to keep bf16 numerics identical to the reference dump.
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
+
+def dev(t):
+    """Move a tensor (weight or CLI-loaded activation) to the compute device."""
+    return t.to(DEVICE)
+
+
+def rope_tables(seq_len, dtype, device):
+    """RoPE cos/sin tables [seq_len, ROTARY_DIM] for text-only input.
+
+    Text positions feed the same arange into all three mrope sections, so
+    the mrope interleaved recomposition collapses to the standard layout
+    cos = cat(freqs, freqs). Trig functions are not part of std-operators,
+    so this runs as a plain (non-node) helper on the host.
+    """
+    inv_freq = 1.0 / (
+        ROPE_THETA ** (torch.arange(0, ROTARY_DIM, 2, dtype=torch.float, device=device) / ROTARY_DIM)
+    )
+    freqs = torch.arange(seq_len, dtype=torch.float, device=device).unsqueeze(-1) * inv_freq
+    cos = torch.cat((freqs.cos(), freqs.cos()), dim=-1)
+    sin = torch.cat((freqs.sin(), freqs.sin()), dim=-1)
+    return cos.to(dtype), sin.to(dtype)
+
+
+# Opaque helpers: fused primitives the reference kernel itself calls
+# (LAPACK trsm / F.softplus / cudnn depthwise conv1d); std-operators has no
+# primitive for them, so they are bound as-is to keep GPU numerics bitwise
+# identical to the reference dump.
+solve_triangular = torch.linalg.solve_triangular
+softplus = torch.nn.functional.softplus
+conv1d = torch.nn.functional.conv1d
+
+
+def causal_conv1d(qkv, w):
+    """Depthwise causal conv1d exactly as the reference fallback runs it:
+    F.conv1d(x [b, C, s], w [C, 1, K], padding=K-1)[:, :, :s]. qkv is
+    [b, s, C]; returns [b, s, C]."""
+    w = w.reshape(-1, CONV_KERNEL)
+    out = conv1d(qkv.transpose(1, 2), w.unsqueeze(1), padding=CONV_KERNEL - 1, groups=w.shape[0])
+    return out[:, :, : qkv.shape[1]].transpose(1, 2).contiguous()
+
+
+def l2norm(x, dim=-1, eps=1e-6):
+    """L2 norm over `dim`, as used inside the gated delta kernel."""
+    return x * torch.rsqrt(torch.sum(x * x, dim=dim, keepdim=True) + eps)
+
+
+CHUNK = 64  # gated delta rule chunk size (same as the reference kernel)
+
+
+def gated_delta_chunk(query, key, value, g, beta):
+    """Chunked gated delta rule -- a verbatim port of the reference kernel
+    (transformers Qwen3_5 torch_chunk_gated_delta_rule), which the reference
+    dump also runs: bitwise-identical numerics. Inputs follow the kernel
+    signature: query/key [b, s, 16, 128], value [b, s, 48, 128], decay g
+    [b, s, 48] (log space, fp32), beta [b, s, 48]; returns [b, s, 48, 128]."""
+    chunk_size = CHUNK
+    initial_dtype = query.dtype
+    batch_size, sequence_length, _, k_head_dim = key.shape
+    num_v_heads, v_head_dim = value.shape[-2:]
+    device = query.device
+
+    # fp32, [b, heads, s, dim]
+    query, key, value, beta, decay = [
+        x.transpose(1, 2).to(torch.float, memory_format=torch.contiguous_format)
+        for x in (query, key, value, beta, g)
+    ]
+    query = l2norm(query, dim=-1, eps=1e-6)
+    key = l2norm(key, dim=-1, eps=1e-6)
+    query = query * (query.shape[-1] ** -0.5)
+
+    # pad the sequence to a multiple of chunk_size
+    pad_size = (chunk_size - sequence_length % chunk_size) % chunk_size
+    query = torch.cat((query, torch.zeros(batch_size, query.shape[1], pad_size, query.shape[3], device=device)), dim=2)
+    key = torch.cat((key, torch.zeros(batch_size, key.shape[1], pad_size, key.shape[3], device=device)), dim=2)
+    value = torch.cat((value, torch.zeros(batch_size, value.shape[1], pad_size, value.shape[3], device=device)), dim=2)
+    beta = torch.cat((beta, torch.zeros(batch_size, beta.shape[1], pad_size, device=device)), dim=2)
+    decay = torch.cat((decay, torch.zeros(batch_size, decay.shape[1], pad_size, device=device)), dim=2)
+
+    total_sequence_length = sequence_length + pad_size
+    num_chunks = total_sequence_length // chunk_size
+
+    # beta-weighted key/value ("learning rate" of the state update)
+    v_beta = value * beta.unsqueeze(-1)
+    k_beta = key * beta.unsqueeze(-1)
+
+    query = query.reshape(batch_size, query.shape[1], -1, chunk_size, query.shape[-1])
+    key = key.reshape(batch_size, key.shape[1], -1, chunk_size, key.shape[-1])
+    k_beta = k_beta.reshape(batch_size, k_beta.shape[1], -1, chunk_size, k_beta.shape[-1])
+    v_beta = v_beta.reshape(batch_size, v_beta.shape[1], -1, chunk_size, v_beta.shape[-1])
+    decay = decay.reshape(batch_size, decay.shape[1], -1, chunk_size)
+
+    pos = torch.arange(chunk_size, device=device)
+    strictly_upper = pos.reshape(1, chunk_size) > pos.reshape(chunk_size, 1)
+    cum_decay = decay.cumsum(dim=3)
+
+    pairwise_decay = cum_decay.unsqueeze(4) - cum_decay.unsqueeze(3)
+    pairwise_decay = pairwise_decay.masked_fill(strictly_upper, float("-inf"))
+    pairwise_decay = pairwise_decay.exp()
+
+    ut_system = (k_beta @ key.transpose(-1, -2)) * pairwise_decay
+    intra_chunk_attn = (query @ key.transpose(-1, -2)) * pairwise_decay
+    decayed_k_beta = k_beta * cum_decay.exp().unsqueeze(-1)
+
+    new_values = solve_triangular(ut_system, v_beta, upper=False, unitriangular=True)
+    k_cumdecay = solve_triangular(ut_system, decayed_k_beta, upper=False, unitriangular=True)
+
+    last_recurrent_state = torch.zeros(
+        batch_size, num_v_heads, k_head_dim, v_head_dim, dtype=new_values.dtype, device=device
+    )
+    core_attn_out = torch.zeros_like(new_values)
+
+    query = query * cum_decay.exp().unsqueeze(-1)
+    last = torch.index_select(cum_decay, 3, torch.arange(chunk_size - 1, chunk_size, device=device))
+    key = key * (last - cum_decay).exp().unsqueeze(-1)
+    chunk_decay = last.squeeze(3).exp()
+
+    for i in range(num_chunks):
+        v_new = new_values[:, :, i] - k_cumdecay[:, :, i] @ last_recurrent_state
+        inter_chunk_attn = query[:, :, i] @ last_recurrent_state
+        step_out = inter_chunk_attn + intra_chunk_attn[:, :, i] @ v_new
+        core_attn_out = torch.cat(
+            (core_attn_out[:, :, :i], step_out.unsqueeze(2), core_attn_out[:, :, i + 1:]), dim=2
+        )
+        last_recurrent_state = (
+            last_recurrent_state * chunk_decay[:, :, i].unsqueeze(-1).unsqueeze(-1)
+            + key[:, :, i].transpose(-1, -2) @ v_new
+        )
+
+    core_attn_out = core_attn_out.reshape(
+        batch_size, num_v_heads, -1, v_head_dim
+    )
+    core_attn_out = core_attn_out[:, :, :sequence_length]
+    return core_attn_out.transpose(1, 2).contiguous().to(initial_dtype)
+
+
+def rms_norm_1p(x32, weight):
+    """Zero-centered Qwen3.5 RMSNorm on the last dim; x32 must be float32."""
+    var = torch.mean(torch.pow(x32, 2), dim=-1, keepdim=True)
+    return x32 * torch.rsqrt(var + RMS_EPS) * (1.0 + weight.float())
+
+
+@vt.NodeChecker(
+    {"embed_tokens": "model.language_model.embed_tokens.weight",},
+    ["model.language_model.embed_tokens.out",],
+)
+def embedding(ids):
+    return torch.embedding(dev(embed_tokens), dev(ids))
+
+
+@vt.NodeChecker(
+    {"norm_w": "model.language_model.layers.{layer}.{module}.weight"},
+    ["model.language_model.layers.{layer}.{module}.out"],
+    ["layer", "module"],
+)
+def rms_norm(x, layer, module):
+    w = dev(norm_w)
+    # round to the weight dtype (bf16): standalone calls get fp32 activations
+    return rms_norm_1p(x.float(), w).to(w.dtype)
+
+
+@vt.NodeChecker(
+    {"norm_w": "model.language_model.norm.weight"},
+    ["model.language_model.norm.out"],
+)
+def final_norm(x):
+    w = dev(norm_w)
+    # round to the weight dtype (bf16): standalone calls get fp32 activations
+    return rms_norm_1p(x.float(), w).to(w.dtype)
+
+
+@vt.NodeChecker(
+    {
+        "gate_w": "model.language_model.layers.{layer}.mlp.gate_proj.weight",
+        "up_w": "model.language_model.layers.{layer}.mlp.up_proj.weight",
+        "down_w": "model.language_model.layers.{layer}.mlp.down_proj.weight",
+    },
+    [
+        "model.language_model.layers.{layer}.mlp.gate_proj.out",
+        "model.language_model.layers.{layer}.mlp.up_proj.out",
+        "model.language_model.layers.{layer}.mlp.down_proj.out",
+    ],
+    ["layer"],
+)
+def mlp(x, layer):
+    gw, uw, dw = dev(gate_w), dev(up_w), dev(down_w)
+    x = x.to(gw.dtype)                          # activations dump as fp32
+    g = linear(x, gw)
+    u = linear(x, uw)
+    d = linear(silu(g) * u, dw)
+    return g, u, d
+
+
+@vt.NodeChecker(
+    {
+        "q_w": "model.language_model.layers.{layer}.self_attn.q_proj.weight",
+        "k_w": "model.language_model.layers.{layer}.self_attn.k_proj.weight",
+        "v_w": "model.language_model.layers.{layer}.self_attn.v_proj.weight",
+        "o_w": "model.language_model.layers.{layer}.self_attn.o_proj.weight",
+        "q_norm_w": "model.language_model.layers.{layer}.self_attn.q_norm.weight",
+        "k_norm_w": "model.language_model.layers.{layer}.self_attn.k_norm.weight",
+    },
+    [
+        "model.language_model.layers.{layer}.self_attn.q_proj.out",
+        "model.language_model.layers.{layer}.self_attn.k_proj.out",
+        "model.language_model.layers.{layer}.self_attn.v_proj.out",
+        "model.language_model.layers.{layer}.self_attn.o_proj.out",
+    ],
+    ["layer"],
+)
+def self_attn(x, layer):
+    # gated GQA attention: q_proj packs each head's query (256) and gate (256)
+    # (activations are dumped as fp32; run in the weight dtype like the model)
+    qw, kw, vw, ow = dev(q_w), dev(k_w), dev(v_w), dev(o_w)
+    qnw, knw = dev(q_norm_w), dev(k_norm_w)
+    x = x.to(qw.dtype)
+    b, s, _ = x.shape
+    q_raw = linear(x, qw)                      # [b, s, 12288]
+    k_raw = linear(x, kw)                      # [b, s, 1024]
+    v_raw = linear(x, vw)                      # [b, s, 1024]
+
+    half = torch.arange(HEAD_DIM, device=x.device)
+    qg = q_raw.reshape(b, s, NUM_HEADS, HEAD_DIM * 2)
+    q = torch.index_select(qg, 3, half)               # [b, s, 24, 256]
+    gate = torch.index_select(qg, 3, HEAD_DIM + half).reshape(b, s, NUM_HEADS * HEAD_DIM)
+
+    # per-head zero-centered RMSNorm, then [b, heads, s, head_dim]
+    q = rms_norm_1p(q.float(), qnw).to(x.dtype).transpose(1, 2)
+    k = rms_norm_1p(k_raw.reshape(b, s, NUM_KV_HEADS, HEAD_DIM).float(), knw)
+    k = k.to(x.dtype).transpose(1, 2)
+    v = v_raw.reshape(b, s, NUM_KV_HEADS, HEAD_DIM).transpose(1, 2)
+
+    # partial RoPE on the first ROTARY_DIM dims (text-only = standard layout)
+    cos, sin = rope_tables(s, x.dtype, x.device)
+    cos = cos.reshape(1, 1, s, ROTARY_DIM)
+    sin = sin.reshape(1, 1, s, ROTARY_DIM)
+    rh = ROTARY_DIM // 2
+    rh_idx = torch.cat((rh + torch.arange(rh, device=x.device), torch.arange(rh, device=x.device)))
+    sign = torch.cat((torch.full((rh,), -1.0, device=x.device), torch.ones(rh, device=x.device))).to(x.dtype)
+    pass_idx = ROTARY_DIM + torch.arange(HEAD_DIM - ROTARY_DIM, device=x.device)
+
+    def rope(t):
+        t_rot = torch.index_select(t, 3, torch.arange(ROTARY_DIM, device=x.device))
+        t_half = sign * torch.index_select(t_rot, 3, rh_idx)
+        t_embed = t_rot * cos + t_half * sin
+        return torch.cat((t_embed, torch.index_select(t, 3, pass_idx)), dim=3)
+
+    q, k = rope(q), rope(k)
+
+    # grouped-query repeat: 4 kv heads -> 24 heads
+    n_rep = NUM_HEADS // NUM_KV_HEADS
+    k = k.unsqueeze(2).expand(b, NUM_KV_HEADS, n_rep, s, HEAD_DIM)
+    k = k.reshape(b, NUM_HEADS, s, HEAD_DIM)
+    v = v.unsqueeze(2).expand(b, NUM_KV_HEADS, n_rep, s, HEAD_DIM)
+    v = v.reshape(b, NUM_HEADS, s, HEAD_DIM)
+
+    # causal attention (eager): bf16 scores, fp32 softmax
+    pos = torch.arange(s, device=x.device)
+    keep = pos.unsqueeze(0) <= pos.unsqueeze(-1)      # [q, k]: k <= q
+    mask = torch.where(keep, 0.0, -1e9).to(x.dtype)
+    scores = torch.matmul(q, k.transpose(2, 3)) * (HEAD_DIM ** -0.5)
+    weights = torch.softmax(scores + mask, dim=-1, dtype=torch.float).to(x.dtype)
+
+    attn = torch.matmul(weights, v)                   # [b, 24, s, 256]
+    attn = attn.transpose(1, 2).contiguous().reshape(b, s, NUM_HEADS * HEAD_DIM)
+    attn = attn * torch.sigmoid(gate)
+    return q_raw, k_raw, v_raw, linear(attn, ow)
+
+
+@vt.NodeChecker(
+    {
+        "qkv_w": "model.language_model.layers.{layer}.linear_attn.in_proj_qkv.weight",
+        "a_w": "model.language_model.layers.{layer}.linear_attn.in_proj_a.weight",
+        "b_w": "model.language_model.layers.{layer}.linear_attn.in_proj_b.weight",
+        "z_w": "model.language_model.layers.{layer}.linear_attn.in_proj_z.weight",
+        "A_log": "model.language_model.layers.{layer}.linear_attn.A_log",
+        "dt_bias": "model.language_model.layers.{layer}.linear_attn.dt_bias",
+        "conv_w": "model.language_model.layers.{layer}.linear_attn.conv1d.weight",
+        "gnorm_w": "model.language_model.layers.{layer}.linear_attn.norm.weight",
+        "out_w": "model.language_model.layers.{layer}.linear_attn.out_proj.weight",
+    },
+    [
+        "model.language_model.layers.{layer}.linear_attn.in_proj_qkv.out",
+        "model.language_model.layers.{layer}.linear_attn.in_proj_a.out",
+        "model.language_model.layers.{layer}.linear_attn.in_proj_b.out",
+        "model.language_model.layers.{layer}.linear_attn.in_proj_z.out",
+        "model.language_model.layers.{layer}.linear_attn.out_proj.out",
+    ],
+    ["layer"],
+)
+def linear_attn(x, layer):
+    qw, aw, bw, zw = dev(qkv_w), dev(a_w), dev(b_w), dev(z_w)
+    cw, gw, ow = dev(conv_w), dev(gnorm_w), dev(out_w)
+    A, dt = dev(A_log), dev(dt_bias)
+    x = x.to(qw.dtype)                           # activations dump as fp32
+    b, s, _ = x.shape
+    qkv = linear(x, qw)                          # [b, s, 10240]
+    z = linear(x, zw)                            # [b, s, 6144]
+    a = linear(x, aw)                            # [b, s, 48]
+    beta = torch.sigmoid(linear(x, bw))          # [b, s, 48]
+
+    # depthwise causal conv1d (kernel 4) + silu -- the fused F.conv1d call
+    # the reference makes (identical cudnn kernel => identical bf16 output)
+    conv = causal_conv1d(qkv, cw)
+    conv = silu(conv)                            # [b, s, 10240]
+
+    key_idx = torch.arange(L_KEY_DIM, device=x.device)
+    val_idx = 2 * L_KEY_DIM + torch.arange(L_VALUE_DIM, device=x.device)
+    q = torch.index_select(conv, 2, key_idx).reshape(b, s, L_K_HEADS, L_HEAD_DIM)
+    k = torch.index_select(conv, 2, L_KEY_DIM + key_idx).reshape(b, s, L_K_HEADS, L_HEAD_DIM)
+    v = torch.index_select(conv, 2, val_idx).reshape(b, s, L_V_HEADS, L_HEAD_DIM)
+
+    # GVA: q/k heads are repeated to the 48 value heads (repeat_interleave
+    # on dim 2 in the reference: head i -> heads 3i, 3i+1, 3i+2)
+    q = q.reshape(b, s, L_K_HEADS, 1, L_HEAD_DIM).expand(b, s, L_K_HEADS, L_REPEAT, L_HEAD_DIM)
+    q = q.reshape(b, s, L_V_HEADS, L_HEAD_DIM)
+    k = k.reshape(b, s, L_K_HEADS, 1, L_HEAD_DIM).expand(b, s, L_K_HEADS, L_REPEAT, L_HEAD_DIM)
+    k = k.reshape(b, s, L_V_HEADS, L_HEAD_DIM)
+
+    # decay g = -exp(A_log) * softplus(a + dt_bias), fp32 like the reference
+    g = -torch.exp(A.to(x.dtype).float()) * softplus(a.float() + dt.float())
+
+    # gated delta rule: the fused chunked kernel (same numerics as the
+    # reference dump: fp32 compute, q/k l2-normed inside, bf16 out)
+    core = gated_delta_chunk(q, k, v, g, beta)       # [b, s, 48, 128]
+    core = core.reshape(b, s, L_VALUE_DIM)
+
+    # gated RMSNorm (per 128-dim value head): norm in fp32, cast to bf16,
+    # * weight (stored fp32, module runs it in bf16), * silu(z), cast back
+    h32 = core.reshape(-1, L_HEAD_DIM).float()
+    var = torch.mean(torch.pow(h32, 2), dim=-1, keepdim=True)
+    h = gw.to(x.dtype) * (h32 * torch.rsqrt(var + RMS_EPS)).to(x.dtype)
+    h = h * silu(z.reshape(-1, L_HEAD_DIM).float())
+    h = h.to(x.dtype).reshape(b, s, L_VALUE_DIM)
+    return qkv, a, linear(x, bw), z, linear(h, ow)
+
+
+@vt.NodeChecker(
+    None,
+    ["model.language_model.layers.{layer}.out"],
+    ["layer"],
+)
+def decoder_layer(x, layer):
+    x = x.to(COMPUTE_DTYPE)                      # activations dump as fp32
+    h = rms_norm(x, layer=layer, module="input_layernorm")
+    if layer % FULL_ATTENTION_INTERVAL == FULL_ATTENTION_INTERVAL - 1:
+        _, _, _, h = self_attn(h, layer=layer)
+    else:
+        _, _, _, _, h = linear_attn(h, layer=layer)
+    x = x + h
+    h = rms_norm(x, layer=layer, module="post_attention_layernorm")
+    _, _, h = mlp(h, layer=layer)
+    return x + h
+
+
+@vt.NodeChecker(
+    # lm_head is NOT tied to the input embeddings in the 27B
+    {"head_w": "lm_head.weight"},
+    ["lm_head.out"],
+)
+def lm_head(x):
+    return linear(x.to(dev(head_w).dtype), dev(head_w))   # activations dump as fp32
+
+
+@vt.NodeChecker(None, None)
+def llm(ids):
+    tokens = embedding(ids)
+    for layer in range(NUM_LAYERS):
+        tokens = decoder_layer(tokens, layer=layer)
+    tokens = final_norm(tokens)
+    return lm_head(tokens)

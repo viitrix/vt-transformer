@@ -495,6 +495,10 @@ class NodeChecker:
             actual = outputs[position]
             key = key.format(**template_values)
             expected = load_activation(key)  # temporary; deleted below
+            if isinstance(actual, torch.Tensor):
+                # activations load on the CPU; the node graph may run on
+                # another device (e.g. the same GPU as the reference dump)
+                expected = expected.to(actual.device)
             try:
                 if not isinstance(actual, torch.Tensor) or actual.shape != expected.shape:
                     raise VtError(
