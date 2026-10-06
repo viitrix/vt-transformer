@@ -2,24 +2,42 @@
 """dump.py -- Qwen3.5-0.8B reference inference dump (HF Transformers).
 
 Runs the model with stock HuggingFace Transformers and saves the tensors
-needed for verification (currently: input_ids and the embed_tokens output;
-later: per-layer intermediate results) into a single safetensors file
+needed for verification into a single safetensors file
 (qwen3.5-0.8b-vt.safetensors) that model.vt compares against.
 
-All exported tensors keep the batch dimension, even when batch == 1:
-    input_ids                         -> [batch, seq_len]
-    model.language_model.embed_tokens.out -> [batch, seq_len, hidden]
+Exported per-node activations (batch dim kept, batch == 1):
+    input_ids                                        -> [batch, seq_len]
+    model.language_model.embed_tokens.out            -> [batch, seq_len, hidden]
+    model.language_model.layers.{N}.input_layernorm.out
+    model.language_model.layers.{N}.linear_attn.in_proj_qkv.out   (linear layers)
+    model.language_model.layers.{N}.linear_attn.in_proj_a.out
+    model.language_model.layers.{N}.linear_attn.in_proj_b.out
+    model.language_model.layers.{N}.linear_attn.in_proj_z.out
+    model.language_model.layers.{N}.linear_attn.out_proj.out
+    model.language_model.layers.{N}.self_attn.q_proj.out          (full layers)
+    model.language_model.layers.{N}.self_attn.k_proj.out
+    model.language_model.layers.{N}.self_attn.v_proj.out
+    model.language_model.layers.{N}.self_attn.o_proj.out
+    model.language_model.layers.{N}.mlp.gate_proj.out
+    model.language_model.layers.{N}.mlp.up_proj.out
+    model.language_model.layers.{N}.mlp.down_proj.out
+    model.language_model.layers.{N}.post_attention_layernorm.out
+    model.language_model.layers.{N}.out
+    model.language_model.norm.out
+    lm_head.out                                      -> [batch, seq_len, vocab]
+
+The attention implementation is forced to "eager" and the FLA kernels are
+not used (fla is not installed), so the reference matches the plain torch
+formulas that model.vt re-implements.
 
 NOTE on environments:
-    Prefer running this script in a CUDA-enabled venv (e.g. the vt-reference
-    venv) -- generation on CPU is slow for this model. The vt-lang venv ships
-    a CPU-only torch build; the script still runs there via --device cpu /
-    --device auto, just slower.
+    The vt-lang venv (CPU torch) is enough: only one prefill forward pass
+    plus a short generate is executed. A CUDA venv also works via --device.
 
 Usage:
-    <cuda-venv>/bin/python models/Qwen3.5-0.8B/dump.py
-    <cuda-venv>/bin/python models/Qwen3.5-0.8B/dump.py \
-        --prompt "Hello, introduce yourself." --max-new-tokens 64
+    vt-lang/.venv/bin/python models/Qwen3.5-0.8B/dump.py
+    vt-lang/.venv/bin/python models/Qwen3.5-0.8B/dump.py \
+        --prompt "Hello, introduce yourself." --max-new-tokens 16
 """
 
 from __future__ import annotations
@@ -38,6 +56,10 @@ DEFAULT_OUT = Path(__file__).resolve().parent / "qwen3.5-0.8b-vt.safetensors"
 # written to the output file in one shot.
 _exported: dict[str, torch.Tensor] = {}
 
+# True while the capture forward pass runs: hooks record only then, so the
+# generate() loop (many cached decode steps) does not overwrite the dump.
+_capturing = False
+
 
 def _save(out_path: Path) -> None:
     """Write all tensors in _exported to one safetensors file (overwrites).
@@ -52,7 +74,62 @@ def _save(out_path: Path) -> None:
             v = v.to(torch.float32)
         tensors[k] = v
     save_file(tensors, str(out_path))
-    print(f"saved {len(tensors)} tensors -> {out_path}: {sorted(tensors)}")
+    print(f"saved {len(tensors)} tensors -> {out_path}")
+
+
+def _hook(name: str):
+    """Forward hook that records a submodule output under `name`."""
+
+    def fn(module, args, output):
+        if _capturing:
+            _exported[name] = output
+
+    return fn
+
+
+def install_hooks(model) -> None:
+    """Register hooks for every node model.vt verifies."""
+    lm = model.model  # Qwen3_5TextModel (CausalLM top level is the text model)
+
+    model.get_input_embeddings().register_forward_hook(
+        _hook("model.language_model.embed_tokens.out")
+    )
+    if model.lm_head is not None and model.lm_head.weight is not None:
+        model.lm_head.register_forward_hook(_hook("lm_head.out"))
+    lm.norm.register_forward_hook(_hook("model.language_model.norm.out"))
+
+    for n, layer in enumerate(lm.layers):
+        p = f"model.language_model.layers.{n}"
+        layer.input_layernorm.register_forward_hook(_hook(f"{p}.input_layernorm.out"))
+        layer.post_attention_layernorm.register_forward_hook(
+            _hook(f"{p}.post_attention_layernorm.out")
+        )
+        layer.register_forward_hook(_hook(f"{p}.out"))
+        layer.mlp.gate_proj.register_forward_hook(_hook(f"{p}.mlp.gate_proj.out"))
+        layer.mlp.up_proj.register_forward_hook(_hook(f"{p}.mlp.up_proj.out"))
+        layer.mlp.down_proj.register_forward_hook(_hook(f"{p}.mlp.down_proj.out"))
+        if hasattr(layer, "linear_attn"):
+            for sub in ("in_proj_qkv", "in_proj_a", "in_proj_b", "in_proj_z", "out_proj"):
+                getattr(layer.linear_attn, sub).register_forward_hook(
+                    _hook(f"{p}.linear_attn.{sub}.out")
+                )
+        if hasattr(layer, "self_attn"):
+            for sub in ("q_proj", "k_proj", "v_proj", "o_proj"):
+                getattr(layer.self_attn, sub).register_forward_hook(
+                    _hook(f"{p}.self_attn.{sub}.out")
+                )
+
+
+@torch.no_grad()
+def capture(model, input_ids: torch.Tensor) -> None:
+    """One plain forward pass (no cache) recording every hooked tensor."""
+    global _capturing
+    _exported["input_ids"] = input_ids.cpu()
+    _capturing = True
+    try:
+        model(input_ids=input_ids, use_cache=False)
+    finally:
+        _capturing = False
 
 
 def load(model_path: str, device: str) -> tuple[AutoTokenizer, AutoModelForCausalLM]:
@@ -64,6 +141,7 @@ def load(model_path: str, device: str) -> tuple[AutoTokenizer, AutoModelForCausa
         model_path,
         dtype=torch.bfloat16,
         device_map=device,
+        attn_implementation="eager",
     )
     model.eval()
     return tokenizer, model
@@ -71,13 +149,8 @@ def load(model_path: str, device: str) -> tuple[AutoTokenizer, AutoModelForCausa
 
 @torch.no_grad()
 def generate(tokenizer, model, prompt: str, max_new_tokens: int, verbose: bool = True):
-    """One generation pass; returns (full text, new token id list)."""
+    """One generation pass (verification values come from capture(), not here)."""
     inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
-    # Keep the batch dimension: [batch, seq_len]
-    _exported["input_ids"] = inputs["input_ids"]
-    # Dump the embedding output, also with batch kept: [batch, seq_len, hidden]
-    embed_tokens = model.get_input_embeddings()
-    _exported["model.language_model.embed_tokens.out"] = embed_tokens(inputs["input_ids"])
     output = model.generate(
         **inputs,
         max_new_tokens=max_new_tokens,
@@ -101,16 +174,28 @@ def main() -> None:
         "--prompt", default="你好，简单介绍一下你自己。",
         help="prompt used for inference",
     )
-    parser.add_argument("--max-new-tokens", type=int, default=48)
+    parser.add_argument("--max-new-tokens", type=int, default=16)
     parser.add_argument(
         "--out", default=str(DEFAULT_OUT),
         help="output safetensors file for intermediate tensors",
     )
+    parser.add_argument(
+        "--no-generate", action="store_true",
+        help="skip the generation pass (dump intermediates only)",
+    )
     args = parser.parse_args()
 
     tokenizer, model = load(args.model, args.device)
-    print(f"model loaded: {args.model} (device={args.device}, dtype=bfloat16)")
-    generate(tokenizer, model, args.prompt, args.max_new_tokens)
+    print(f"model loaded: {args.model} (device={args.device}, dtype=bfloat16, attn=eager)")
+    install_hooks(model)
+
+    inputs = tokenizer(args.prompt, return_tensors="pt").to(model.device)
+    capture(model, inputs["input_ids"])
+    print(f"captured {len(_exported)} tensors from one prefill forward")
+
+    if not args.no_generate:
+        generate(tokenizer, model, args.prompt, args.max_new_tokens)
+
     _save(Path(args.out))
 
 
