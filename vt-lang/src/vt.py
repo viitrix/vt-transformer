@@ -265,12 +265,10 @@ def _check_std_operators(func):
     """
     try:
         source = textwrap.dedent(inspect.getsource(func))
-        # inspect.getsource includes the @decorator lines; drop them so the
-        # checker only sees the function body itself.
-        source = "\n".join(
-            line for line in source.splitlines() if not line.lstrip().startswith("@")
-        )
         tree = ast.parse(source)
+        # Drop the decorators (which may span several lines) so the checker
+        # only sees the function itself.
+        tree.body[0].decorator_list = []
     except (OSError, TypeError, IndentationError, SyntaxError) as exc:
         raise VtError(
             f"cannot read source of node {func.__name__!r} for the "
