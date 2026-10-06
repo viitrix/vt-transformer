@@ -10,9 +10,12 @@ ACTIVITY_FILE = "/home/teaonly/workspace/vt-transformer/models/Qwen3.5-0.8B/qwen
 
 vt.register_safetensors(WEIGHT_FILE, ACTIVITY_FILE)
 
-## Weight + Check
 @vt.NodeChecker({"embed_tokens": "model.language_model.embed_tokens.weight"}, ["model.language_model.embed_tokens.out"] )
 def embedding(ids):
     return torch.embedding(embed_tokens, ids)
 
 
+@vt.NodeChecker(None, None)
+def llm(ids):
+    tokens = embedding(ids)
+    

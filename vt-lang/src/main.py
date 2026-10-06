@@ -33,7 +33,7 @@ def main(argv=None):
         result = node(*inputs)
     except vt.VtError as exc:
         sys.exit(f"vt: {exc}")
-    if node.output_bindings:
-        print("Verify is OK")
+    except Exception as exc:  # node crashed: the call stack above shows where
+        sys.exit(f"vt: {type(exc).__name__}: {exc}")
     print("Output is:")
     print(result)
