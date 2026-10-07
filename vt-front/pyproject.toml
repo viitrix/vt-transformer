@@ -1,0 +1,78 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vt-front"
+version = "0.1.0"
+description = "Standalone LLM inference HTTP frontend (extracted from mini-sglang)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "numpy",
+    "torch",
+    "transformers>=4.56.0",
+    "huggingface_hub",
+    "pyzmq",
+    "uvicorn",
+    "fastapi",
+    "pydantic",
+    "prompt_toolkit",
+    "psutil",
+]
+
+[project.optional-dependencies]
+modelscope = ["modelscope"]
+dev = [
+    "pytest>=6.0",
+    "black>=22.0",
+    "ruff>=0.11.0",
+]
+
+[project.scripts]
+vt-front = "vt_front.server.launch:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["vt_front*"]
+
+[tool.black]
+line-length = 100
+target-version = ['py310']
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+lint.select = [
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "C4", # flake8-comprehensions
+]
+lint.ignore = [
+    "E501",  # line too long, handled by black
+    "B008",  # do not perform function calls in argument defaults
+]
+exclude = [
+    ".git",
+    ".venv",
+    "build",
+    "dist",
+    "__pycache__",
+    ".pytest_cache",
+    ".mypy_cache",
+]
