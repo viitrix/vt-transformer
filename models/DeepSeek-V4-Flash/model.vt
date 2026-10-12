@@ -1,0 +1,970 @@
+#
+# DeepSeek-V4-Flash inference and verification
+#
+# Model layout (text config):
+#   43 decoder layers + 1 MTP layer.
+#   Attention: 64 query heads, 1 shared KV head (head_dim 512, rope_head_dim 64),
+#     q_lora_rank 1024, grouped low-rank output projection (o_groups 8,
+#     o_lora_rank 1024), sliding window 128, compressed KV with per-layer
+#     compress_ratios (0 for layers 0/1, 4 for even layers 2..42, 128 for
+#     odd layers 3..41), indexer with top-512 on the ratio-4 layers.
+#   MoE: 256 routed experts (top-6) + 1 shared expert, moe_inter_dim 2048,
+#     swiglu_limit 10; the first 3 layers route by token id (`tid2eid`).
+#   Hyper-connections: 4 residual streams, Sinkhorn split with 20 iterations.
+#   Quantisation: FP8 weights (128x128 blocks) except the routed experts which
+#     are packed FP4 (32-element blocks); activations are quantised as well.
+#
+# This file describes the *prefill* pass that dump.py recorded (start_pos = 0);
+# the decode branches of Attention/Compressor/Indexer are out of scope.
+# See VT_PLAN.md for the node slicing and README.md for what the dump holds.
+#
+# Run one node at a time, e.g.
+#   vt model.vt attn_q layers.0.attn_norm.out prefix=layers.0. layer=0
+#
+import os
+from pathlib import Path
+
+import torch
+import torch.nn.functional
+import vt_lang as vt
+
+# std-operators aliases: "linear" is torch.nn.functional.linear and "silu" is
+# torch.nn.functional.silu (see std_operators.TORCH_ALIASES; torch itself has no
+# torch.linear / torch.silu)
+linear = torch.nn.functional.linear
+silu = torch.nn.functional.silu
+
+# Override sources without editing the computation description.
+WEIGHT_FILE = os.environ.get(
+    "VT_WEIGHT_FILE",
+    str(Path.home() / "workspace/infra/dsv4-flash/model.safetensors.index.json"),
+)
+ACTIVITY_FILE = os.environ.get(
+    "VT_ACTIVATION_FILE",
+    str(Path(__file__).with_name("deepseek-v4-flash-vt.safetensors")),
+)
+torch.set_num_threads(int(os.environ.get("VT_NUM_THREADS", "4")))
+vt.register_safetensors(WEIGHT_FILE, ACTIVITY_FILE)
+
+# ---- model constants (text config) ---------------------------------------
+HIDDEN = 4096
+NUM_LAYERS = 43
+HASH_LAYERS = 3
+WINDOW = 128
+NUM_HEADS = 64
+HEAD_DIM = 512
+ROTARY_DIM = 64
+Q_LORA_RANK = 1024
+O_GROUPS = 8
+O_LORA_RANK = 1024
+NUM_EXPERTS = 256
+TOP_K = 6
+MOE_INTER = 2048
+SWIGLU_LIMIT = 10.0
+ROUTE_SCALE = 1.5
+HC_MULT = 4
+HC_ITERS = 20
+HC_EPS = 1e-6
+NORM_EPS = 1e-6
+INDEX_TOP_K = 512
+ROPE_THETA = 10000.0
+COMPRESS_ROPE_THETA = 160000.0
+ROPE_FACTOR = 16.0
+BETA_FAST = 32
+BETA_SLOW = 1
+ORIGINAL_SEQ_LEN = 65536
+COMPUTE_DTYPE = torch.bfloat16
+COMPRESS_RATIOS = [0, 0, 4, 128, 4, 128, 4, 128, 4, 128, 4, 128, 4, 128, 4, 128,
+                   4, 128, 4, 128, 4, 128, 4, 128, 4, 128, 4, 128, 4, 128, 4, 128,
+                   4, 128, 4, 128, 4, 128, 4, 128, 4, 128, 4, 0]
+
+
+# =========================================================================
+# Helpers. The operator check only inspects the decorated node functions, so
+# anything the std-operator subset cannot express lives here: the quantisation
+# machinery (no log2/ceil/fp8 dtype in the subset), the fused primitives the
+# reference calls as kernels (`topk`, the MoE scatter), the trigonometric
+# rotary tables, and the Hadamard rotation.
+# =========================================================================
+FP8_MAX = 448.0
+FP4_MAX = 6.0
+FP8_BLOCK = 128
+FP4_BLOCK = 32
+E2M1_VALUES = torch.tensor([0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0])
+E2M1_MIDS = torch.tensor([0.25, 0.75, 1.25, 1.75, 2.5, 3.5, 5.0])
+E2M1_TIE = torch.tensor([0, 2, 2, 4, 4, 6, 6], dtype=torch.long)
+FP4_TABLE = torch.tensor([0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0,
+                          0.0, -0.5, -1.0, -1.5, -2.0, -3.0, -4.0, -6.0])
+
+# opaque primitives: not expressible / not allowed inside a node
+topk = torch.topk
+
+
+def scatter_add(dst, index, values):
+    """dst[index] += values -- a backend primitive, not a std-operator.
+
+    The reference adds the bf16 expert output into an fp32 accumulator, so the
+    promotion happens here (index_add needs both sides to agree).
+    """
+    return torch.index_add(dst, 0, index, values.to(dst.dtype))
+
+
+def e8m0_to_float(scale):
+    """F8_E8M0 -> float32: value = 2 ** (bits - 127)."""
+    return torch.pow(2.0, (scale.view(torch.uint8).to(torch.int32) - 127).to(torch.float))
+
+
+def act_quant(x, block=FP8_BLOCK):
+    """Quantise-dequantise activations to E4M3 with power-of-two block scales."""
+    n = x.size(-1)
+    blocks = x.reshape(*x.shape[:-1], n // block, block).float()
+    amax = blocks.abs().amax(dim=-1).clamp(min=1e-4)
+    scale = torch.pow(2.0, torch.ceil(torch.log2(amax / FP8_MAX)))
+    values = (blocks / scale.unsqueeze(-1)).clamp(-FP8_MAX, FP8_MAX)
+    values = values.to(torch.float8_e4m3fn).float() * scale.unsqueeze(-1)
+    return values.reshape(x.shape)
+
+
+def fp4_act_quant(x, block=FP4_BLOCK):
+    """Quantise-dequantise activations to E2M1 (round-half-to-even)."""
+    n = x.size(-1)
+    blocks = x.reshape(*x.shape[:-1], n // block, block).float()
+    amax = blocks.abs().amax(dim=-1).clamp(min=FP4_MAX * 2.0 ** -126)
+    scale = torch.pow(2.0, torch.ceil(torch.log2(amax / FP4_MAX)))
+    scaled = (blocks / scale.unsqueeze(-1)).clamp(-FP4_MAX, FP4_MAX)
+    magnitude = scaled.abs()
+    code = torch.bucketize(magnitude, E2M1_MIDS)
+    lower = (code - 1).clamp(min=0)
+    tie = (code > 0) & (magnitude == E2M1_MIDS[lower])
+    code = torch.where(tie, E2M1_TIE[lower], code)
+    values = scaled.sign() * E2M1_VALUES[code]
+    return (values * scale.unsqueeze(-1)).reshape(x.shape)
+
+
+def act_quant_bf16(x, block=FP8_BLOCK):
+    """The in-place variant of the reference: quantise, dequantise, round to bf16."""
+    return act_quant(x, block).to(COMPUTE_DTYPE)
+
+
+def fp4_act_quant_bf16(x, block=FP4_BLOCK):
+    return fp4_act_quant(x, block).to(COMPUTE_DTYPE)
+
+
+def dequant_weight(weight, scale, fp4=False):
+    """FP8 (128x128 blocks) or packed FP4 (per 32 along K) -> float32."""
+    if fp4:
+        packed = weight.view(torch.uint8)
+        low = (packed & 0x0F).to(torch.long)
+        high = ((packed >> 4) & 0x0F).to(torch.long)
+        values = torch.stack([FP4_TABLE[low], FP4_TABLE[high]], dim=-1).flatten(-2)
+        expanded = e8m0_to_float(scale).repeat_interleave(FP4_BLOCK, dim=1)
+        return values * expanded[:, : values.size(1)]
+    expanded = e8m0_to_float(scale).repeat_interleave(FP8_BLOCK, 0).repeat_interleave(FP8_BLOCK, 1)
+    return weight.float() * expanded[: weight.size(0), : weight.size(1)]
+
+
+def qlinear(x, weight, scale, fp4=False, block=FP8_BLOCK):
+    """Quantised activation x quantised weight, fp32 accumulate, bf16 out."""
+    return linear(act_quant(x, block), dequant_weight(weight, scale, fp4)).to(COMPUTE_DTYPE)
+
+
+def hadamard(size):
+    matrix = torch.ones(1, 1)
+    while matrix.shape[0] < size:
+        matrix = torch.cat([torch.cat([matrix, matrix], dim=1),
+                            torch.cat([matrix, -matrix], dim=1)], dim=0)
+    return matrix
+
+
+def rotate_activation(x):
+    """Hadamard rotation applied before the indexer's FP4 quantisation."""
+    size = x.size(-1)
+    return ((x.float() @ hadamard(size)) * (size ** -0.5)).to(COMPUTE_DTYPE)
+
+
+# the reference calls F.softplus (its log1p form matters: a log(1+exp(x)) rewrite
+# differs in the last bits and the drift accumulates over 43 layers)
+softplus = torch.nn.functional.softplus
+
+
+def _correction_dim(rotations, dim, base, max_seq_len):
+    import math
+    return dim * math.log(max_seq_len / (rotations * 2 * math.pi)) / (2 * math.log(base))
+
+
+def _correction_range(low_rot, high_rot, dim, base, max_seq_len):
+    import math
+    low = math.floor(_correction_dim(low_rot, dim, base, max_seq_len))
+    high = math.ceil(_correction_dim(high_rot, dim, base, max_seq_len))
+    return max(low, 0), min(high, dim - 1)
+
+
+def rope_tables(seq_len, theta, original_seq_len):
+    """Complex rotary table [seq_len, ROTARY_DIM/2] with optional YaRN scaling."""
+    freqs = 1.0 / (theta ** (torch.arange(0, ROTARY_DIM, 2, dtype=torch.float) / ROTARY_DIM))
+    if original_seq_len > 0:
+        low, high = _correction_range(BETA_FAST, BETA_SLOW, ROTARY_DIM, theta, original_seq_len)
+        if low == high:
+            high = high + 0.001
+        ramp = torch.clamp((torch.arange(ROTARY_DIM // 2, dtype=torch.float) - low) / (high - low), 0, 1)
+        smooth = 1 - ramp
+        freqs = freqs / ROPE_FACTOR * (1 - smooth) + freqs * smooth
+    positions = torch.arange(seq_len)
+    return torch.polar(torch.ones_like(torch.outer(positions, freqs)), torch.outer(positions, freqs))
+
+
+def apply_rope(x, freqs_cis, inverse=False):
+    """Complex rotation of the trailing ROTARY_DIM dims (apply_rotary_emb)."""
+    complex_x = torch.view_as_complex(x.float().unflatten(-1, (-1, 2)))
+    table = freqs_cis.conj() if inverse else freqs_cis
+    if complex_x.ndim == 3:
+        table = table.view(1, complex_x.size(1), complex_x.size(-1))
+    else:
+        table = table.view(1, complex_x.size(1), 1, complex_x.size(-1))
+    return torch.view_as_real(complex_x * table).flatten(-2).to(x.dtype)
+
+
+def rope_tail(x, freqs_cis, inverse=False):
+    """Apply the rotation to the last ROTARY_DIM dims, leaving the rest alone."""
+    rotated = apply_rope(x[..., -ROTARY_DIM:], freqs_cis, inverse)
+    return torch.cat([x[..., :-ROTARY_DIM], rotated], dim=-1)
+
+
+def layer_rope_tables(seq_len, ratio):
+    """Compressed layers use the YaRN table with theta 160000, the rest theta 10000."""
+    if ratio:
+        return rope_tables(seq_len, COMPRESS_ROPE_THETA, ORIGINAL_SEQ_LEN)
+    return rope_tables(seq_len, ROPE_THETA, 0)
+
+
+def window_index(bsz, seq_len, window=WINDOW):
+    """get_window_topk_idxs for a prefill pass: [bsz, seq_len, min(seq_len, window)]."""
+    positions = torch.arange(seq_len).unsqueeze(1)
+    matrix = (positions - window + 1).clamp(0) + torch.arange(min(seq_len, window))
+    matrix = torch.where(matrix > positions, -1, matrix)
+    return matrix.unsqueeze(0).expand(bsz, -1, -1)
+
+
+def compress_index(bsz, seq_len, ratio, offset):
+    """get_compress_topk_idxs for a prefill pass: [bsz, seq_len, seq_len // ratio]."""
+    matrix = torch.arange(seq_len // ratio).unsqueeze(0).expand(seq_len, -1)
+    mask = matrix >= (torch.arange(1, seq_len + 1).unsqueeze(1) // ratio)
+    matrix = torch.where(mask, -1, matrix + offset)
+    return matrix.unsqueeze(0).expand(bsz, -1, -1)
+
+
+def grouped_projection(o, wo_a):
+    """The reference's einsum("bsgd,grd->bsgr"), kept verbatim.
+
+    This contraction runs on bf16 operands and torch's CPU bf16 kernel
+    accumulates in its own order, which is part of the recorded numerics;
+    rewriting it as an fp32 matmul changes the result by one bf16 ulp.
+    """
+    return torch.einsum("bsgd,grd->bsgr", o, wo_a)
+
+
+def index_scores(q, kv):
+    """The indexer's einsum("bshd,btd->bsht"), kept verbatim for the same reason."""
+    return torch.einsum("bshd,btd->bsht", q, kv)
+
+
+def attention_scores(q, kv):
+    """sparse_attn's einsum("bmhd,bmtd->bmht"), kept verbatim (see grouped_projection)."""
+    return torch.einsum("bmhd,bmtd->bmht", q, kv)
+
+
+def attention_values(probs, kv):
+    """sparse_attn's einsum("bmht,bmtd->bmhd"), kept verbatim."""
+    return torch.einsum("bmht,bmtd->bmhd", probs, kv)
+
+
+def expert_batches(indices):
+    """Group tokens by expert: [(expert_id, token_positions, slot_positions), ...].
+
+    The reference uses torch.bincount + torch.where; neither is in the operator
+    subset (and the grouping is a dispatch primitive, not tensor maths), so it
+    lives here.
+    """
+    groups = []
+    for expert in range(NUM_EXPERTS):
+        tokens, slots = torch.where(indices == expert)
+        if tokens.numel():
+            groups.append((expert, tokens, slots))
+    return groups
+
+
+def rms_norm_formula(x, weight):
+    """RMSNorm of the reference: fp32 statistics, weight in fp32."""
+    var = torch.mean(torch.pow(x.float(), 2), dim=-1, keepdim=True)
+    return (weight.float() * (x.float() * torch.rsqrt(var + NORM_EPS))).to(x.dtype)
+
+
+# =========================================================================
+# Top level
+# =========================================================================
+@vt.NodeChecker(
+    {"embed_w": "embed.weight"},
+    ["embed.out"],
+)
+def embedding(ids):
+    return torch.embedding(embed_w, ids)
+
+
+@vt.NodeChecker(
+    {"norm_w": "norm.weight"},
+    ["norm.out"],
+)
+def final_norm(x):
+    return rms_norm_formula(x.to(COMPUTE_DTYPE), norm_w)
+
+
+@vt.NodeChecker(
+    {"head_w": "head.weight"},
+    ["head.out"],
+)
+def lm_head(x):
+    # ParallelHead.get_logits projects the last position only (the checkpoint
+    # stores lm_head in bf16, the model keeps it in fp32)
+    return linear(x[:, -1].float(), head_w.float())
+
+
+# =========================================================================
+# Per-layer pieces: norms and hyper-connections
+# =========================================================================
+@vt.NodeChecker(
+    {"norm_w": "{wprefix}{module}.weight"},
+    ["{prefix}{module}.out"],
+    ["prefix", "wprefix", "module"],
+)
+def rms_norm(x, prefix, wprefix, module):
+    return rms_norm_formula(x.to(COMPUTE_DTYPE), norm_w)
+
+
+@vt.NodeChecker(
+    {
+        "hc_fn": "{wprefix}hc_{which}_fn",
+        "hc_base": "{wprefix}hc_{which}_base",
+        "hc_scale": "{wprefix}hc_{which}_scale",
+    },
+    [
+        "{prefix}hc_{which}.pre",
+        "{prefix}hc_{which}.post",
+        "{prefix}hc_{which}.comb",
+        None,
+    ],
+    ["prefix", "wprefix", "which"],
+)
+def hc_split(x, prefix, wprefix, which):
+    # x: [b, s, HC_MULT, d] -> pre/post [b, s, HC_MULT], comb [b, s, HC_MULT, HC_MULT]
+    shape = x.size()
+    lead = shape[:-2]
+    flat = x.reshape(-1, shape[-2] * shape[-1]).float()
+    mixes = linear(flat, hc_fn) * torch.rsqrt(torch.mean(torch.pow(flat, 2), dim=-1, keepdim=True) + NORM_EPS)
+
+    pre = torch.sigmoid(mixes[:, :HC_MULT] * hc_scale[0] + hc_base[:HC_MULT]) + HC_EPS
+    post = 2.0 * torch.sigmoid(mixes[:, HC_MULT:2 * HC_MULT] * hc_scale[1]
+                               + hc_base[HC_MULT:2 * HC_MULT])
+    comb = (mixes[:, 2 * HC_MULT:] * hc_scale[2] + hc_base[2 * HC_MULT:]).reshape(-1, HC_MULT, HC_MULT)
+
+    comb = comb.softmax(dim=-1) + HC_EPS
+    comb = comb / (comb.sum(dim=-2, keepdim=True) + HC_EPS)
+    for _ in range(HC_ITERS - 1):
+        comb = comb / (comb.sum(dim=-1, keepdim=True) + HC_EPS)
+        comb = comb / (comb.sum(dim=-2, keepdim=True) + HC_EPS)
+
+    pre = pre.reshape(*lead, HC_MULT)
+    post = post.reshape(*lead, HC_MULT)
+    comb = comb.reshape(*lead, HC_MULT, HC_MULT)
+    reduced = torch.sum(pre.unsqueeze(-1) * flat.reshape(shape), dim=2)
+    return pre, post, comb, reduced.to(x.dtype)
+
+
+@vt.NodeChecker(None, None)
+def hc_merge(y, pre, post, comb, residual):
+    # y: [b, s, d], residual: [b, s, HC_MULT, d] -> [b, s, HC_MULT, d]
+    merged = (post.unsqueeze(-1) * y.unsqueeze(-2)
+              + torch.sum(comb.unsqueeze(-1) * residual.unsqueeze(-2), dim=2))
+    return merged.to(y.dtype)
+
+
+# =========================================================================
+# Attention sublayer. Input: the normalised hidden [b, s, d].
+# =========================================================================
+@vt.NodeChecker(
+    {
+        "wq_a_w": "{wprefix}attn.wq_a.weight", "wq_a_s": "{wprefix}attn.wq_a.scale",
+        "wq_b_w": "{wprefix}attn.wq_b.weight", "wq_b_s": "{wprefix}attn.wq_b.scale",
+    },
+    [
+        "{prefix}attn.wq_a.out",
+        "{prefix}attn.q_norm.out",
+        "{prefix}attn.wq_b.out",
+        "{prefix}attn.rope.rot.0.out",
+        "{prefix}attn.sparse_attn.in.q",
+    ],
+    ["prefix", "wprefix"],
+)
+def attn_q(x, prefix, wprefix, layer, start_pos=0):
+    x = x.to(COMPUTE_DTYPE)
+    q_raw = qlinear(x, wq_a_w, wq_a_s)                       # [b, s, Q_LORA_RANK]
+    qr = rms_norm(q_raw, prefix=prefix, wprefix=wprefix, module="attn.q_norm")
+    wide = qlinear(qr, wq_b_w, wq_b_s)                       # [b, s, NUM_HEADS * HEAD_DIM]
+    q = wide.reshape(wide.size(0), wide.size(1), NUM_HEADS, HEAD_DIM)
+    q = q * torch.rsqrt(torch.mean(torch.pow(q, 2), dim=-1, keepdim=True) + NORM_EPS)
+    # a decode step rotates at position start_pos, so the table starts there
+    table = layer_rope_tables(x.size(1) + start_pos, COMPRESS_RATIOS[layer])[start_pos:]
+    q = rope_tail(q, table)
+    # the recorded wq_b output is the module result *before* the per-head norm
+    # and the rotation (the hook fires as soon as the module returns)
+    return q_raw, qr, wide, q[..., -ROTARY_DIM:], q
+
+
+@vt.NodeChecker(
+    {
+        "wkv_w": "{wprefix}attn.wkv.weight", "wkv_s": "{wprefix}attn.wkv.scale",
+    },
+    [
+        "{prefix}attn.wkv.out",
+        "{prefix}attn.kv_norm.out",
+        "{prefix}attn.rope.rot.1.out",
+        None,
+    ],
+    ["prefix", "wprefix"],
+)
+def attn_kv(x, prefix, wprefix, layer, start_pos=0):
+    x = x.to(COMPUTE_DTYPE)
+    kv_raw = qlinear(x, wkv_w, wkv_s)                        # [b, s, HEAD_DIM]
+    kv_normed = rms_norm(kv_raw, prefix=prefix, wprefix=wprefix, module="attn.kv_norm")
+    table = layer_rope_tables(x.size(1) + start_pos, COMPRESS_RATIOS[layer])[start_pos:]
+    rotated = apply_rope(kv_normed[..., -ROTARY_DIM:], table)
+    kv = torch.cat([kv_normed[..., :-ROTARY_DIM], rotated], dim=-1)
+    # the non-rotary dims are FP8 simulated with a 64-element block
+    kv = torch.cat([act_quant_bf16(kv[..., :-ROTARY_DIM], 64), kv[..., -ROTARY_DIM:]], dim=-1)
+    return kv_raw, kv_normed, rotated, kv
+
+
+@vt.NodeChecker(
+    {
+        "attn_sink": "{wprefix}attn.attn_sink",
+    },
+    ["{prefix}attn.sparse_attn.out"],
+    ["prefix", "wprefix"],
+)
+def sparse_attention(q, kv, topk_idxs, prefix, wprefix):
+    # q: [b, m, h, d], kv: [b, n, d], topk_idxs: [b, m, topk] (-1 = no position)
+    q = q.to(COMPUTE_DTYPE)
+    kv = kv.to(COMPUTE_DTYPE)
+    size = q.size()
+    b, m, h, d = size
+    n = kv.size(1)
+    topk_len = topk_idxs.size(-1)
+
+    valid = topk_idxs >= 0
+    index = torch.clamp(topk_idxs, min=0)
+    index = index.reshape(b, m, topk_len, 1).expand(b, m, topk_len, kv.size(-1))
+    source = kv.reshape(b, 1, n, kv.size(-1)).expand(b, m, n, kv.size(-1))
+    gathered = torch.gather(source, 2, index).float()        # [b, m, topk, d]
+
+    scores = attention_scores(q.float(), gathered) * (HEAD_DIM ** -0.5)
+    scores = scores.masked_fill(~valid.unsqueeze(2), float("-inf"))
+    row_max = torch.max(scores, dim=-1, keepdim=True)[0]
+    has_valid = torch.sum(valid.to(torch.int32), dim=-1) > 0
+    row_max = torch.where(has_valid.unsqueeze(-1).unsqueeze(-1),
+                          row_max, torch.zeros_like(row_max))
+    probs_fp32 = torch.exp(scores - row_max)
+    denom = torch.sum(probs_fp32, dim=-1) + torch.exp(attn_sink.float() - row_max.squeeze(-1))
+    probs_bf16 = probs_fp32.to(COMPUTE_DTYPE).float()
+    out = attention_values(probs_bf16, gathered) / denom.unsqueeze(-1)
+    out = torch.where(has_valid.unsqueeze(-1).unsqueeze(-1), out, torch.zeros_like(out))
+    return out.to(COMPUTE_DTYPE)
+
+
+@vt.NodeChecker(
+    {
+        "wo_a_w": "{wprefix}attn.wo_a.weight", "wo_a_s": "{wprefix}attn.wo_a.scale",
+        "wo_b_w": "{wprefix}attn.wo_b.weight", "wo_b_s": "{wprefix}attn.wo_b.scale",
+    },
+    [
+        "{prefix}attn.rope.o_inv.out",
+        "{prefix}attn.wo_b.in",
+        "{prefix}attn.wo_b.out",
+        "{prefix}attn.out",
+    ],
+    ["prefix", "wprefix"],
+)
+def attn_out(x, prefix, wprefix, layer, start_pos=0):
+    # x: the sparse-attention result [b, s, h, d]. The reference rotates the
+    # trailing ROTARY_DIM dims back, then applies the grouped low-rank output
+    # projection (an einsum there, reshape + matmul here) and wo_b.
+    x = x.to(COMPUTE_DTYPE)
+    table = layer_rope_tables(x.size(1) + start_pos, COMPRESS_RATIOS[layer])[start_pos:]
+    rotated = rope_tail(x, table, inverse=True)
+    b, s, h, d = rotated.size()
+    # the loader dequantises wo_a straight to bf16, so the model multiplies bf16
+    wo_a = dequant_weight(wo_a_w, wo_a_s).to(COMPUTE_DTYPE)
+    grouped = rotated.reshape(b, s, O_GROUPS, (h * d) // O_GROUPS)
+    wo_a = wo_a.reshape(O_GROUPS, O_LORA_RANK, (h * d) // O_GROUPS)
+    o = grouped_projection(grouped, wo_a).reshape(b, s, O_GROUPS * O_LORA_RANK)
+    # Attention.forward returns wo_b's output directly, so `attn.out` and
+    # `attn.wo_b.out` are the same tensor -- both are recorded, both declared
+    wo = qlinear(o, wo_b_w, wo_b_s)
+    return rotated[..., -ROTARY_DIM:], o, wo, wo
+
+
+# =========================================================================
+# Compressor (only on ratio 4 / 128 layers), prefill branch of
+# Compressor.forward. The decode state machine is out of scope.
+# =========================================================================
+INDEX_HEADS = 64
+INDEX_HEAD_DIM = 128
+
+
+def overlap_transform(tensor, head_dim, value):
+    """Compressor.overlap_transform: [b, chunks, ratio, 2*head_dim] -> [b, chunks, 2*ratio, head_dim]."""
+    first = tensor[..., :head_dim]
+    second = tensor[..., head_dim:]
+    filler = tensor.new_full((tensor.size(0), 1, tensor.size(2), head_dim), value)
+    return torch.cat([torch.cat([filler, first[:, :-1]], dim=1), second], dim=2)
+
+
+def layer_prefix(layer):
+    """Key prefix of a decoder layer, e.g. "layers.7." (string building is not a node op)."""
+    return "layers." + "%d" % layer + "."
+
+
+@vt.NodeChecker(
+    {
+        "wkv_w": "{prefix}{path}.wkv.weight",
+        "wgate_w": "{prefix}{path}.wgate.weight",
+    },
+    [
+        "{prefix}{path}.wkv.out",
+        "{prefix}{path}.wgate.out",
+    ],
+    ["prefix", "path"],
+)
+def compressor_split(x, prefix, path):
+    # both projections are fp32 linears (bf16 weights in the checkpoint, kept
+    # in fp32 by the model), so they are not quantised
+    x = x.to(COMPUTE_DTYPE).float()
+    return linear(x, wkv_w.float()), linear(x, wgate_w.float())
+
+
+@vt.NodeChecker(
+    {
+        "ape": "{prefix}{path}.ape",
+        "comp_norm_w": "{prefix}{path}.norm.weight",
+    },
+    [
+        "{prefix}{path}.out",
+        "{prefix}{path}.norm.out",
+        "{prefix}{rot_out}",
+    ],
+    ["prefix", "path", "rot_out"],
+)
+def compressor_pool(wkv_out, wgate_out, prefix, path, rot_out, ratio, rotate):
+    # `rotate` is 1 for the indexer's compressor and 0 for the attention's; it is
+    # an int because the CLI parses int/float only ("False" would stay a string)
+    # pool every `ratio` tokens with a learned gate, then norm, rotate, quantise
+    seq_len = wkv_out.size(1)
+    overlap = (ratio == 4)
+    head_dim = wkv_out.size(-1) // (1 + overlap)
+    kv, score = wkv_out, wgate_out
+    remainder = seq_len % ratio
+    cutoff = seq_len - remainder
+    if remainder > 0:
+        kv = kv[:, :cutoff]
+        score = score[:, :cutoff]
+
+    kv = kv.reshape(kv.size(0), -1, ratio, kv.size(-1))
+    score = score.reshape(score.size(0), -1, ratio, score.size(-1)) + ape
+    if overlap:
+        kv = overlap_transform(kv, head_dim, 0.0)
+        score = overlap_transform(score, head_dim, float("-inf"))
+    pooled = torch.sum(kv * score.softmax(dim=2), dim=2)
+
+    normed = rms_norm(pooled.to(COMPUTE_DTYPE), prefix=prefix, wprefix=prefix, module=path + ".norm")
+    table = layer_rope_tables(seq_len, ratio)[:cutoff:ratio]
+    rotated = apply_rope(normed[..., -ROTARY_DIM:], table)
+    pooled = torch.cat([normed[..., :-ROTARY_DIM], rotated], dim=-1)
+    if rotate:
+        pooled = rotate_activation(pooled)
+        pooled = fp4_act_quant_bf16(pooled, FP4_BLOCK)
+    else:
+        pooled = torch.cat([act_quant_bf16(pooled[..., :-ROTARY_DIM], 64),
+                            pooled[..., -ROTARY_DIM:]], dim=-1)
+    return pooled, normed, rotated
+
+
+# =========================================================================
+# Indexer (ratio 4 layers only), prefill branch of Indexer.forward.
+# =========================================================================
+@vt.NodeChecker(
+    {
+        "wq_b_w": "{prefix}attn.indexer.wq_b.weight", "wq_b_s": "{prefix}attn.indexer.wq_b.scale",
+        "weights_proj_w": "{prefix}attn.indexer.weights_proj.weight",
+    },
+    [
+        "{prefix}attn.indexer.wq_b.out",
+        "{prefix}attn.indexer.weights_proj.out",
+        "{prefix}attn.indexer.out",
+    ],
+    ["prefix"],
+)
+def indexer(x, qr, prefix, offset):
+    x = x.to(COMPUTE_DTYPE)
+    qr = qr.to(COMPUTE_DTYPE)
+    seq_len = x.size(1)
+    ratio = 4                                   # the indexer exists only on ratio-4 layers
+    if seq_len < ratio:
+        raise vt.VtError(
+            "this DeepSeek VT description requires at least 4 prefill tokens; "
+            "use the recorded 6-token input"
+        )
+
+    wide = qlinear(qr, wq_b_w, wq_b_s)          # [b, s, heads * head_dim]
+    q = wide.reshape(wide.size(0), wide.size(1), INDEX_HEADS, INDEX_HEAD_DIM)
+    q = rope_tail(q, layer_rope_tables(seq_len, ratio))
+    q = rotate_activation(q)
+    q = fp4_act_quant_bf16(q, FP4_BLOCK)
+
+    wkv_out, wgate_out = compressor_split(x, prefix=prefix, path="attn.indexer.compressor")
+    pooled, _, _ = compressor_pool(wkv_out, wgate_out, prefix=prefix,
+                                   path="attn.indexer.compressor",
+                                   rot_out="attn.rope.rot.3.out", ratio=ratio, rotate=1)
+
+    raw_weights = linear(x, weights_proj_w).to(COMPUTE_DTYPE)
+    weights = raw_weights * (INDEX_HEAD_DIM ** -0.5 * INDEX_HEADS ** -0.5)
+
+    scores = index_scores(q, pooled)            # [b, s, heads, blocks]
+    scores = torch.maximum(scores, torch.zeros_like(scores))
+    scores = torch.sum(scores * weights.unsqueeze(-1), dim=2)
+
+    blocks = torch.arange(seq_len // ratio)
+    causal = torch.arange(1, seq_len + 1).unsqueeze(1) // ratio
+    mask = blocks.unsqueeze(0).expand(seq_len, -1) >= causal
+    scores = scores + torch.where(mask, float("-inf"), torch.zeros_like(scores))
+    picked = topk(scores, min(INDEX_TOP_K, seq_len // ratio), dim=-1)[1]
+    inside = picked >= causal
+    return wide, raw_weights, torch.where(inside, -1, picked + offset)
+
+
+# =========================================================================
+# MoE: the two routers, one expert, the shared expert, and the dispatch.
+# =========================================================================
+@vt.NodeChecker(
+    {
+        "gate_w": "{wprefix}ffn.gate.weight",
+        "tid2eid": "{wprefix}ffn.gate.tid2eid",
+    },
+    [
+        "{prefix}ffn.gate.out.0",
+        "{prefix}ffn.gate.out.1",
+    ],
+    ["prefix", "wprefix"],
+)
+def router_hash(x, ids, prefix, wprefix):
+    # layers 0..2 route by token id: the table gives the experts, the score
+    # only provides their weights (these layers have no router bias)
+    x = x.reshape(-1, x.size(-1))
+    scores = softplus(linear(x.float(), gate_w.float())).sqrt()
+    indices = torch.index_select(tid2eid, 0, ids.reshape(-1))
+    weights = torch.gather(scores, 1, indices.to(torch.int64))
+    weights = weights / torch.sum(weights, dim=-1, keepdim=True)
+    return weights * ROUTE_SCALE, indices
+
+
+@vt.NodeChecker(
+    {
+        "gate_w": "{wprefix}ffn.gate.weight",
+        "gate_b": "{wprefix}ffn.gate.bias",
+    },
+    [
+        "{prefix}ffn.gate.out.0",
+        "{prefix}ffn.gate.out.1",
+    ],
+    ["prefix", "wprefix"],
+)
+def router_score(x, prefix, wprefix):
+    x = x.reshape(-1, x.size(-1))
+    scores = softplus(linear(x.float(), gate_w.float())).sqrt()
+    original = scores
+    indices = topk(scores + gate_b, TOP_K, dim=-1)[1]
+    weights = torch.gather(original, 1, indices)
+    weights = weights / torch.sum(weights, dim=-1, keepdim=True)
+    return weights * ROUTE_SCALE, indices
+
+
+@vt.NodeChecker(
+    {
+        "w1_w": "{wprefix}ffn.experts.{expert}.w1.weight", "w1_s": "{wprefix}ffn.experts.{expert}.w1.scale",
+        "w2_w": "{wprefix}ffn.experts.{expert}.w2.weight", "w2_s": "{wprefix}ffn.experts.{expert}.w2.scale",
+        "w3_w": "{wprefix}ffn.experts.{expert}.w3.weight", "w3_s": "{wprefix}ffn.experts.{expert}.w3.scale",
+    },
+    [
+        "{prefix}ffn.experts.{expert}.w1.out",
+        "{prefix}ffn.experts.{expert}.w3.out",
+        "{prefix}ffn.experts.{expert}.w2.out",
+        "{prefix}ffn.experts.{expert}.out",
+    ],
+    ["prefix", "wprefix", "expert"],
+)
+def expert(x, weight, prefix, wprefix, expert):
+    # FP4 SwiGLU expert; the routing weight scales the hidden state before w2
+    x = x.to(COMPUTE_DTYPE)
+    gate = qlinear(x, w1_w, w1_s, fp4=True)
+    up = qlinear(x, w3_w, w3_s, fp4=True)
+    up32 = torch.clamp(up.float(), min=-SWIGLU_LIMIT, max=SWIGLU_LIMIT)
+    gate32 = torch.clamp(gate.float(), max=SWIGLU_LIMIT)
+    hidden = silu(gate32) * up32 * weight
+    out = qlinear(hidden.to(COMPUTE_DTYPE), w2_w, w2_s, fp4=True)
+    return gate, up, out, out
+
+
+@vt.NodeChecker(
+    {
+        "w1_w": "{wprefix}ffn.shared_experts.w1.weight", "w1_s": "{wprefix}ffn.shared_experts.w1.scale",
+        "w2_w": "{wprefix}ffn.shared_experts.w2.weight", "w2_s": "{wprefix}ffn.shared_experts.w2.scale",
+        "w3_w": "{wprefix}ffn.shared_experts.w3.weight", "w3_s": "{wprefix}ffn.shared_experts.w3.scale",
+    },
+    [
+        "{prefix}ffn.shared_experts.w1.out",
+        "{prefix}ffn.shared_experts.w3.out",
+        "{prefix}ffn.shared_experts.w2.out",
+        "{prefix}ffn.shared_experts.out",
+    ],
+    ["prefix", "wprefix"],
+)
+def shared_expert(x, prefix, wprefix):
+    # the shared expert is an FP8 SwiGLU and sees every token
+    x = x.to(COMPUTE_DTYPE)
+    gate = qlinear(x, w1_w, w1_s)
+    up = qlinear(x, w3_w, w3_s)
+    up32 = torch.clamp(up.float(), min=-SWIGLU_LIMIT, max=SWIGLU_LIMIT)
+    gate32 = torch.clamp(gate.float(), max=SWIGLU_LIMIT)
+    out = qlinear((silu(gate32) * up32).to(COMPUTE_DTYPE), w2_w, w2_s)
+    return gate, up, out, out
+
+
+@vt.NodeChecker(None, ["{prefix}ffn.out"], ["prefix"])
+def moe(x, ids, prefix, wprefix, layer):
+    shape = x.size()
+    flat = x.reshape(-1, shape[-1]).to(COMPUTE_DTYPE)
+    if layer < HASH_LAYERS:
+        weights, indices = router_hash(flat, ids, prefix=prefix, wprefix=wprefix)
+    else:
+        weights, indices = router_score(flat, prefix=prefix, wprefix=wprefix)
+
+    y = torch.zeros(flat.size(), dtype=torch.float)
+    for expert_id, tokens, slots in expert_batches(indices):
+        piece = torch.index_select(flat, 0, tokens)
+        # weights[idx, top] in the reference: pick the token's row first, then the
+        # slot -- gather() alone would number the rows of the *index*, not tokens
+        share = torch.gather(torch.index_select(weights, 0, tokens), 1, slots.unsqueeze(-1))
+        _, _, contribution, _ = expert(piece, share, prefix=prefix, wprefix=wprefix, expert=expert_id)
+        y = scatter_add(y, tokens, contribution)
+    _, _, shared, _ = shared_expert(flat, prefix=prefix, wprefix=wprefix)
+    y = y + shared
+    return y.to(flat.dtype).reshape(shape)
+
+
+# =========================================================================
+# Orchestration: one attention sublayer, then one decoder layer.
+# =========================================================================
+@vt.NodeChecker(
+    None,
+    [
+        "{prefix}attn.sparse_attn.in.kv",
+        "{prefix}attn.sparse_attn.in.topk_idxs",
+    ],
+    ["prefix"],
+)
+def attention(h, prefix, wprefix, layer, start_pos=0):
+    h = h.to(COMPUTE_DTYPE)
+    seq_len = h.size(1)
+    ratio = COMPRESS_RATIOS[layer]
+
+    _, qr, _, _, q = attn_q(h, prefix=prefix, wprefix=wprefix, layer=layer, start_pos=start_pos)
+    _, _, _, kv = attn_kv(h, prefix=prefix, wprefix=wprefix, layer=layer, start_pos=start_pos)
+    idxs = window_index(h.size(0), seq_len)
+    if ratio:
+        if ratio == 4:
+            _, _, compressed = indexer(h, qr, prefix=prefix, offset=seq_len)
+        else:
+            compressed = compress_index(h.size(0), seq_len, ratio, seq_len)
+        idxs = torch.cat([idxs, compressed], dim=-1)
+    idxs = idxs.to(torch.int32)
+
+    if ratio:
+        wkv_out, wgate_out = compressor_split(h, prefix=prefix, path="attn.compressor")
+        if seq_len >= ratio:
+            pooled, _, _ = compressor_pool(
+                wkv_out, wgate_out, prefix=prefix, path="attn.compressor",
+                rot_out="attn.rope.rot.4.out" if ratio == 4 else "attn.rope.rot.2.out",
+                ratio=ratio, rotate=0,
+            )
+            kv = torch.cat([kv, pooled], dim=1)
+
+    o = sparse_attention(q, kv, idxs, prefix=prefix, wprefix=wprefix)
+    _, _, out, _ = attn_out(o, prefix=prefix, wprefix=wprefix, layer=layer, start_pos=start_pos)
+    return kv, idxs, out
+
+
+@vt.NodeChecker(None, ["{prefix}out"], ["prefix"])
+def decoder_layer(x, ids, prefix, wprefix, layer):
+    x = x.to(COMPUTE_DTYPE)
+    pre, post, comb, reduced = hc_split(x, prefix=prefix, wprefix=wprefix, which="attn")
+    h = rms_norm(reduced, prefix=prefix, wprefix=wprefix, module="attn_norm")
+    _, _, h = attention(h, prefix=prefix, wprefix=wprefix, layer=layer)
+    x = hc_merge(h, pre, post, comb, x)
+
+    pre, post, comb, reduced = hc_split(x, prefix=prefix, wprefix=wprefix, which="ffn")
+    h = rms_norm(reduced, prefix=prefix, wprefix=wprefix, module="ffn_norm")
+    h = moe(h, ids, prefix=prefix, wprefix=wprefix, layer=layer)
+    return hc_merge(h, pre, post, comb, x)
+
+
+# =========================================================================
+# MTP and the top level. Only the prefill pass is described here: the decode
+# pass reads the MTP block's KV cache, which a stateless node cannot model.
+# =========================================================================
+@vt.NodeChecker(
+    {
+        "embed_w": "embed.weight",
+        "enorm_w": "mtp.0.enorm.weight",
+        "hnorm_w": "mtp.0.hnorm.weight",
+        "e_proj_w": "mtp.0.e_proj.weight", "e_proj_s": "mtp.0.e_proj.scale",
+        "h_proj_w": "mtp.0.h_proj.weight", "h_proj_s": "mtp.0.h_proj.scale",
+    },
+    [
+        "{prefix}embed.out",
+        "{prefix}enorm.out",
+        "{prefix}hnorm.out",
+        "{prefix}e_proj.out",
+        "{prefix}h_proj.out",
+        None,
+    ],
+    ["prefix"],
+)
+def mtp_fuse(hidden, ids, prefix):
+    # the MTP block fuses the last hidden state with the next token's embedding
+    hidden = hidden.to(COMPUTE_DTYPE)
+    raw = torch.embedding(embed_w, ids)
+    e = rms_norm(raw, prefix=prefix, wprefix="mtp.0.", module="enorm")
+    h = rms_norm(hidden, prefix=prefix, wprefix="mtp.0.", module="hnorm")
+    e_proj = qlinear(e, e_proj_w, e_proj_s)
+    h_proj = qlinear(h, h_proj_w, h_proj_s)
+    return raw, e, h, e_proj, h_proj, e_proj.unsqueeze(2) + h_proj
+
+
+@vt.NodeChecker(
+    {
+        "hc_fn": "mtp.0.hc_head_fn",
+        "hc_base": "mtp.0.hc_head_base",
+        "hc_scale": "mtp.0.hc_head_scale",
+        "norm_w": "mtp.0.norm.weight",
+        "head_w": "head.weight",
+    },
+    [
+        "{prefix}norm.out",
+        "{prefix}head.out",
+        "{prefix}out",
+        "{prefix}logits",
+    ],
+    ["prefix"],
+)
+def mtp_head(x, prefix):
+    x = x.to(COMPUTE_DTYPE)
+    flat = x.reshape(-1, x.size(-2) * x.size(-1)).float()
+    rsqrt = torch.rsqrt(torch.mean(torch.pow(flat, 2), dim=-1, keepdim=True) + NORM_EPS)
+    mixes = linear(flat, hc_fn) * rsqrt
+    pre = torch.sigmoid(mixes * hc_scale + hc_base) + HC_EPS
+    reduced = torch.sum(pre.unsqueeze(-1) * flat.reshape(x.size()), dim=2).to(x.dtype)
+    normed = rms_norm_formula(reduced, norm_w)
+    logits = linear(normed[:, -1].float(), head_w.float())
+    return normed, logits, logits, logits
+
+
+@vt.NodeChecker(
+    {
+        "hc_fn": "hc_head_fn",
+        "hc_base": "hc_head_base",
+        "hc_scale": "hc_head_scale",
+    },
+    None,
+)
+def final_head(x):
+    # ParallelHead.forward: the final hyper-connection reduction, the norm and
+    # the projection (final_norm and lm_head verify their own keys)
+    x = x.to(COMPUTE_DTYPE)
+    flat = x.reshape(-1, x.size(-2) * x.size(-1)).float()
+    rsqrt = torch.rsqrt(torch.mean(torch.pow(flat, 2), dim=-1, keepdim=True) + NORM_EPS)
+    mixes = linear(flat, hc_fn) * rsqrt
+    pre = torch.sigmoid(mixes * hc_scale + hc_base) + HC_EPS
+    reduced = torch.sum(pre.unsqueeze(-1) * flat.reshape(x.size()), dim=2).to(x.dtype)
+    return lm_head(final_norm(reduced))
+
+
+@vt.NodeChecker(None, None)
+def mtp_run(hidden, ids, prefix, layer):
+    # The MTP block is its own module and its forward ends with the head, so
+    # `{prefix}out` is the *logits*, not a hidden state (that is why this
+    # orchestration declares nothing and lets the sub-nodes verify themselves).
+    fused = mtp_fuse(hidden, ids, prefix=prefix)
+    x = fused[-1].to(COMPUTE_DTYPE)
+    pre, post, comb, reduced = hc_split(x, prefix=prefix, wprefix="mtp.0.", which="attn")
+    h = rms_norm(reduced, prefix=prefix, wprefix="mtp.0.", module="attn_norm")
+    _, _, h = attention(h, prefix=prefix, wprefix="mtp.0.", layer=layer)
+    x = hc_merge(h, pre, post, comb, x)
+    pre, post, comb, reduced = hc_split(x, prefix=prefix, wprefix="mtp.0.", which="ffn")
+    h = rms_norm(reduced, prefix=prefix, wprefix="mtp.0.", module="ffn_norm")
+    h = moe(h, ids, prefix=prefix, wprefix="mtp.0.", layer=layer)
+    x = hc_merge(h, pre, post, comb, x)
+    return mtp_head(x, prefix=prefix)
+
+
+@vt.NodeChecker(None, None)
+def attention_decode(cache_kv, cache_idxs, h, prefix, wprefix, layer, start_pos):
+    # A decode step cannot *build* its KV cache or its index table: both are
+    # state written by the prefill pass. They are recorded in the dump (that is
+    # why sparse_attn's inputs are captured at all), so this node takes them as
+    # arguments and verifies everything that is derived -- the projections, the
+    # rotation at position start_pos, the sparse attention and the output
+    # projection. cache_kv/cache_idxs are inputs, not outputs, so no node
+    # declares them: they are cache state, nothing computes them here.
+    _, _, _, _, q = attn_q(h, prefix=prefix, wprefix=wprefix, layer=layer, start_pos=start_pos)
+    _, _, _, _ = attn_kv(h, prefix=prefix, wprefix=wprefix, layer=layer, start_pos=start_pos)
+    o = sparse_attention(q, cache_kv, cache_idxs, prefix=prefix, wprefix=wprefix)
+    _, _, out, _ = attn_out(o, prefix=prefix, wprefix=wprefix, layer=layer, start_pos=start_pos)
+    return out
+
+
+@vt.NodeChecker(None, None)
+def mtp_decode(last_hidden, ids, cache_kv, cache_idxs, prefix, start_pos):
+    # The decode half of the MTP layer: the last layer's final position fused
+    # with the next token's embedding, through one block that attends over the
+    # prefill's window cache. `prefix` carries no key of its own here, so it is
+    # a plain argument rather than a template.
+    fused = mtp_fuse(last_hidden[:, -1:], ids[:, -1:], prefix=prefix)
+    x = fused[-1].to(COMPUTE_DTYPE)
+    pre, post, comb, reduced = hc_split(x, prefix=prefix, wprefix="mtp.0.", which="attn")
+    h = rms_norm(reduced, prefix=prefix, wprefix="mtp.0.", module="attn_norm")
+    h = attention_decode(cache_kv, cache_idxs, h, prefix=prefix, wprefix="mtp.0.",
+                         layer=NUM_LAYERS, start_pos=start_pos)
+    x = hc_merge(h, pre, post, comb, x)
+    pre, post, comb, reduced = hc_split(x, prefix=prefix, wprefix="mtp.0.", which="ffn")
+    h = rms_norm(reduced, prefix=prefix, wprefix="mtp.0.", module="ffn_norm")
+    h = moe(h, ids[:, -1:], prefix=prefix, wprefix="mtp.0.", layer=NUM_LAYERS)
+    x = hc_merge(h, pre, post, comb, x)
+    return mtp_head(x, prefix=prefix)
+
+
+@vt.NodeChecker(None, None)
+def llm(ids):
+    h = embedding(ids)
+    h = h.unsqueeze(2).expand(-1, -1, HC_MULT, -1).contiguous()
+    for layer in range(NUM_LAYERS):
+        h = decoder_layer(h, ids, prefix=layer_prefix(layer), wprefix=layer_prefix(layer), layer=layer)
+    logits = final_head(h)
+    mtp_run(h, ids, prefix="mtp.0.prefill.", layer=NUM_LAYERS)
+    return logits

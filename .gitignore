@@ -1,1 +1,12 @@
 __pycache__/
+.DS_Store
+
+# 所有本地 safetensors，包括 Qwen 和 DeepSeek 的三份结果
+
+*.safetensors
+/models/DeepSeek-V4-Flash/OVERVIEW.md
+
+
+# Qwen 下载附带的配置和数据索引
+/models/Qwen3.5-0.8B/.gitattributes
+/models/Qwen3.5-0.8B/qwen3.5-0.8b-vt.safetensors.index.json
