@@ -1,172 +1,229 @@
-"""End-to-end smoke test for the standalone vt_front package.
+"""Offline integration smoke test: HTTP handlers + real ZMQ + spawned workers.
 
-Starts:
-  - a mock inference backend (speaks the ZMQ message protocol)
-  - the real vt_front frontend (tokenizer/detokenizer workers + FastAPI server)
-then issues HTTP requests against /v1/chat/completions (non-streaming and
-streaming) and /generate, and verifies the outputs.
+Run `python tests/e2e_smoke.py` from vt-front. A tiny tokenizer is generated
+locally; no GPU, model download, fixed HTTP port, or cached model is required.
 """
 
 from __future__ import annotations
 
 import json
+import logging
 import multiprocessing as mp
-import sys
+import os
+import tempfile
 import threading
 import time
-import urllib.request
+from pathlib import Path
 
-import torch
-from transformers import AutoTokenizer
-
-MODEL_PATH = (
-    __import__("os").path.expanduser(
-        "~/.cache/huggingface/hub/models--Qwen--Qwen2.5-0.5B-Instruct/snapshots"
-    )
-)
-import glob
-
-MODEL_PATH = glob.glob(MODEL_PATH + "/*")[0]
+import zmq
+from fastapi.testclient import TestClient
+from tokenizers import Tokenizer, models, pre_tokenizers
+from transformers import PreTrainedTokenizerFast
 
 from vt_front.message import (
+    AbortBackendMsg,
+    AbortMsg,
     BaseBackendMsg,
-    BatchTokenizerMsg,
+    BaseFrontendMsg,
+    BaseTokenizerMsg,
     DetokenizeMsg,
+    ErrorReply,
     UserMsg,
 )
-from vt_front.server.api_server import run_api_server
-from vt_front.server.args import parse_args
-from vt_front.utils import ZmqPullQueue, ZmqPushQueue
-
-REPLY_TEXT = "Hello from the mock vt-front backend! 你好，来自 vt-front。"
-PORT = 8931
-
-
-def mock_backend(cfg, tokenizer):
-    reply_ids = tokenizer.encode(REPLY_TEXT, add_special_tokens=False)
-    recv = ZmqPullQueue(cfg.zmq_backend_addr, create=True, decoder=BaseBackendMsg.decoder)
-    send = ZmqPushQueue(cfg.zmq_detokenizer_addr, create=False, encoder=BatchTokenizerMsg.encoder)
-    print("[mock-backend] ready", flush=True)
-    while True:
-        msg = recv.get()
-        if not isinstance(msg, UserMsg):
-            continue
-        print(f"[mock-backend] got UserMsg uid={msg.uid} input_len={len(msg.input_ids)}", flush=True)
-        for i, tid in enumerate(reply_ids):
-            last = i == len(reply_ids) - 1
-            send.put(DetokenizeMsg(uid=msg.uid, next_token=int(tid), finished=last))
+from vt_front.server import api_server
+from vt_front.server.api_server import FrontendManager
+from vt_front.server.args import FrontendConfig
+from vt_front.server.launch import WorkerGroup
+from vt_front.utils import ZmqAsyncPullQueue, ZmqAsyncPushQueue, ZmqPullQueue, ZmqPushQueue
 
 
-def start_frontend(cfg):
-    def start_subprocess():
-        from vt_front.tokenizer import tokenize_worker
-
-        mp.set_start_method("spawn", force=True)
-        ack_queue: mp.Queue[str] = mp.Queue()
-        mp.Process(
-            target=tokenize_worker,
-            kwargs=dict(
-                tokenizer_path=cfg.model_path,
-                addr=cfg.zmq_detokenizer_addr,
-                backend_addr=cfg.zmq_backend_addr,
-                frontend_addr=cfg.zmq_frontend_addr,
-                local_bs=1,
-                create=cfg.tokenizer_create_addr,
-                tokenizer_id=cfg.num_tokenizer,
-                ack_queue=ack_queue,
-            ),
-            daemon=False,
-            name="vt-front-detokenizer-0",
-        ).start()
-        for _ in range(cfg.num_tokenizer + 1):
-            print("[frontend]", ack_queue.get(), flush=True)
-
-    t = threading.Thread(target=lambda: run_api_server(cfg, start_subprocess, run_shell=False), daemon=True)
-    t.start()
-    return t
-
-
-def http_post(path, payload, stream=False):
-    req = urllib.request.Request(
-        f"http://127.0.0.1:{PORT}{path}",
-        data=json.dumps(payload).encode(),
-        headers={"Content-Type": "application/json"},
+def make_tokenizer(path):
+    core = Tokenizer(
+        models.WordLevel(
+            {"<eos>": 0, "Hello": 1, "world": 2, "<unk>": 3, "error": 4, "silent": 5},
+            unk_token="<unk>",
+        )
     )
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        return json.loads(resp.read())
+    core.pre_tokenizer = pre_tokenizers.Whitespace()
+    tokenizer = PreTrainedTokenizerFast(tokenizer_object=core, eos_token="<eos>", unk_token="<unk>")
+    tokenizer.chat_template = "{% for message in messages %}{{ message['content'] }} {% endfor %}"
+    tokenizer.save_pretrained(path)
+
+
+def mock_backend(config, ready):
+    recv = ZmqPullQueue(config.zmq_backend_addr, create=True, decoder=BaseBackendMsg.decoder)
+    send = ZmqPushQueue(
+        config.zmq_detokenizer_addr,
+        create=config.backend_create_detokenizer_link,
+        encoder=BaseTokenizerMsg.encoder,
+    )
+    frontend = ZmqPushQueue(config.zmq_frontend_addr, create=False, encoder=BaseFrontendMsg.encoder)
+    ready.put("ready")
+    try:
+        while True:
+            msg = recv.get()
+            if isinstance(msg, AbortBackendMsg):
+                if not config.share_tokenizer:
+                    send.put(AbortMsg(msg.uid))
+                continue
+            if not isinstance(msg, UserMsg):
+                continue
+            if 4 in msg.input_ids.tolist():
+                frontend.put(ErrorReply(msg.uid, "mock backend failure"))
+            elif 5 in msg.input_ids.tolist():
+                send.put(DetokenizeMsg(msg.uid, 1, False))
+            else:
+                for token in [1, 2, 0]:
+                    send.put(DetokenizeMsg(msg.uid, token, token == 0))
+    finally:
+        recv.stop()
+        send.stop()
+        frontend.stop()
+
+
+def run_mode(model_path, num_tokenizer):
+    config = FrontendConfig(
+        model_path,
+        num_tokenizer=num_tokenizer,
+        startup_timeout=20,
+        request_timeout=0.5,
+        _unique_suffix=f".smoke-{os.getpid()}-{num_tokenizer}",
+    )
+    ctx = mp.get_context("spawn")
+    ready = ctx.Queue()
+    backend = ctx.Process(target=mock_backend, args=(config, ready))
+    workers = WorkerGroup(config)
+    state = FrontendManager(
+        config,
+        ZmqAsyncPushQueue(
+            config.zmq_tokenizer_addr,
+            config.frontend_create_tokenizer_link,
+            BaseTokenizerMsg.encoder,
+        ),
+        ZmqAsyncPullQueue(config.zmq_frontend_addr, True, BaseFrontendMsg.decoder),
+    )
+    backend.start()
+    backend_pid = backend.pid
+    worker_pids = []
+    try:
+        ready.get(timeout=20)
+        workers.start()
+        worker_pids = [process.pid for process in workers.processes]
+        api_server._GLOBAL_STATE = state
+        with TestClient(api_server.app) as client:
+            payload = {"model": "test", "messages": [{"role": "user", "content": "Hello"}]}
+            response = client.post("/v1/chat/completions", json=payload)
+            assert response.status_code == 200, response.text
+            assert response.json()["choices"][0]["message"]["content"] == "Hello world"
+            response = client.post("/v1/chat/completions", json={**payload, "stream": True})
+            chunks = [json.loads(event[6:]) for event in response.text.strip().split("\n\n")[:-1]]
+            assert (
+                "".join(chunk["choices"][0]["delta"].get("content", "") for chunk in chunks)
+                == "Hello world"
+            )
+            assert response.text.endswith("data: [DONE]\n\n")
+            response = client.post("/generate", json={"prompt": "Hello", "max_tokens": 4})
+            assert response.status_code == 200 and response.text.endswith("data: [DONE]\n\n")
+            response = client.post(
+                "/v1/chat/completions", json={"model": "test", "prompt": "error"}
+            )
+            assert response.status_code == 502, response.text
+            response = client.post("/generate", json={"prompt": "error", "max_tokens": 4})
+            assert '"code": 502' in response.text and response.text.endswith("data: [DONE]\n\n")
+            response = client.post(
+                "/v1/chat/completions", json={"model": "test", "prompt": "silent"}
+            )
+            assert response.status_code == 504, response.text
+            # A failed/aborted request must not prevent subsequent success.
+            assert client.post("/v1/chat/completions", json=payload).status_code == 200
+            backend.kill()
+            backend.join(timeout=5)
+            response = client.post("/v1/chat/completions", json=payload)
+            assert response.status_code == 504, response.text
+            assert not state.ack_map and not state.event_map and not state.deadlines
+        print(f"E2E passed: num_tokenizer={num_tokenizer}", flush=True)
+    finally:
+        state.shutdown()
+        api_server._GLOBAL_STATE = None
+        workers.shutdown()
+        if backend.is_alive():
+            backend.terminate()
+        backend.join(timeout=5)
+        if backend.is_alive():
+            backend.kill()
+            backend.join(timeout=5)
+        backend.close()
+        ready.close()
+        ready.join_thread()
+        assert not {p.pid for p in mp.active_children()} & {backend_pid, *worker_pids}
+        # The backend owns these endpoints; its test harness cleans them up.
+        for address in (config.zmq_backend_addr, config.zmq_detokenizer_addr):
+            Path(address.removeprefix("ipc://")).unlink(missing_ok=True)
+        assert not Path(config.zmq_frontend_addr.removeprefix("ipc://")).exists()
+        assert not Path(config.zmq_tokenizer_addr.removeprefix("ipc://")).exists()
+
+
+def check_startup_timeout(model_path):
+    config = FrontendConfig(
+        model_path, startup_timeout=0.001, _unique_suffix=f".smoke-timeout-{os.getpid()}"
+    )
+    before = {process.pid for process in mp.active_children()}
+    workers = WorkerGroup(config)
+    try:
+        workers.start()
+    except RuntimeError as exc:
+        assert "within" in str(exc)
+    else:
+        raise AssertionError("Expected worker startup timeout")
+    finally:
+        workers.shutdown()
+    assert {process.pid for process in mp.active_children()} == before
+    print("E2E passed: startup timeout reaps workers", flush=True)
+
+
+def check_send_recovery():
+    from vt_front.tokenizer.server import send_with_retry
+
+    address = f"ipc:///tmp/vt-front-retry-{os.getpid()}"
+    sender = ZmqPushQueue(address, create=True, encoder=BaseBackendMsg.encoder)
+    sender.socket.setsockopt(zmq.SNDTIMEO, 50)
+    received, failures = [], []
+
+    def late_receiver():
+        time.sleep(0.3)  # Force several send timeouts before a peer is available.
+        receiver = ZmqPullQueue(address, create=False, decoder=BaseBackendMsg.decoder)
+        receiver.socket.setsockopt(zmq.RCVTIMEO, 5000)
+        try:
+            received.extend([receiver.get(), receiver.get()])
+        except Exception as exc:
+            failures.append(exc)
+        finally:
+            receiver.stop()
+
+    thread = threading.Thread(target=late_receiver)
+    thread.start()
+    try:
+        for uid in [1, 2]:
+            send_with_retry(
+                sender, AbortBackendMsg(uid), logging.getLogger("retry-test"), retry_timeout=3
+            )
+        thread.join(timeout=6)
+        assert not thread.is_alive() and not failures
+        assert received == [AbortBackendMsg(1), AbortBackendMsg(2)]
+        print("E2E passed: send recovers after peer arrival without duplicate messages", flush=True)
+    finally:
+        sender.stop()
+        thread.join(timeout=6)
+        Path(address.removeprefix("ipc://")).unlink(missing_ok=True)
 
 
 def main():
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
-    cfg, _ = parse_args(["--model-path", MODEL_PATH, "--port", str(PORT)])
-    print(f"[test] config: {cfg}", flush=True)
-
-    backend_thread = threading.Thread(target=mock_backend, args=(cfg, tokenizer), daemon=True)
-    backend_thread.start()
-
-    start_frontend(cfg)
-
-    # wait for HTTP server
-    for _ in range(60):
-        try:
-            urllib.request.urlopen(f"http://127.0.0.1:{PORT}/v1", timeout=2)
-            break
-        except Exception:
-            time.sleep(0.5)
-    else:
-        raise RuntimeError("frontend HTTP server did not start")
-    print("[test] HTTP server is up", flush=True)
-
-    # 1. non-streaming chat completions
-    r = http_post(
-        "/v1/chat/completions",
-        {"model": "test", "messages": [{"role": "user", "content": "hi"}], "max_tokens": 32},
-    )
-    content = r["choices"][0]["message"]["content"]
-    assert content == REPLY_TEXT, f"unexpected content: {content!r}"
-    print("[test] /v1/chat/completions OK:", content[:50], flush=True)
-
-    # 2. streaming chat completions
-    req = urllib.request.Request(
-        f"http://127.0.0.1:{PORT}/v1/chat/completions",
-        data=json.dumps(
-            {
-                "model": "test",
-                "messages": [{"role": "user", "content": "hi"}],
-                "max_tokens": 32,
-                "stream": True,
-            }
-        ).encode(),
-        headers={"Content-Type": "application/json"},
-    )
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        body = resp.read().decode()
-    assert "data: [DONE]" in body
-    streamed = "".join(
-        json.loads(line[6:])["choices"][0]["delta"].get("content", "")
-        for line in body.splitlines()
-        if line.startswith("data: {")
-    )
-    assert streamed == REPLY_TEXT, f"unexpected stream: {streamed!r}"
-    print("[test] /v1/chat/completions stream OK", flush=True)
-
-    # 3. /generate raw endpoint
-    req = urllib.request.Request(
-        f"http://127.0.0.1:{PORT}/generate",
-        data=json.dumps({"prompt": "hi", "max_tokens": 32}).encode(),
-        headers={"Content-Type": "application/json"},
-    )
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        body = resp.read().decode()
-    assert "data: [DONE]" in body and REPLY_TEXT.split()[0] in body
-    print("[test] /generate OK", flush=True)
-
-    # 4. /v1/models
-    with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/v1/models", timeout=10) as resp:
-        models = json.loads(resp.read())
-    assert models["data"][0]["id"] == MODEL_PATH
-    print("[test] /v1/models OK", flush=True)
-
+    check_send_recovery()
+    with tempfile.TemporaryDirectory(prefix="vt-front-smoke-") as path:
+        make_tokenizer(path)
+        check_startup_timeout(path)
+        for count in [0, 1]:
+            run_mode(path, count)
     print("E2E_TEST_PASSED", flush=True)
 
 
