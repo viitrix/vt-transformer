@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import math
 import os
 from dataclasses import dataclass, field
 from typing import List, Tuple
@@ -23,6 +24,17 @@ class FrontendConfig:
     server_host: str = "127.0.0.1"
     server_port: int = 1919
     num_tokenizer: int = 0  # 0 means the tokenizer is shared with the detokenizer
+
+    startup_timeout: float = 300
+    request_timeout: float = 300
+
+    def __post_init__(self):
+        if self.num_tokenizer < 0:
+            raise ValueError("num_tokenizer must be non-negative")
+        if not math.isfinite(self.startup_timeout) or self.startup_timeout <= 0:
+            raise ValueError("startup_timeout must be finite and positive")
+        if not math.isfinite(self.request_timeout) or self.request_timeout < 0:
+            raise ValueError("request_timeout must be finite and non-negative")
 
     # networking config
     _unique_suffix: str = field(default_factory=_get_pid_suffix)
@@ -127,6 +139,19 @@ def parse_args(args: List[str], run_shell: bool = False) -> Tuple[FrontendConfig
         help="Run the server in shell mode.",
     )
 
+    parser.add_argument(
+        "--startup-timeout",
+        type=float,
+        default=300,
+        help="Total worker startup deadline in seconds (positive).",
+    )
+    parser.add_argument(
+        "--request-timeout",
+        type=float,
+        default=300,
+        help="Total inference deadline in seconds; 0 disables it.",
+    )
+
     # Parse arguments
     kwargs = parser.parse_args(args).__dict__.copy()
 
@@ -141,5 +166,14 @@ def parse_args(args: List[str], run_shell: bool = False) -> Tuple[FrontendConfig
 
     kwargs["model_source"] = model_source
 
-    result = FrontendConfig(**kwargs)
+    # A repo ID also contains '/', so only explicit filesystem paths can
+    # safely be rejected here. Ambiguous relative names are resolved by HF.
+    if (os.path.isabs(model_path) or model_path.startswith(("./", "../"))) and not os.path.isdir(
+        model_path
+    ):
+        parser.error(f"Local model directory does not exist: {model_path}")
+    try:
+        result = FrontendConfig(**kwargs)
+    except ValueError as exc:
+        parser.error(str(exc))
     return result, run_shell

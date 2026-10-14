@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import json
 from typing import Callable, Dict, Generic, TypeVar
 
-import json
 import zmq
 import zmq.asyncio
 
@@ -26,7 +26,7 @@ class ZmqPushQueue(Generic[T]):
         self.socket.send(event, copy=False)
 
     def stop(self):
-        self.socket.close()
+        self.socket.close(linger=0)
         self.context.term()
 
 
@@ -47,7 +47,7 @@ class ZmqAsyncPushQueue(Generic[T]):
         await self.socket.send(event, copy=False)
 
     def stop(self):
-        self.socket.close()
+        self.socket.close(linger=0)
         self.context.term()
 
 
@@ -73,11 +73,14 @@ class ZmqPullQueue(Generic[T]):
     def decode(self, raw: bytes) -> T:
         return self.decoder(json.loads(raw))
 
+    def poll(self, timeout: int = 0) -> bool:
+        return bool(self.socket.poll(timeout=timeout))
+
     def empty(self) -> bool:
         return self.socket.poll(timeout=0) == 0
 
     def stop(self):
-        self.socket.close()
+        self.socket.close(linger=0)
         self.context.term()
 
 
@@ -98,7 +101,7 @@ class ZmqAsyncPullQueue(Generic[T]):
         return self.decoder(json.loads(event))
 
     def stop(self):
-        self.socket.close()
+        self.socket.close(linger=0)
         self.context.term()
 
 
@@ -122,7 +125,7 @@ class ZmqPubQueue(Generic[T]):
         self.socket.send(event, copy=False)
 
     def stop(self):
-        self.socket.close()
+        self.socket.close(linger=0)
         self.context.term()
 
 
@@ -143,9 +146,12 @@ class ZmqSubQueue(Generic[T]):
         event = self.socket.recv()
         return self.decoder(json.loads(event))
 
+    def poll(self, timeout: int = 0) -> bool:
+        return bool(self.socket.poll(timeout=timeout))
+
     def empty(self) -> bool:
         return self.socket.poll(timeout=0) == 0
 
     def stop(self):
-        self.socket.close()
+        self.socket.close(linger=0)
         self.context.term()

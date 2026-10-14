@@ -1,19 +1,21 @@
 from __future__ import annotations
 
 import multiprocessing as mp
+import time
 from typing import List
 
 import torch
+import zmq
+
 from vt_front.message import (
     AbortBackendMsg,
     AbortMsg,
     BaseBackendMsg,
     BaseFrontendMsg,
     BaseTokenizerMsg,
-    BatchBackendMsg,
-    BatchFrontendMsg,
     BatchTokenizerMsg,
     DetokenizeMsg,
+    ErrorReply,
     TokenizeMsg,
     UserMsg,
     UserReply,
@@ -27,6 +29,73 @@ def _unwrap_msg(msg: BaseTokenizerMsg) -> List[BaseTokenizerMsg]:
     return [msg]
 
 
+def send_with_retry(queue, msg, logger, retry_timeout=30.0):
+    """Retry only transient backpressure; socket sends themselves are bounded.
+
+    A failed send was not enqueued, so retrying preserves message order without
+    duplicating it. Persistent failure still exits the worker after this budget
+    (plus at most one SNDTIMEO interval).
+    """
+    deadline = time.monotonic() + retry_timeout
+    warned = False
+    while True:
+        try:
+            queue.put(msg)
+            if warned:
+                logger.info("Worker send recovered for user %s", msg.uid)
+            return
+        except zmq.Again:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                logger.error("Worker send retry deadline exceeded for user %s", msg.uid)
+                raise
+            if not warned:
+                logger.warning(
+                    "Worker send blocked for user %s; retrying for up to %ss",
+                    msg.uid,
+                    retry_timeout,
+                )
+                warned = True
+            time.sleep(min(0.1, remaining))
+
+
+def process_message(
+    msg,
+    tokenize_manager,
+    detokenize_manager,
+    send_backend,
+    send_frontend,
+    logger,
+    forward_aborts=True,
+):
+    """Isolate model/tokenizer errors; transport failures remain fatal."""
+    try:
+        if isinstance(msg, TokenizeMsg):
+            tensor = tokenize_manager.tokenize([msg])[0]
+            output = UserMsg(msg.uid, tensor, msg.sampling_params)
+        elif isinstance(msg, DetokenizeMsg):
+            text = detokenize_manager.detokenize([msg])[0]
+            output = UserReply(msg.uid, text, msg.finished)
+        elif isinstance(msg, AbortMsg):
+            detokenize_manager.abort(msg.uid)
+            if not forward_aborts:
+                return
+            output = AbortBackendMsg(msg.uid)
+        else:
+            logger.warning("Ignoring unknown tokenizer message: %s", type(msg).__name__)
+            return
+    except Exception as exc:
+        logger.exception("Tokenizer failed for user %s", msg.uid)
+        detokenize_manager.abort(msg.uid)
+        send_with_retry(send_frontend, ErrorReply(msg.uid, f"Tokenizer failed: {exc}"), logger)
+        send_with_retry(send_backend, AbortBackendMsg(msg.uid), logger)
+        return
+    if isinstance(output, UserReply):
+        send_with_retry(send_frontend, output, logger)
+    else:
+        send_with_retry(send_backend, output, logger)
+
+
 @torch.inference_mode()
 def tokenize_worker(
     *,
@@ -36,12 +105,15 @@ def tokenize_worker(
     backend_addr: str,
     frontend_addr: str,
     local_bs: int,
+    forward_aborts: bool = True,
     tokenizer_id: int = -1,
     model_source: str = "huggingface",
     ack_queue: mp.Queue[str] | None = None,
 ) -> None:
     send_backend = ZmqPushQueue(backend_addr, create=False, encoder=BaseBackendMsg.encoder)
+    send_backend.socket.setsockopt(zmq.SNDTIMEO, 1000)
     send_frontend = ZmqPushQueue(frontend_addr, create=False, encoder=BaseFrontendMsg.encoder)
+    send_frontend.socket.setsockopt(zmq.SNDTIMEO, 1000)
     recv_listener = ZmqPullQueue(addr, create=create, decoder=BatchTokenizerMsg.decoder)
     assert local_bs > 0
 
@@ -68,55 +140,34 @@ def tokenize_worker(
     if ack_queue is not None:
         ack_queue.put(f"Tokenize server {tokenizer_id} is ready")
 
+    next_sweep = 0.0
     try:
         while True:
-            pending_msg = _unwrap_msg(recv_listener.get())
-            while len(pending_msg) < local_bs and not recv_listener.empty():
-                pending_msg.extend(_unwrap_msg(recv_listener.get()))
-
-            logger.debug(f"Received {len(pending_msg)} messages")
-
-            detokenize_msg = [m for m in pending_msg if isinstance(m, DetokenizeMsg)]
-            tokenize_msg = [m for m in pending_msg if isinstance(m, TokenizeMsg)]
-            abort_msg = [m for m in pending_msg if isinstance(m, AbortMsg)]
-            assert len(detokenize_msg) + len(tokenize_msg) + len(abort_msg) == len(pending_msg)
-            if len(detokenize_msg) > 0:
-                replies = detokenize_manager.detokenize(detokenize_msg)
-                batch_output = BatchFrontendMsg(
-                    data=[
-                        UserReply(
-                            uid=msg.uid,
-                            incremental_output=reply,
-                            finished=msg.finished,
-                        )
-                        for msg, reply in zip(detokenize_msg, replies, strict=True)
-                    ]
+            # Poll so abandoned decode state is reclaimed even with no traffic.
+            now = time.monotonic()
+            if now >= next_sweep:
+                detokenize_manager.expire_idle()
+                next_sweep = now + 1
+            if not recv_listener.poll(timeout=1000):
+                continue
+            try:
+                pending_msg = _unwrap_msg(recv_listener.get())
+            except (ValueError, KeyError, TypeError, AttributeError, AssertionError):
+                logger.exception("Dropping malformed tokenizer message")
+                continue
+            for msg in pending_msg:
+                process_message(
+                    msg,
+                    tokenize_manager,
+                    detokenize_manager,
+                    send_backend,
+                    send_frontend,
+                    logger,
+                    forward_aborts,
                 )
-                if len(batch_output.data) == 1:
-                    batch_output = batch_output.data[0]
-                send_frontend.put(batch_output)
-
-            if len(tokenize_msg) > 0:
-                tensors = tokenize_manager.tokenize(tokenize_msg)
-                batch_output = BatchBackendMsg(
-                    data=[
-                        UserMsg(
-                            uid=msg.uid,
-                            input_ids=t,
-                            sampling_params=msg.sampling_params,
-                        )
-                        for msg, t in zip(tokenize_msg, tensors, strict=True)
-                    ]
-                )
-                if len(batch_output.data) == 1:
-                    batch_output = batch_output.data[0]
-                send_backend.put(batch_output)
-            if len(abort_msg) > 0:
-                batch_output = BatchBackendMsg(
-                    data=[AbortBackendMsg(uid=msg.uid) for msg in abort_msg]
-                )
-                if len(batch_output.data) == 1:
-                    batch_output = batch_output.data[0]
-                send_backend.put(batch_output)
     except KeyboardInterrupt:
         pass
+    finally:
+        send_backend.stop()
+        send_frontend.stop()
+        recv_listener.stop()

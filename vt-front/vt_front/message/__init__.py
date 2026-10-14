@@ -1,5 +1,5 @@
 from .backend import AbortBackendMsg, BaseBackendMsg, BatchBackendMsg, ExitMsg, UserMsg
-from .frontend import BaseFrontendMsg, BatchFrontendMsg, UserReply
+from .frontend import BaseFrontendMsg, BatchFrontendMsg, ErrorReply, UserReply
 from .tokenizer import AbortMsg, BaseTokenizerMsg, BatchTokenizerMsg, DetokenizeMsg, TokenizeMsg
 
 __all__ = [
@@ -16,4 +16,5 @@ __all__ = [
     "BaseFrontendMsg",
     "BatchFrontendMsg",
     "UserReply",
+    "ErrorReply",
 ]

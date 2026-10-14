@@ -1,8 +1,13 @@
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, field
 from typing import Dict, List
 
 from transformers import PreTrainedTokenizerBase
+
 from vt_front.message import DetokenizeMsg
+from vt_front.utils import init_logger
+
+logger = init_logger(__name__, "Detokenizer")
 
 # Borrowed from sglang
 
@@ -58,16 +63,41 @@ class DecodeStatus:
     read_offset: int  # length of read ids
     surr_offset: int  # length of surr ids
     sent_offset: int  # length of sent out string
+    updated_at: float = field(default_factory=time.monotonic)
 
 
 class DetokenizeManager:
-    def __init__(self, tokenizer: PreTrainedTokenizerBase) -> None:
+    def __init__(self, tokenizer: PreTrainedTokenizerBase, max_idle_seconds: float = 3600) -> None:
         # uid -> DecodeStatus
         self.decode_map: Dict[int, DecodeStatus] = {}
         self.tokenizer = tokenizer
-        self.eos_token_id = self.tokenizer.eos_token_id
+        eos = tokenizer.eos_token_id
+        self.eos_token_ids = (
+            set(eos) if isinstance(eos, (list, tuple)) else ({eos} if eos is not None else set())
+        )
+        self.max_idle_seconds = max_idle_seconds
+
+    def abort(self, uid: int):
+        self.decode_map.pop(uid, None)
+
+    def expire_idle(self):
+        now = time.monotonic()
+        expired = [
+            uid
+            for uid, status in self.decode_map.items()
+            if now - status.updated_at >= self.max_idle_seconds
+        ]
+        for uid in expired:
+            self.abort(uid)
+            logger.warning("Expired idle detokenizer state for user %s", uid)
+        return expired
 
     def detokenize(self, msgs: List[DetokenizeMsg]) -> List[str]:
+        # A batch may contain consecutive tokens for one request. Decode those
+        # in order so offsets and terminal cleanup are applied between tokens.
+        if len({msg.uid for msg in msgs}) != len(msgs):
+            return [self.detokenize([msg])[0] for msg in msgs]
+
         read_ids: List[List[int]] = []
         surr_ids: List[List[int]] = []
         for msg in msgs:
@@ -80,7 +110,8 @@ class DetokenizeManager:
                     sent_offset=0,
                 )
             s = self.decode_map[msg.uid]
-            if not (msg.finished and msg.next_token == self.eos_token_id):
+            s.updated_at = time.monotonic()
+            if not (msg.finished and msg.next_token in self.eos_token_ids):
                 s.decoded_ids.append(msg.next_token)
             read_ids.append(s.decoded_ids[s.surr_offset :])
             surr_ids.append(s.decoded_ids[s.surr_offset : s.read_offset])

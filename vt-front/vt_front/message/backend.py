@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Dict, List
 
 import torch
+
 from vt_front.core import SamplingParams
 
 from .utils import deserialize_type, serialize_type

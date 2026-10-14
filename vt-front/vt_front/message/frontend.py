@@ -23,6 +23,12 @@ class BatchFrontendMsg(BaseFrontendMsg):
 
 
 @dataclass
+class ErrorReply(BaseFrontendMsg):
+    uid: int
+    message: str
+
+
+@dataclass
 class UserReply(BaseFrontendMsg):
     uid: int
     incremental_output: str

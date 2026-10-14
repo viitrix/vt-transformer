@@ -28,7 +28,7 @@ class EnvVar(BaseEnv, Generic[T]):
                 pass
 
     def __bool__(self):
-        return self.value
+        return bool(self.value)
 
     def __str__(self):
         return str(self.value)
@@ -41,7 +41,6 @@ VT_FRONT_ENV_PREFIX = "VT_FRONT_"
 EnvInt = partial(EnvVar[int], fn=int)
 EnvFloat = partial(EnvVar[float], fn=float)
 EnvBool = partial(EnvVar[bool], fn=_TO_BOOL)
-EnvOption = partial(EnvVar[bool | None], fn=_TO_BOOL, default_value=None)
 
 
 class EnvClassSingleton:
